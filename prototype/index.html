@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识探索卡片系统 · 移动探索端原型</title>
+<style>
+:root{
+  --ink:#1f2d3d; --sub:#7a8699; --line:#e8ecf2; --bg:#f4f6f9; --card:#ffffff;
+  --pri:#3a5fcd; --pri-soft:#eef2fd; --green:#2e8b57; --green-soft:#eaf5ef;
+  --blue:#3a5fcd; --blue-soft:#eef2fd; --orange:#d97a2b; --orange-soft:#fdf1e7;
+  --amber:#b7791f; --shadow:0 4px 16px rgba(31,45,61,.06);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+  background:#232a35;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px 0}
+.phone{width:393px;height:852px;background:var(--bg);border-radius:44px;overflow:hidden;
+  position:relative;box-shadow:0 30px 80px rgba(0,0,0,.5);border:10px solid #11151c;display:flex;flex-direction:column}
+/* ---------- 通用 ---------- */
+.screen{display:none;flex-direction:column;height:100%;background:var(--bg)}
+.screen.active{display:flex}
+.scroll{flex:1;overflow-y:auto;padding:0 16px 96px}
+.scroll::-webkit-scrollbar{width:0}
+.topbar{display:flex;align-items:center;gap:10px;padding:14px 16px 10px;background:var(--bg);position:sticky;top:0;z-index:5}
+.topbar .ic{width:34px;height:34px;border-radius:10px;background:#fff;border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;color:var(--ink)}
+.crumb{font-size:12px;color:var(--sub);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumb b{color:var(--ink);font-weight:600}
+h1.page{font-size:20px;font-weight:700;color:var(--ink);margin:6px 0 2px}
+.cardbox{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-top:12px;box-shadow:var(--shadow)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 9px;border-radius:999px;background:var(--pri-soft);color:var(--pri);font-weight:600}
+.chip.gray{background:#f0f2f5;color:var(--sub)}
+.chip.green{background:var(--green-soft);color:var(--green)}
+.chip.orange{background:var(--orange-soft);color:var(--orange)}
+.chip.amber{background:#fdf6e3;color:var(--amber)}
+.sec-title{font-size:13px;font-weight:700;color:var(--ink);margin:16px 0 6px;display:flex;align-items:center;gap:6px}
+.sec-title .ln{flex:1;height:1px;background:var(--line)}
+p.body{font-size:14px;line-height:1.75;color:#3b4757;margin-top:8px;text-align:justify}
+.cite{color:var(--pri);font-weight:700;font-size:11px;vertical-align:super;cursor:pointer}
+.badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;margin-left:6px;vertical-align:1px}
+.b-fact{background:var(--green-soft);color:var(--green)}
+.b-syn{background:var(--blue-soft);color:var(--blue)}
+.b-gen{background:var(--orange-soft);color:var(--orange)}
+.btn{display:flex;align-items:center;justify-content:center;gap:6px;border-radius:12px;font-size:14px;
+  font-weight:600;padding:12px;cursor:pointer;border:none;transition:.15s}
+.btn.pri{background:var(--pri);color:#fff}
+.btn.pri:active{transform:scale(.97)}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.soft{background:var(--pri-soft);color:var(--pri)}
+.btn.sm{padding:8px 14px;font-size:12.5px;border-radius:10px}
+.btn.block{width:100%;margin-top:10px}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.row2{display:flex;gap:10px}
+/* ---------- 底部导航 / 服务栏 ---------- */
+.tabbar{position:absolute;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);
+  display:flex;padding:8px 0 18px;z-index:9}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10.5px;color:var(--sub);cursor:pointer}
+.tab .ti{font-size:19px}
+.tab.on{color:var(--pri);font-weight:700}
+.svcbar{position:absolute;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);
+  display:flex;gap:8px;padding:10px 12px 22px;z-index:9}
+.svc{flex:1;text-align:center;padding:9px 0;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;
+  background:var(--pri-soft);color:var(--pri)}
+.svc.alt{background:#fff;border:1px solid var(--line);color:var(--ink)}
+/* ---------- 首页 ---------- */
+.search{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 14px;color:var(--sub);font-size:13.5px;margin-top:14px}
+.resume{background:linear-gradient(120deg,#3a5fcd,#5d7ee8);color:#fff;border:none;border-radius:16px;padding:16px;margin-top:14px;cursor:pointer;box-shadow:var(--shadow)}
+.resume .rt{font-size:15px;font-weight:700}
+.resume .rs{font-size:12px;opacity:.85;margin-top:4px}
+.resume .rb{display:inline-block;margin-top:10px;background:rgba(255,255,255,.2);border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600}
+.themes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px}
+.theme{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 10px;text-align:center;cursor:pointer}
+.theme .em{font-size:26px}
+.theme .tn{font-size:13px;font-weight:700;color:var(--ink);margin-top:6px}
+.theme .tc{font-size:10.5px;color:var(--sub);margin-top:2px}
+/* ---------- 卡片 ---------- */
+.kcard{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;margin-top:12px;box-shadow:var(--shadow)}
+.kcard .kt{font-size:19px;font-weight:800;color:var(--ink);margin-top:8px;line-height:1.4}
+.kcard .ksum{font-size:13px;color:var(--sub);line-height:1.7;margin-top:8px;padding-bottom:10px;border-bottom:1px dashed var(--line)}
+.kimg{height:120px;border-radius:12px;margin-top:12px;display:flex;align-items:center;justify-content:center;
+  font-size:34px;background:linear-gradient(135deg,#dfe8f8,#f2e8df);position:relative}
+.kimg .tag{position:absolute;right:8px;bottom:8px;font-size:10px;color:var(--sub);background:rgba(255,255,255,.8);padding:2px 8px;border-radius:6px}
+.src{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-top:10px;font-size:12px;color:var(--sub);line-height:1.8}
+.src b{color:var(--ink)}
+.entry{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:13px;
+  padding:12px 13px;margin-top:8px;cursor:pointer;transition:.12s}
+.entry:active{background:var(--pri-soft)}
+.entry .ei{width:34px;height:34px;border-radius:10px;background:var(--pri-soft);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.entry .et{flex:1}
+.entry .en{font-size:13.5px;font-weight:600;color:var(--ink)}
+.entry .er{font-size:11px;color:var(--sub);margin-top:1px}
+.entry .ea{color:#c3cad6;font-size:16px}
+.fold{ text-align:center;font-size:12px;color:var(--sub);margin-top:8px;cursor:pointer}
+.addentry{display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px dashed #b9c6e4;color:var(--pri);
+  border-radius:13px;padding:11px;margin-top:10px;font-size:13px;font-weight:700;cursor:pointer;background:#f8faFF}
+/* ---------- 执行中 ---------- */
+.runwrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+.spinner{width:54px;height:54px;border:4px solid var(--pri-soft);border-top-color:var(--pri);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:18px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.step{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--sub);margin-top:12px;width:230px}
+.step.done{color:var(--ink)}
+.step.doing{color:var(--pri);font-weight:700}
+.step .sd{width:18px;text-align:center}
+/* ---------- 时间线 ---------- */
+.tl{margin-top:14px;border-left:2px solid #d5deef;padding-left:16px}
+.tl-item{position:relative;padding:0 0 18px}
+.tl-item::before{content:"";position:absolute;left:-22.5px;top:4px;width:9px;height:9px;border-radius:50%;background:#fff;border:2.5px solid var(--pri)}
+.tl-item.hl::before{background:var(--pri)}
+.tl-y{font-size:12px;font-weight:800;color:var(--pri)}
+.tl-t{font-size:14.5px;font-weight:700;color:var(--ink);margin-top:2px}
+.tl-b{font-size:12.5px;color:var(--sub);line-height:1.6;margin-top:3px}
+/* ---------- 对比卡 ---------- */
+.cmp{width:100%;border-collapse:collapse;margin-top:12px;font-size:12.5px}
+.cmp th,.cmp td{border:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:top;line-height:1.55}
+.cmp th{background:var(--pri-soft);color:var(--ink);font-weight:700}
+.cmp td:first-child{background:#f8fafc;font-weight:700;color:var(--sub);white-space:nowrap}
+/* ---------- 人物关联 ---------- */
+.fig{display:flex;align-items:center;gap:12px;padding:13px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+.fig .fa{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#e8eef9,#f7efe6);
+  display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:var(--pri);flex-shrink:0}
+.fig .fn{font-size:14.5px;font-weight:700;color:var(--ink)}
+.fig .fr{font-size:12px;color:var(--sub);margin-top:2px;line-height:1.5}
+/* ---------- 路径树 ---------- */
+.node{display:flex;align-items:flex-start;gap:9px;padding:10px 10px;border-radius:12px;cursor:pointer;margin-top:6px;background:#fff;border:1px solid var(--line)}
+.node:active{background:var(--pri-soft)}
+.node .dot{width:10px;height:10px;border-radius:50%;background:var(--pri);margin-top:6px;flex-shrink:0}
+.node.leaf .dot{background:#c3cad6}
+.node .nt{font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.4}
+.node .ns{font-size:11px;color:var(--sub);margin-top:2px}
+.node .nx{margin-left:auto;font-size:11px;color:var(--pri);white-space:nowrap;padding-top:2px}
+/* ---------- 分享 ---------- */
+.shbanner{background:#fff7e8;border:1px solid #f3ddad;color:#8a6414;font-size:12px;border-radius:12px;padding:10px 12px;line-height:1.6;margin-top:12px}
+.shstep{display:flex;gap:10px;margin-top:10px}
+.shstep .n{width:22px;height:22px;border-radius:50%;background:var(--pri);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+label.fld{display:block;font-size:12px;font-weight:700;color:var(--sub);margin:12px 0 5px}
+input.inp,textarea.inp{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px;font-family:inherit;background:#fff;color:var(--ink)}
+textarea.inp{min-height:88px;resize:none;line-height:1.6}
+.check{display:flex;align-items:center;gap:9px;padding:9px 4px;font-size:13.5px;color:var(--ink);border-bottom:1px solid var(--line)}
+.cbx{width:18px;height:18px;border-radius:5px;border:2px solid #c3cad6;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px}
+.cbx.on{background:var(--pri);border-color:var(--pri)}
+/* ---------- 任务卡 ---------- */
+.stop{display:flex;gap:12px;margin-top:10px}
+.stop .sm{width:44px;height:44px;border-radius:12px;background:var(--pri-soft);color:var(--pri);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+.stop .sm b{font-size:14px}
+.stop .st{font-size:14px;font-weight:700;color:var(--ink)}
+.stop .sq{font-size:12.5px;color:var(--sub);margin-top:3px;line-height:1.6;background:#f8fafc;border-radius:8px;padding:7px 10px}
+/* ---------- toast / 弹层 ---------- */
+#toast{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);background:rgba(31,45,61,.92);color:#fff;
+  font-size:13px;border-radius:10px;padding:10px 18px;opacity:0;pointer-events:none;transition:.25s;z-index:99;max-width:300px;text-align:center;line-height:1.5}
+#toast.show{opacity:1}
+.intro{position:absolute;inset:0;background:rgba(20,26,38,.9);z-index:100;display:flex;align-items:center;justify-content:center;padding:28px}
+.intro .ibox{background:#fff;border-radius:18px;padding:22px;max-width:300px}
+.intro h3{font-size:16px;color:var(--ink)}
+.intro p{font-size:12.5px;color:var(--sub);line-height:1.8;margin-top:8px}
+.qa-bar{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:10px 16px 22px;display:flex;gap:8px;z-index:8}
+.qa-bar input{flex:1;border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;font-size:13.5px;font-family:inherit}
+.qa-bar .send{width:44px;height:44px;border-radius:12px;background:var(--pri);color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="phone" id="phone">
+
+<!-- ═══════════ 1 首页 ═══════════ -->
+<section class="screen active" id="s-home">
+  <div class="scroll">
+    <h1 class="page">知识探索</h1>
+    <div style="font-size:12px;color:var(--sub);margin-top:2px">从一张卡片出发，逐层深入，随时回望</div>
+    <div class="search" onclick="toast('搜索为原型示意，一期为标题+摘要关键词检索')">🔍 搜索卡片、主题或问题</div>
+
+    <div class="resume" onclick="go('s-card-yuelu')">
+      <div style="font-size:11px;opacity:.8">继续探索 · 昨天暂存</div>
+      <div class="rt">岳麓书院：从选址到人物</div>
+      <div class="rs">已探索 5 个节点 · 1 个分支 · 2 条未决疑问</div>
+      <div class="rb">继续上次探索 →</div>
+    </div>
+
+    <div class="sec-title">主题专题 <span class="ln"></span></div>
+    <div class="themes">
+      <div class="theme" onclick="go('s-card-yuelu')"><div class="em">🏛️</div><div class="tn">书院地标</div><div class="tc">12 张卡</div></div>
+      <div class="theme" onclick="go('s-card-dish')"><div class="em">🌶️</div><div class="tn">湘菜风物</div><div class="tc">9 张卡</div></div>
+      <div class="theme" onclick="go('s-card-sound')"><div class="em">🔊</div><div class="tn">声音科学</div><div class="tc">7 张卡</div></div>
+    </div>
+
+    <div class="sec-title">今日推荐入口 <span class="ln"></span></div>
+    <div class="entry" onclick="go('s-task')">
+      <div class="ei">🧭</div><div class="et"><div class="en">带孩子 60 分钟逛岳麓书院</div><div class="er">任务卡 · 4 站观察路线</div></div><div class="ea">›</div>
+    </div>
+    <div class="entry" onclick="go('s-compare')">
+      <div class="ei">⚖️</div><div class="et"><div class="en">剁椒鱼头为什么是"辣"的</div><div class="er">对比卡 · 饮食 × 科学跨主题</div></div><div class="ea">›</div>
+    </div>
+  </div>
+  <div class="tabbar">
+    <div class="tab on"><div class="ti">🏠</div>首页</div>
+    <div class="tab" onclick="openPath()"><div class="ti">🧭</div>我的路径</div>
+    <div class="tab" onclick="go('s-me')"><div class="ti">👤</div>我的</div>
+  </div>
+</section>
+
+<!-- ═══════════ 2 岳麓书院 图文卡 ═══════════ -->
+<section class="screen" id="s-card-yuelu">
+  <div class="topbar">
+    <div class="ic" onclick="go('s-home')">‹</div>
+    <div class="crumb">书院地标 · <b>岳麓书院</b></div>
+    <div class="ic" onclick="openPath()">🧭</div>
+  </div>
+  <div class="scroll">
+    <div class="kcard">
+      <span class="chip">图文卡 · 地标</span><span class="chip green" style="margin-left:6px">已核验</span>
+      <div class="kt">岳麓书院</div>
+      <div class="ksum">中国四大书院之一，北宋创办于岳麓山下，千年弦歌不绝，朱熹、张栻曾在此会讲。</div>
+      <div class="kimg">🏛️<span class="tag">示意图</span></div>
+      <p class="body">岳麓书院位于长沙湘江西岸的岳麓山脚下，由潭州太守朱洞于北宋开宝九年（976 年）创办<span class="cite">[1]</span>。书院背山面江，与长沙古城隔江相望，形成了"城市—江渡—书院"的空间关系<span class="cite">[2]</span>。<span class="badge b-fact">📎 事实</span></p>
+      <p class="body">南宋乾道三年（1167 年），朱熹与张栻在此举行"朱张会讲"，开创了不同学派在书院公开论辩的传统<span class="cite">[1]</span>。<span class="badge b-fact">📎 事实</span></p>
+      <div class="src"><b>来源依据</b><br>[1]《岳麓书院史略》第一章 · p12–14（已授权）<br>[2] 湖南大学岳麓书院官网 · 书院沿革（2024-06 更新）</div>
+    </div>
+
+    <div class="sec-title">解释版本 <span class="ln"></span></div>
+    <div style="display:flex;gap:8px">
+      <span class="chip" style="cursor:pointer">简明</span>
+      <span class="chip gray" style="cursor:pointer" onclick="toast('已切换到「深入版」：引用原文并展开论证')">深入</span>
+      <span class="chip gray" style="cursor:pointer" onclick="toast('已切换到「儿童版」：用比喻和提问讲解')">儿童</span>
+    </div>
+
+    <div class="sec-title">探索入口 <span class="ln"></span><span style="font-size:11px;color:var(--sub);font-weight:400">默认展示 5 个</span></div>
+    <div class="entry" onclick="runService('为什么岳麓书院建在岳麓山下？','讲解')">
+      <div class="ei">⛰️</div><div class="et"><div class="en">为什么建在这里</div><div class="er">深入了解 · 历史 × 地理</div></div><div class="ea">›</div>
+    </div>
+    <div class="entry" onclick="nav('s-figures','哪些人物与这里有关','关联卡')">
+      <div class="ei">👥</div><div class="et"><div class="en">哪些人物与这里有关</div><div class="er">相关联 · 人物 → 时间线</div></div><div class="ea">›</div>
+    </div>
+    <div class="entry" onclick="nav('s-timeline','书院大事记','时间线卡')">
+      <div class="ei">🕰️</div><div class="et"><div class="en">书院千年大事记</div><div class="er">时间线 · 976 年至今</div></div><div class="ea">›</div>
+    </div>
+    <div class="entry" onclick="toast('入口「从一处题刻开始讲故事」为他人分享的入口模板，已复制到本卡')">
+      <div class="ei">🖋️</div><div class="et"><div class="en">从一处题刻开始讲故事<span class="chip orange" style="margin-left:6px">入口模板</span></div><div class="er">去实践 · 来自 @老周的探索</div></div><div class="ea">›</div>
+    </div>
+    <div class="fold" onclick="this.style.display='none';document.getElementById('more-entries').style.display='block'">还有 2 个入口，展开 ∨</div>
+    <div id="more-entries" style="display:none">
+      <div class="entry" onclick="toast('建筑空间布局卡开发中（二期地图卡）')">
+        <div class="ei">📐</div><div class="et"><div class="en">建筑空间布局</div><div class="er">深入了解 · 二期地图卡</div></div><div class="ea">›</div>
+      </div>
+      <div class="entry" onclick="runService('书院如何影响湖湘文化？','讲解')">
+        <div class="ei">💡</div><div class="et"><div class="en">书院如何影响湖湘文化</div><div class="er">深入了解 · 文化脉络</div></div><div class="ea">›</div>
+      </div>
+    </div>
+    <div class="addentry" onclick="go('s-entry-nl')">✚ 用一句话新增入口</div>
+  </div>
+  <div class="svcbar">
+    <div class="svc" onclick="runService('讲清楚：岳麓书院是什么、为什么重要','讲解')">💡 讲清楚</div>
+    <div class="svc alt" onclick="runService('岳麓书院与城南书院有什么异同？','比较')">⚖️ 帮我比较</div>
+    <div class="svc alt" onclick="go('s-summary')">🗂️ 整理发现</div>
+  </div>
+</section>
+
+<!-- ═══════════ 3 服务执行中 ═══════════ -->
+<section class="screen" id="s-run">
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb"><b>智能体服务</b></div></div>
+  <div class="runwrap">
+    <div class="spinner"></div>
+    <div style="font-size:15px;font-weight:700;color:var(--ink)" id="run-q">为什么岳麓书院建在岳麓山下？</div>
+    <div style="font-size:12px;color:var(--sub);margin-top:4px">讲解与问答服务 · 通常需要 5–15 秒</div>
+    <div style="margin-top:26px;width:250px">
+      <div class="step done"><span class="sd">✓</span>读取卡片资料与路径上下文</div>
+      <div class="step done"><span class="sd">✓</span>检索已授权知识资源（6 条命中）</div>
+      <div class="step doing"><span class="sd">◐</span>生成讲解并校验出处</div>
+    </div>
+    <div style="font-size:11px;color:var(--sub);margin-top:30px">服务由平台统一调度，你无需选择模型 · 单次任务限时 60 秒</div>
+  </div>
+</section>
+
+<!-- ═══════════ 4 讲解卡结果 ═══════════ -->
+<section class="screen" id="s-explain">
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">岳麓书院 · <b>讲解卡</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="scroll">
+    <div class="kcard">
+      <span class="chip">讲解卡 · 由智能体生成</span><span class="chip gray" style="margin-left:6px" id="explain-mode">深入版</span>
+      <div class="kt" style="font-size:17px">为什么岳麓书院建在岳麓山下？</div>
+      <p class="body"><b>水源与讲学传统。</b>宋代书院选址普遍遵循"背山面水、藏修游息"的原则。岳麓山提供了清幽的环境，而山脚的湘江渡口（朱张渡）使学者可以从长沙城便捷过江，形成"隔江相望、渡口相连"的关系<span class="cite">[1]</span>。<span class="badge b-fact">📎 事实</span></p>
+      <p class="body"><b>城市功能的互补。</b>976 年创办时，长沙城的教育功能集中于官学；书院选址城外山下，既避开城市喧扰，又通过渡口保持与士人社群的联系，这种"入则宁静、出则通达"的区位被后世学者视为书院选址的典型<span class="cite">[2]</span>。<span class="badge b-fact">📎 事实</span></p>
+      <p class="body"><b>综合来看</b>，岳麓书院的选址反映了宋代书院"山水—渡口—城市"三位一体的空间智慧：山水提供讲学环境，渡口提供可达性，城市提供生源与文化需求。<span class="badge b-syn">✦ 归纳</span></p>
+      <div class="src"><b>出处清单</b><br>
+        [1]《岳麓书院史略》第一章 · p12–14<br>
+        [2]《中国古代书院选址研究》· 第 2 节（专题库已授权）<br>
+        <span style="color:var(--orange)">⚠ 证据缺口：宋代原始文献中直接论述"选址理由"的记载有限，[2] 的结论主要为现代学者归纳。</span>
+      </div>
+    </div>
+    <div class="cardbox">
+      <div class="sec-title" style="margin-top:0">🤔 还可以继续问 <span class="ln"></span></div>
+      <div class="entry" onclick="runService('朱张渡的日常渡江有多少史料记载？','讲解')"><div class="ei">📄</div><div class="et"><div class="en">朱张渡的渡江记载有多少史料支撑</div><div class="er">证据缺口 · 深入追查</div></div><div class="ea">›</div></div>
+      <div class="entry" onclick="go('s-figures')"><div class="ei">👥</div><div class="et"><div class="en">看看与选址相关的人物</div><div class="er">相关联 · 朱洞 / 朱熹 / 张栻</div></div><div class="ea">›</div></div>
+    </div>
+    <div class="cardbox" style="padding:12px 16px">
+      <div style="font-size:12px;color:var(--sub)">📌 本次为受控生成：仅基于卡片与已授权资料，事实与归纳分段标注；无出处内容不会自动成为公共知识。</div>
+    </div>
+  </div>
+  <div class="svcbar">
+    <div class="svc" onclick="pushNode('讲解：为什么建在这里','讲解卡');toast('已保存到我的路径');">💾 保存到路径</div>
+    <div class="svc alt" onclick="go('s-ask')">💬 继续追问</div>
+    <div class="svc alt" onclick="toast('已重新生成，表述有调整，出处不变')">🔄 重新生成</div>
+  </div>
+</section>
+
+<!-- ═══════════ 5 人物关联 ═══════════ -->
+<section class="screen" id="s-figures">
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">岳麓书院 · <b>人物关联</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="scroll">
+    <div class="kcard" style="padding-bottom:6px">
+      <span class="chip">关联卡 · 关系说明必填</span>
+      <div class="kt" style="font-size:17px">哪些人物与岳麓书院有关？</div>
+      <p class="body" style="font-size:12.5px;color:var(--sub)">跨主题连接均标注关系与出处（方案规则）。以下人物按时代排列：</p>
+      <div class="fig" onclick="openFigure('朱熹','南宋理学家。1167 年从福建崇安专程来访，与张栻会讲于讲堂，听众云集，「一时舆马之众，饮池水立涸」。《岳麓书院史略》p.41')">
+        <div class="fa">朱</div><div style="flex:1"><div class="fn">朱熹 <span class="chip" style="font-size:10px">南宋</span></div><div class="fr">1167 年「朱张会讲」主讲人之一 · 关系：<b>在此讲学</b>（出处 [1] p41）</div></div><div style="color:#c3cad6">›</div>
+      </div>
+      <div class="fig" onclick="openFigure('张栻','南宋湖湘学派代表，时任主教。与朱熹论学两月余，围绕「中和」「太极」展开辩难，奠定书院会讲传统。')">
+        <div class="fa">张</div><div style="flex:1"><div class="fn">张栻 <span class="chip" style="font-size:10px">南宋</span></div><div class="fr">书院主教 · 关系：<b>主持讲学</b>（出处 [1] p43）</div></div><div style="color:#c3cad6">›</div>
+      </div>
+      <div class="fig" onclick="openFigure('王夫之','明末清初思想家。青年时代就读岳麓书院，师从吴道行，晚年著述宏富，后人辑为《船山遗书》。')">
+        <div class="fa">王</div><div style="flex:1"><div class="fn">王夫之 <span class="chip" style="font-size:10px">明末清初</span></div><div class="fr">关系：<b>就读求学</b>（出处 [1] p118）</div></div><div style="color:#c3cad6">›</div>
+      </div>
+      <div class="fig" onclick="openFigure('曾国藩','晚清重臣、桐城派古文推崇者。道光年间就读岳麓书院，其后书院多位学生位列晚清军政要职。')">
+        <div class="fa">曾</div><div style="flex:1"><div class="fn">曾国藩 <span class="chip" style="font-size:10px">晚清</span></div><div class="fr">关系：<b>就读求学</b>（出处 [1] p156）</div></div><div style="color:#c3cad6">›</div>
+      </div>
+    </div>
+    <div class="entry" style="margin-top:12px" onclick="nav('s-timeline','书院大事记','时间线卡')">
+      <div class="ei">🕰️</div><div class="et"><div class="en">沿时间看书院大事记</div><div class="er">时间线卡 · 含上述人物事件</div></div><div class="ea">›</div>
+    </div>
+  </div>
+  <div class="svcbar">
+    <div class="svc" onclick="runService('朱张会讲为什么影响这么大？','讲解')">💡 讲清楚</div>
+    <div class="svc alt" onclick="runService('朱熹与张栻的观点有何不同？','比较')">⚖️ 帮我比较</div>
+    <div class="svc alt" onclick="go('s-summary')">🗂️ 整理发现</div>
+  </div>
+</section>
+
+<!-- ═══════════ 6 人物图文卡（动态填充） ═══════════ -->
+<section class="screen" id="s-figure">
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">人物 · <b id="fig-name">朱熹</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="scroll">
+    <div class="kcard">
+      <span class="chip">图文卡 · 人物</span>
+      <div class="kt" id="fig-title">朱熹</div>
+      <p class="body" id="fig-body"></p>
+      <div class="src"><b>来源依据</b><br>[1]《岳麓书院史略》（已授权专题库）</div>
+    </div>
+    <div class="sec-title">探索入口 <span class="ln"></span></div>
+    <div class="entry" onclick="runService('朱张会讲讲了什么？','讲解')"><div class="ei">🗣️</div><div class="et"><div class="en">朱张会讲讲了什么</div><div class="er">深入了解 · 会讲主题</div></div><div class="ea">›</div></div>
+    <div class="entry" onclick="go('s-timeline')"><div class="ei">🕰️</div><div class="et"><div class="en">回到书院时间线</div><div class="er">相关联 · 大事记</div></div><div class="ea">›</div></div>
+  </div>
+  <div class="svcbar">
+    <div class="svc" onclick="runService('用 100 字讲清楚这个人','讲解')">💡 讲清楚</div>
+    <div class="svc alt" onclick="go('s-ask')">💬 追问</div>
+    <div class="svc alt" onclick="pushNode(document.getElementById('fig-title').innerText,'人物卡');toast('已收藏并保存节点')">⭐ 收藏</div>
+  </div>
+</section>
+
+<!-- ═══════════ 7 时间线卡 ═══════════ -->
+<section class="screen" id="s-timeline">
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">岳麓书院 · <b>时间线卡</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="scroll">
+    <div class="kcard">
+      <span class="chip">时间线卡</span>
+      <div class="kt" style="font-size:17px">岳麓书院千年大事记</div>
+      <div class="tl">
+        <div class="tl-item"><div class="tl-y">976 年</div><div class="tl-t">北宋 · 朱洞创办</div><div class="tl-b">潭州太守朱洞在岳麓山抱黄洞下建屋办学，奠定书院基址<span class="cite">[1]</span></div></div>
+        <div class="tl-item"><div class="tl-y">1015 年</div><div class="tl-t">宋真宗赐额</div><div class="tl-b">真宗召见山长周式，赐「岳麓书院」匾额与经书，书院名闻天下<span class="cite">[1]</span></div></div>
+        <div class="tl-item hl" style="cursor:pointer" onclick="openFigure('朱熹','南宋理学家。1167 年来访会讲，奠定书院会讲传统。')">
+          <div class="tl-y">1167 年</div><div class="tl-t">朱张会讲</div><div class="tl-b">朱熹与张栻公开论辩两月余，「道林三百众，书院一千徒」 · 点击进入人物卡 →</div></div>
+        <div class="tl-item"><div class="tl-y">1508 年</div><div class="tl-t">明代 · 王阳明来游</div><div class="tl-b">王守仁过长沙讲学于岳麓，心学传入湖湘<span class="cite">[1]</span></div></div>
+        <div class="tl-item"><div class="tl-y">1903 年</div><div class="tl-t">改制为湖南高等学堂</div><div class="tl-b">清末新政改革书院制，岳麓书院并入近代学制<span class="cite">[2]</span></div></div>
+        <div class="tl-item"><div class="tl-y">1926 年</div><div class="tl-t">定名湖南大学</div><div class="tl-b">书院原址延续为大学办学地，「千年学府」由此得名<span class="cite">[2]</span></div></div>
+      </div>
+      <div class="src"><b>来源依据</b><br>[1]《岳麓书院史略》· 大事年表<br>[2] 湖南大学校史 · 官网</div>
+    </div>
+    <div class="entry" onclick="go('s-card-yuelu')"><div class="ei">🏛️</div><div class="et"><div class="en">回到岳麓书院卡片</div><div class="er">返回上一节点</div></div><div class="ea">›</div></div>
+  </div>
+  <div class="svcbar">
+    <div class="svc" onclick="runService('比较宋代与清代书院的功能差异','比较')">⚖️ 比较不同阶段</div>
+    <div class="svc alt" onclick="go('s-summary')">🗂️ 整理发现</div>
+  </div>
+</section>
+
+<!-- ═══════════ 8 湘菜图文卡 ═══════════ -->
+<section class="screen" id="s-card-dish">
+  <div class="topbar"><div class="ic" onclick="go('s-home')">‹</div><div class="crumb">湘菜风物 · <b>剁椒鱼头</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="scroll">
+    <div class="kcard">
+      <span class="chip">图文卡 · 菜系</span>
+      <div class="kt">剁椒鱼头</div>
+      <div class="ksum">湘菜代表作。以鲜鱼头配发酵剁椒蒸制，「鲜辣」风味的典型样本。</div>
+      <div class="kimg" style="background:linear-gradient(135deg,#fbe8e0,#f7f0df)">🌶️<span class="tag">示意图</span></div>
+      <p class="body"><b>食材</b>：主料为鳙鱼（雄鱼头），配料剁椒经盐渍发酵产生乳酸与酯香<span class="cite">[1]</span>。<span class="badge b-fact">📎 事实</span></p>
+      <p class="body"><b>技法</b>：猛火蒸制 8–10 分钟，高温使鱼肉蛋白快速变性，保留水分；剁椒的乳酸与鱼脂结合形成复合鲜味<span class="cite">[1]</span>。<span class="badge b-fact">📎 事实</span></p>
+      <div class="src"><b>来源依据</b><br>[1]《中国菜谱·湖南》· 剁椒蒸鱼头（已授权）</div>
+    </div>
+    <div class="sec-title">探索入口 <span class="ln"></span></div>
+    <div class="entry" onclick="nav('s-compare','剁椒鱼头 vs 清蒸鲈鱼','对比卡')">
+      <div class="ei">⚖️</div><div class="et"><div class="en">与清蒸做法比较</div><div class="er">相比较 · 技法与风味</div></div><div class="ea">›</div>
+    </div>
+    <div class="entry" onclick="runService('这道菜为什么形成这样的风味？','讲解')">
+      <div class="ei">🔥</div><div class="et"><div class="en">这道菜为什么形成这样的风味 <span class="chip orange" style="font-size:10px;margin-left:4px">私人入口</span></div><div class="er">深入了解 · 食材 × 技法 × 地域（你创建的入口）</div></div><div class="ea">›</div>
+    </div>
+    <div class="entry" onclick="nav('s-card-sound','声音与振动','图文卡')">
+      <div class="ei">🔀</div><div class="et"><div class="en">烹饪中的温度与风味变化</div><div class="er">跨主题 · 饮食 → 科学（关系：温度影响风味物质生成 [2]）</div></div><div class="ea">›</div>
+    </div>
+    <div class="addentry" onclick="go('s-entry-nl')">✚ 用一句话新增入口</div>
+  </div>
+  <div class="svcbar">
+    <div class="svc" onclick="runService('讲清楚：剁椒的发酵原理','讲解')">💡 讲清楚</div>
+    <div class="svc alt" onclick="runService('剁椒鱼头与清蒸鲈鱼比较','比较')">⚖️ 帮我比较</div>
+    <div class="svc alt" onclick="go('s-summary')">🗂️ 整理发现</div>
+  </div>
+</section>
+
+<!-- ═══════════ 9 对比卡 ═══════════ -->
+<section class="screen" id="s-compare">
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">湘菜风物 · <b>对比卡</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="scroll">
+    <div class="kcard">
+      <span class="chip">对比卡 · 智能体生成</span>
+      <div class="kt" style="font-size:17px">剁椒鱼头 vs 清蒸鲈鱼</div>
+      <table class="cmp">
+        <tr><th style="width:64px">维度</th><th>剁椒鱼头</th><th>清蒸鲈鱼</th></tr>
+        <tr><td>食材</td><td>鳙鱼头，胶质丰富；剁椒发酵调味<span class="cite">[1]</span></td><td>鲈鱼整条，肉质细嫩，本味突出<span class="cite">[1]</span></td></tr>
+        <tr><td>技法</td><td>猛火蒸 8–10 分钟，调味料与鱼脂融合</td><td>旺火速蒸 6–8 分钟，锁住水分</td></tr>
+        <tr><td>风味</td><td>鲜辣复合：乳酸鲜 + 辣椒素灼热感</td><td>清鲜本味：氨基酸鲜味为主</td></tr>
+        <tr><td>适用场景</td><td>宴席主菜、家庭聚餐（湘地传统）</td><td>清淡饮食、儿童与老人餐食</td></tr>
+      </table>
+      <div class="src"><b>来源依据</b><br>[1]《中国菜谱·湖南》（已授权）· 风味归纳部分 <span class="badge b-syn">✦ 归纳</span>（对比框架由智能体组织，事实条目均带出处）</div>
+    </div>
+    <div class="cardbox">
+      <div style="font-size:13px;font-weight:700;color:var(--ink)">🔀 跨主题继续</div>
+      <p class="body" style="font-size:12.5px;color:var(--sub)">两道菜的差异核心在「温度与时间」。沿此关系进入科学主题：</p>
+      <div class="entry" onclick="nav('s-card-sound','声音与振动','图文卡')"><div class="ei">🔊</div><div class="et"><div class="en">温度如何改变物质状态</div><div class="er">饮食 → 科学 · 关系已说明</div></div><div class="ea">›</div></div>
+    </div>
+  </div>
+  <div class="svcbar">
+    <div class="svc" onclick="toast('已选择新维度「营养」，重新生成对比')">＋ 选择维度</div>
+    <div class="svc alt" onclick="pushNode('对比：剁椒鱼头 vs 清蒸鲈鱼','对比卡');toast('已保存到我的路径')">💾 保存</div>
+  </div>
+</section>
+
+<!-- ═══════════ 10 声音科学卡 ═══════════ -->
+<section class="screen" id="s-card-sound">
+  <div class="topbar"><div class="ic" onclick="go('s-home')">‹</div><div class="crumb">声音科学 · <b>振动与传播</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="scroll">
+    <div class="kcard">
+      <span class="chip">图文卡 · 科学</span>
+      <div class="kt">声音：振动与传播</div>
+      <div class="ksum">声音由物体振动产生，需要介质传播——这是初中物理的验证性实验主题。</div>
+      <p class="body"><b>振动产生声音</b>：音叉发声时触碰水面激起水花，说明发声体在振动<span class="cite">[1]</span>。<span class="badge b-fact">📎 事实</span></p>
+      <p class="body"><b>介质传播</b>：抽成真空的罩内闹钟铃声逐渐消失，说明声音传播需要介质<span class="cite">[1]</span>。<span class="badge b-fact">📎 事实</span></p>
+      <div style="margin-top:12px;border:1.5px dashed #c9d4ea;border-radius:12px;padding:14px;text-align:center;background:#f8faff">
+        <div style="font-size:22px">🎛️</div>
+        <div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-top:4px">互动演示组件：调整频率观察波形</div>
+        <div style="font-size:11px;color:var(--sub);margin-top:3px">经审核的验证性组件 · <span class="chip amber" style="font-size:10px">三期上线</span></div>
+      </div>
+      <div class="src"><b>来源依据</b><br>[1] 义务教育教科书·物理八年级上册 · 第 2 章（已授权）</div>
+    </div>
+    <div class="sec-title">探索入口 <span class="ln"></span></div>
+    <div class="entry" onclick="runService('乐器如何改变音调？','讲解')"><div class="ei">🎻</div><div class="et"><div class="en">乐器如何改变音调</div><div class="er">相关联 → 音乐文化（跨主题）</div></div><div class="ea">›</div></div>
+    <div class="entry" onclick="toast('教师入口「课堂上如何验证」生成观察任务与记录表（演示见工作台原型）')"><div class="ei">🧪</div><div class="et"><div class="en">课堂上如何验证<span class="chip orange" style="font-size:10px;margin-left:4px">入口模板</span></div><div class="er">去实践 · 观察任务 + 记录表</div></div><div class="ea">›</div></div>
+    <div class="addentry" onclick="go('s-entry-nl')">✚ 用一句话新增入口</div>
+  </div>
+  <div class="svcbar">
+    <div class="svc" onclick="runService('讲清楚：为什么真空里听不到声音','讲解')">💡 讲清楚</div>
+    <div class="svc alt" onclick="go('s-ask')">💬 追问</div>
+    <div class="svc alt" onclick="go('s-summary')">🗂️ 整理发现</div>
+  </div>
+</section>
+
+<!-- ═══════════ 11 自由追问 ═══════════ -->
+<section class="screen" id="s-ask">
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb"><b>自由追问</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="scroll" style="padding-bottom:10px">
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <span class="chip">📍 当前：岳麓书院</span><span class="chip gray">🎯 会话目标：了解选址与人物</span><span class="chip gray">深入版</span>
+    </div>
+    <div class="cardbox" style="background:var(--pri-soft);border-color:#d5def8;padding:13px 15px">
+      <div style="font-size:12px;color:var(--sub)">仅使用当前卡片与会话路径理解你的问题（上下文隔离，不混入其他探索）</div>
+    </div>
+    <div class="sec-title">从路径中推荐的问法 <span class="ln"></span></div>
+    <div class="entry" onclick="runService('书院和岳麓山道教佛寺有过互动吗？','讲解')"><div class="ei">❓</div><div class="et"><div class="en">书院和山上寺庙有过互动吗</div><div class="er">基于当前卡片关联</div></div><div class="ea">›</div></div>
+    <div class="entry" onclick="runService('为什么叫「千年学府」？','讲解')"><div class="ei">❓</div><div class="et"><div class="en">为什么叫「千年学府」</div><div class="er">高频追问</div></div><div class="ea">›</div></div>
+  </div>
+  <div class="qa-bar">
+    <input id="ask-input" placeholder="输入你的问题…" onkeydown="if(event.key==='Enter')sendAsk()">
+    <div class="send" onclick="sendAsk()">➤</div>
+  </div>
+</section>
+
+<!-- ═══════════ 12 任务卡（60分钟路线） ═══════════ -->
+<section class="screen" id="s-task">
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">岳麓书院 · <b>任务卡</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="scroll">
+    <div class="kcard">
+      <span class="chip">任务与成果卡 · 智能体生成</span>
+      <div class="kt" style="font-size:17px">60 分钟家庭文化探索路线</div>
+      <div class="ksum">面向第一次到访的家庭 · 每站附一个观察问题 · 共 4 站</div>
+      <div class="stop"><div class="sm"><b>10</b>分钟</div><div><div class="st">① 大门 · 赫曦台</div><div class="sq">👀 观察问题：台上「赫曦」两个字是什么意思？猜猜为什么放在进门第一眼的位置？</div></div></div>
+      <div class="stop"><div class="sm"><b>15</b>分钟</div><div><div class="st">② 讲堂</div><div class="sq">👀 观察问题：找到「实事求是」匾额。它挂在讲堂什么位置？和上课的地方有什么关系？</div></div></div>
+      <div class="stop"><div class="sm"><b>10</b>分钟</div><div><div class="st">③ 御书楼</div><div class="sq">👀 观察问题：藏书楼为什么要建在书院最高处？（提示：想想防火和地位）</div></div></div>
+      <div class="stop"><div class="sm"><b>15</b>分钟</div><div><div class="st">④ 爱晚亭</div><div class="sq">👀 观察问题：「停车坐爱枫林晚」写的是这里吗？亭子和诗有什么关系？</div></div></div>
+      <div class="src">基于已维护的参观信息生成（官方导览 2024-04 更新）；<b style="color:var(--amber)">实时开放情况以官方公告为准，不作确定承诺</b>。<br>出品说明：路线为 <span class="badge b-gen">✦ 创意生成</span>（参考已核验的开放时间与空间信息编排）</div>
+    </div>
+    <div class="sec-title">记录观察 <span class="ln"></span></div>
+    <textarea class="inp" placeholder="写下你们的发现，将保存进探索成果…">② 讲堂：「实事求是」挂在讲堂正中，我们猜是因为这里决定怎么办学问。</textarea>
+  </div>
+  <div class="svcbar">
+    <div class="svc" onclick="pushNode('任务：60分钟家庭路线','任务卡');toast('已保存为探索成果');">💾 保存为成果</div>
+    <div class="svc alt" onclick="go('s-share')">📤 分享</div>
+    <div class="svc alt" onclick="runService('调整路线：改为雨天室内版','讲解')">🔄 调整路线</div>
+  </div>
+</section>
+
+<!-- ═══════════ 13 新增入口·输入 ═══════════ -->
+<section class="screen" id="s-entry-nl">
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">岳麓书院 · <b>新增入口</b></div></div>
+  <div class="scroll">
+    <h1 class="page" style="margin-top:6px">想要什么入口，说一句话</h1>
+    <div style="font-size:12px;color:var(--sub);line-height:1.7;margin-top:4px">系统会把你的话转换成<b>可预览、可修改</b>的入口配置。入口只能使用本卡已授权的资料与平台已有服务。</div>
+    <textarea class="inp" id="nl-input" style="margin-top:14px">给第一次来这里的家庭设计一条 60 分钟的文化探索路线，每一站附一个可以观察的问题。</textarea>
+    <div class="sec-title">试试这些例子 <span class="ln"></span></div>
+    <div class="entry" onclick="document.getElementById('nl-input').value='给第一次来这里的家庭设计一条60分钟的文化探索路线，每一站附一个可以观察的问题。'">
+      <div class="ei">🏛️</div><div class="et"><div class="en" style="font-size:12.5px;line-height:1.5">给第一次来的家庭设计 60 分钟路线，每站附观察问题</div></div>
+    </div>
+    <div class="entry" onclick="document.getElementById('nl-input').value='增加「这道菜为什么形成这样的风味」，从食材、技法和地域饮食习惯三个角度解释，用对比卡呈现。';go('s-card-dish')">
+      <div class="ei">🌶️</div><div class="et"><div class="en" style="font-size:12.5px;line-height:1.5">「这道菜为什么形成这样的风味」三角度解释，对比卡呈现</div></div>
+    </div>
+    <div class="entry" onclick="document.getElementById('nl-input').value='增加一个面向初中生的入口，用已验证的互动演示解释声音与振动的关系，最后给出一个观察任务。';go('s-card-sound')">
+      <div class="ei">🔊</div><div class="et"><div class="en" style="font-size:12.5px;line-height:1.5">面向初中生：互动演示解释声音与振动，附观察任务</div></div>
+    </div>
+  </div>
+  <div class="svcbar" style="padding-bottom:26px">
+    <div class="svc" style="padding:13px 0" onclick="go('s-entry-config')">✨ 生成入口配置</div>
+  </div>
+</section>
+
+<!-- ═══════════ 14 新增入口·配置与试运行 ═══════════ -->
+<section class="screen" id="s-entry-config">
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">新增入口 · <b>配置预览</b></div></div>
+  <div class="scroll">
+    <div class="cardbox">
+      <div style="font-size:12px;color:var(--green);font-weight:700">✓ 已识别探索目的：任务卡生成（讲解服务）</div>
+      <label class="fld">入口名称（可修改）</label>
+      <input class="inp" value="60 分钟家庭文化探索路线">
+      <label class="fld">所需输入（服务运行时会询问使用者）</label>
+      <div class="check"><div class="cbx on">✓</div>儿童年龄</div>
+      <div class="check"><div class="cbx on">✓</div>可用时间（默认 60 分钟）</div>
+      <div class="check"><div class="cbx" onclick="this.classList.toggle('on');this.innerText=this.classList.contains('on')?'✓':''"></div>是否避开台阶多的路线</div>
+      <label class="fld">资料与上下文</label>
+      <div class="src">本卡片 + 已授权专题库（12 条）<br><span style="color:var(--pri)">🔒 自然语言不能扩大资料与工具权限（系统硬约束）</span></div>
+      <label class="fld">服务与输出形式</label>
+      <div class="src">讲解服务 → 1 张任务卡（4–6 站 + 每站观察问题 + 出处）</div>
+    </div>
+    <div class="cardbox" id="test-run-box">
+      <div class="sec-title" style="margin-top:0">🧪 试运行预览 <span class="ln"></span></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13px;color:var(--ink)"><span style="color:var(--green);font-weight:700">✓</span>试运行成功 · 输出符合预期（用时 8.2 秒）</div>
+      <div style="border:1px solid var(--line);border-radius:12px;padding:12px;font-size:12.5px;color:#3b4757;line-height:1.7;background:#fafbfd">
+        <b>60 分钟家庭文化探索路线</b><br>① 大门·赫曦台（10min）观察「赫曦」二字…<br>② 讲堂（15min）寻找「实事求是」匾…<br>③ 御书楼（10min）为什么建在最高处？<br>④ 爱晚亭（15min）诗与亭的关系<br><span style="color:var(--sub);font-size:11px">——共 4 站 · 出自官方导览（2024-04）· 示意预览</span>
+      </div>
+    </div>
+  </div>
+  <div class="svcbar" style="flex-direction:column;gap:8px;padding:10px 12px 22px">
+    <div class="row2" style="width:100%">
+      <div class="svc alt" style="flex:1;border:1px solid var(--line)" onclick="toast('已用当前配置重新试运行…结果一致')">🔄 重新试运行</div>
+      <div class="svc alt" style="flex:1;border:1px solid var(--line)" onclick="toast('入口草案支持继续编辑（原型示意）')">✎ 继续编辑</div>
+    </div>
+    <div class="row2" style="width:100%">
+      <div class="svc" style="flex:1.4;background:var(--pri);color:#fff" onclick="toast('已保存到个人空间（仅自己可见，可在「我的·私人入口」管理）');pushNode('新增入口：家庭路线','入口')">💾 保存到个人空间</div>
+      <div class="svc" style="flex:1" onclick="toast('已提交公共审核，将由卡片维护者确认后发布')">📤 提交公共审核</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 15 我的路径 ═══════════ -->
+<section class="screen" id="s-path">
+  <div class="topbar"><div class="ic" onclick="go('s-home')">‹</div><div class="crumb"><b>我的路径</b></div><div class="ic" onclick="go('s-summary')">🗂️</div></div>
+  <div class="scroll">
+    <div class="cardbox" style="padding:13px 15px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><div style="font-size:14.5px;font-weight:800;color:var(--ink)">岳麓书院：从选址到人物</div>
+        <div style="font-size:11.5px;color:var(--sub);margin-top:2px">进行中 · 始于 09-29 · 深入版</div></div>
+        <span class="chip green">可回溯</span>
+      </div>
+    </div>
+    <div style="font-size:11.5px;color:var(--sub);background:#f0f4ff;border-radius:10px;padding:9px 12px;margin-top:10px;line-height:1.6">
+      💡 点击任一节点可回到该处继续探索；从历史节点继续会形成<b>新分支</b>，不影响已有发现。
+    </div>
+    <div class="sec-title">探索树 <span class="ln"></span></div>
+    <div id="path-tree"></div>
+    <div class="sec-title">未决疑问（2） <span class="ln"></span></div>
+    <div class="cardbox" style="padding:12px 15px;font-size:12.5px;color:#3b4757;line-height:1.8">
+      ① 朱张渡的渡江记载有多少史料支撑？（来自讲解卡·证据缺口）<br>② 书院与岳麓山寺庙的互动如何？<span style="color:var(--pri);cursor:pointer" onclick="go('s-ask')"> 去追问 →</span>
+    </div>
+  </div>
+  <div class="svcbar">
+    <div class="svc" onclick="go('s-summary')">🗂️ 整理目前发现</div>
+    <div class="svc alt" onclick="toast('已暂存会话，可随时从首页「继续探索」恢复')">⏸️ 暂存</div>
+    <div class="svc alt" onclick="toast('已按未决疑问生成三个新方向：渡口史料 / 山寺关系 / 讲堂建筑')">🔀 换个方向</div>
+  </div>
+</section>
+
+<!-- ═══════════ 16 成果整理 ═══════════ -->
+<section class="screen" id="s-summary">
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb"><b>整理发现</b> · 成果整理服务</div></div>
+  <div class="scroll">
+    <div class="kcard">
+      <span class="chip">探索报告 · 智能体整理</span>
+      <div class="kt" style="font-size:17px">岳麓书院：选址智慧与人物群像</div>
+      <div class="sec-title" style="margin-top:10px">关键发现（勾选要纳入的分支发现）</div>
+      <div class="check" onclick="tick(this)"><div class="cbx on">✓</div><span>选址遵循「山水—渡口—城市」结构<span class="cite">[1][2]</span> <span class="chip gray" style="font-size:10px">主分支</span></span></div>
+      <div class="check" onclick="tick(this)"><div class="cbx on">✓</div><span>朱张会讲开创公开论辩传统<span class="cite">[1]</span> <span class="chip gray" style="font-size:10px">主分支</span></span></div>
+      <div class="check" onclick="tick(this)"><div class="cbx on">✓</div><span>儿童观察：「实事求是」匾在讲堂正中 <span class="chip orange" style="font-size:10px">家庭任务分支</span></span></div>
+      <div class="check" onclick="tick(this)"><div class="cbx"></div><span>剁椒鱼头与清蒸的风味差异 <span class="chip gray" style="font-size:10px">跨主题分支</span></span></div>
+      <div class="sec-title">未决问题（保留）</div>
+      <p class="body" style="font-size:12.5px;color:var(--sub)">① 朱张渡渡江的史料支撑 ② 山寺互动关系 —— 已附可查证方向</p>
+      <div class="src"><b>出处汇总</b>：4 个知识单元 · 6 处定位（章节/页码）· 全部可点击回溯</div>
+    </div>
+    <div style="font-size:11.5px;color:var(--sub);text-align:center;margin:10px 0">报告基于你勾选的节点与各次服务的已校验出处生成，可继续编辑</div>
+  </div>
+  <div class="svcbar">
+    <div class="svc" onclick="toast('已保存到「我的成果」，可随时编辑与分享')">💾 保存成果</div>
+    <div class="svc alt" onclick="go('s-share')">📤 去分享</div>
+  </div>
+</section>
+
+<!-- ═══════════ 17 分享设置 ═══════════ -->
+<section class="screen" id="s-share">
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb"><b>分享探索</b></div></div>
+  <div class="scroll">
+    <div class="shbanner">分享展示「发现了什么」与「如何发现」。默认不含聊天记录、隐藏分支与个人信息；接收者可从任一节点接续探索。</div>
+    <div class="cardbox">
+      <div class="shstep"><div class="n">1</div><div style="font-size:13.5px;font-weight:700;color:var(--ink);padding-top:2px">选择要分享的节点</div></div>
+      <div class="check" onclick="tick(this)"><div class="cbx on">✓</div><span>岳麓书院（起点）</span></div>
+      <div class="check" onclick="tick(this)"><div class="cbx on">✓</div><span>讲解：为什么建在这里</span></div>
+      <div class="check" onclick="tick(this)"><div class="cbx on">✓</div><span>人物关联 → 大事记</span></div>
+      <div class="check" onclick="tick(this)"><div class="cbx on">✓</div><span>家庭任务分支（含孩子的观察记录）</span></div>
+      <div class="check" onclick="tick(this)"><div class="cbx"></div><span>剁椒鱼头跨主题分支</span></div>
+    </div>
+    <div class="cardbox">
+      <div class="shstep"><div class="n">2</div><div style="font-size:13.5px;font-weight:700;color:var(--ink);padding-top:2px">编辑标题与摘要</div></div>
+      <label class="fld">标题</label><input class="inp" value="岳麓书院：选址智慧与人物群像">
+      <label class="fld">摘要</label><textarea class="inp" style="min-height:56px">一次从「为什么建在山下」出发的探索，附家庭观察任务。</textarea>
+      <div style="font-size:11.5px;color:var(--sub);margin-top:8px">已自动移除：2 条私人追问 · 1 个隐藏分支</div>
+    </div>
+    <div class="cardbox">
+      <div class="shstep"><div class="n">3</div><div style="font-size:13.5px;font-weight:700;color:var(--ink);padding-top:2px">访问范围</div></div>
+      <div class="check" onclick="onlyTick(this)"><div class="cbx on">✓</div><span>公开（任何人可浏览，保存/接续需登录）</span></div>
+      <div class="check" onclick="onlyTick(this);toast('指定成员分享为二期功能')"><div class="cbx"></div><span>指定成员（二期）</span></div>
+      <div class="check" onclick="onlyTick(this)"><div class="cbx"></div><span>仅自己（生成固定链接备查）</span></div>
+      <div style="font-size:11.5px;color:var(--sub);margin-top:8px">生成的是<b>固定版本快照</b>：接收者看到的就是你现在选定的内容；卡片后续更新不影响快照。</div>
+    </div>
+  </div>
+  <div class="svcbar">
+    <div class="svc" style="background:var(--pri);color:#fff" onclick="go('s-share-view')">🔗 生成分享链接</div>
+    <div class="svc alt" onclick="toast('已预览接收者视图（即下一页）')">👁️ 预览</div>
+  </div>
+</section>
+
+<!-- ═══════════ 18 接收者视角 ═══════════ -->
+<section class="screen" id="s-share-view">
+  <div class="topbar"><div class="ic" onclick="go('s-share')">‹</div><div class="crumb"><b>分享页</b> · 免登录可浏览</div></div>
+  <div class="scroll">
+    <div style="background:linear-gradient(120deg,#3a5fcd,#5d7ee8);border-radius:16px;padding:18px;color:#fff;margin-top:12px">
+      <div style="font-size:11px;opacity:.85">来自 小舟 的探索分享 · 快照 v3（2026-09-30）</div>
+      <div style="font-size:17px;font-weight:800;margin-top:6px">岳麓书院：选址智慧与人物群像</div>
+      <div style="font-size:12px;opacity:.85;margin-top:6px;line-height:1.6">一次从「为什么建在山下」出发的探索，附家庭观察任务。</div>
+      <div style="display:flex;gap:14px;margin-top:12px;font-size:11px;opacity:.9"><span>🧭 4 个节点</span><span>🌿 2 个分支</span><span>📎 4 个出处</span></div>
+    </div>
+    <div class="shbanner">👤 接收者视角预览——未登录状态。浏览无需账号；「接续探索」将创建<b>你自己的副本</b>，不会改动原路径。</div>
+    <div class="sec-title">探索路径 <span class="ln"></span></div>
+    <div class="tl">
+      <div class="tl-item"><div class="tl-y">起点</div><div class="tl-t">🏛️ 岳麓书院</div><div class="tl-b">图文卡 · 已核验 · 可从这里继续</div></div>
+      <div class="tl-item"><div class="tl-y">追问</div><div class="tl-t">为什么建在岳麓山下</div><div class="tl-b">讲解卡 · 事实与归纳分段标注 · 2 处出处</div></div>
+      <div class="tl-item"><div class="tl-y">关联</div><div class="tl-t">人物 → 大事记</div><div class="tl-b">朱张会讲（1167）与千年沿革</div></div>
+      <div class="tl-item"><div class="tl-y">分支</div><div class="tl-t">🧒 家庭观察任务</div><div class="tl-b">孩子的记录：「实事求是」挂在讲堂正中</div></div>
+    </div>
+    <div class="sec-title">探索成果 <span class="ln"></span></div>
+    <div class="cardbox" style="padding:13px 15px;font-size:12.5px;color:#3b4757;line-height:1.8">
+      <b>报告摘要</b>：选址遵循「山水—渡口—城市」结构[1][2]；朱张会讲开创公开论辩传统[1]。<br><span style="color:var(--sub)">出处 4 个 · 未决问题 2 条（附查证方向）</span>
+    </div>
+    <div style="height:8px"></div>
+  </div>
+  <div class="svcbar">
+    <div class="svc" style="background:var(--pri);color:#fff" onclick="toast('已创建你的探索副本（原路径不受影响）。登录后可保存进度。');go('s-card-yuelu')">▶ 沿此路径继续</div>
+    <div class="svc alt" onclick="toast('已收藏（登录后同步到个人空间）')">⭐ 收藏</div>
+  </div>
+</section>
+
+<!-- ═══════════ 19 我的 ═══════════ -->
+<section class="screen" id="s-me">
+  <div class="topbar"><div class="ic" onclick="go('s-home')">‹</div><div class="crumb"><b>个人空间</b></div></div>
+  <div class="scroll">
+    <div class="cardbox" style="display:flex;gap:14px;align-items:center">
+      <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#e8eef9,#f7efe6);display:flex;align-items:center;justify-content:center;font-size:22px">🧑‍🎓</div>
+      <div style="flex:1"><div style="font-size:16px;font-weight:800;color:var(--ink)">小舟</div><div style="font-size:12px;color:var(--sub);margin-top:2px">探索者 · 已探索 3 个专题</div></div>
+      <span class="chip">⚙️ 偏好</span>
+    </div>
+    <div class="themes" style="grid-template-columns:repeat(4,1fr)">
+      <div class="theme" onclick="openPath()"><div class="em">🧭</div><div class="tn" style="font-size:12px">路径</div><div class="tc">2 个会话</div></div>
+      <div class="theme" onclick="toast('收藏列表（原型示意）')"><div class="em">⭐</div><div class="tn" style="font-size:12px">收藏</div><div class="tc">5 张卡</div></div>
+      <div class="theme" onclick="go('s-summary')"><div class="em">🗂️</div><div class="tn" style="font-size:12px">成果</div><div class="tc">1 份报告</div></div>
+      <div class="theme" onclick="go('s-entry-config')"><div class="em">✚</div><div class="tn" style="font-size:12px">私人入口</div><div class="tc">1 个</div></div>
+    </div>
+    <div class="cardbox">
+      <div class="sec-title" style="margin-top:0">今日服务配额 <span class="ln"></span></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--ink)"><span>智能体服务</span><b>12 / 30 次</b></div>
+      <div style="height:8px;border-radius:4px;background:#edf0f5;margin-top:8px;overflow:hidden"><div style="width:40%;height:100%;background:var(--pri);border-radius:4px"></div></div>
+      <div style="font-size:11px;color:var(--sub);margin-top:8px">超限后当日不可再发起服务；入口试运行计入配额。个性化偏好与历史仅自己可见，可一键清除。</div>
+    </div>
+  </div>
+  <div class="tabbar">
+    <div class="tab" onclick="go('s-home')"><div class="ti">🏠</div>首页</div>
+    <div class="tab" onclick="openPath()"><div class="ti">🧭</div>我的路径</div>
+    <div class="tab on"><div class="ti">👤</div>我的</div>
+  </div>
+</section>
+
+<div id="toast"></div>
+
+<!-- 开场说明 -->
+<div class="intro" id="intro">
+  <div class="ibox">
+    <h3>📖 知识探索卡片系统 · 移动端原型</h3>
+    <p>高保真可点击原型，覆盖一期核心闭环：<br>
+      ① 打开「岳麓书院」卡片，走完 讲解服务 → 人物 → 时间线；<br>
+      ② 点右上 🧭 查看路径树，回到历史节点开<b>新分支</b>；<br>
+      ③ 用一句话<b>新增入口</b>并试运行；<br>
+      ④ 整理发现 → 分享 → 切换到<b>接收者视角</b>接续探索。<br>
+      湘菜专题演示「跨主题关联」，声音专题演示分期标识。</p>
+    <div class="btn pri block" onclick="document.getElementById('intro').style.display='none'">开始体验</div>
+  </div>
+</div>
+</div>
+
+<script>
+/* ---------- 路由与路径记录 ---------- */
+const state = { nodes: [], seq: 0, cursor: null, stack: [] };
+// 预置一条历史路径，模拟"继续探索"
+function seed(){
+  const a=addNode('岳麓书院（起点）','图文卡',null);
+  const b=addNode('讲解：为什么建在这里','讲解卡',a);
+  addNode('人物关联 → 大事记','时间线卡',a);
+  state.cursor=a;
+}
+function addNode(title,type,parent){
+  state.seq++;
+  const n={id:state.seq,title,type,parent:parent==null?null:parent.id,ref:parent,branch:0};
+  state.nodes.push(n);return n;
+}
+function depth(n){let d=0,c=n;while(c.ref){d++;c=c.ref;}return d;}
+seed();
+
+const screens=document.querySelectorAll('.screen');
+function go(id){
+  screens.forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  state.stack.push(id);
+  // tabbar 高亮
+  document.querySelectorAll('.tabbar').forEach(()=>{});
+}
+function back(){state.stack.pop();const p=state.stack.pop()||'s-home';go(p);}
+
+/* ---------- 节点导航（计入路径树） ---------- */
+function nav(id,title,type){
+  const n=addNode(title,type,state.cursor);
+  state.cursor=n;
+  go(id);renderPath();
+}
+function pushNode(title,type){const n=addNode(title,type,state.cursor);state.cursor=n;renderPath();}
+function runService(q,kind){
+  document.getElementById('run-q').innerText=q+'（'+kind+'）';
+  document.getElementById('explain-mode').innerText=['深入版','简明版'][Math.floor(Math.random()*2)];
+  go('s-run');
+  setTimeout(()=>{pushNode((kind==='比较'?'对比：':'讲解：')+q.slice(0,14)+'…',kind==='比较'?'对比卡':'讲解卡');go('s-explain');renderPath();},2000);
+}
+function sendAsk(){
+  const v=document.getElementById('ask-input').value.trim();
+  if(!v){toast('先输入一个问题吧');return;}
+  runService(v,'讲解');
+}
+function openFigure(name,body){
+  document.getElementById('fig-name').innerText=name;
+  document.getElementById('fig-title').innerText=name;
+  document.getElementById('fig-body').innerText=(body||'')+'';
+  pushNode('人物：'+name,'人物卡');
+  go('s-figure');renderPath();
+}
+function openPath(){renderPath();go('s-path');}
+
+/* ---------- 路径树渲染 ---------- */
+function renderPath(){
+  const box=document.getElementById('path-tree');
+  box.innerHTML=state.nodes.map(n=>{
+    const d=depth(n);
+    const isCur=state.cursor&&n.id===state.cursor.id;
+    const sibBranch = n.ref && state.nodes.filter(x=>x.parent===n.parent).length>1 && n.id!==Math.min(...state.nodes.filter(x=>x.parent===n.parent).map(x=>x.id));
+    return `<div class="node ${n.ref?'leaf':''}" style="margin-left:${d*18}px;${isCur?'border-color:var(--pri);background:var(--pri-soft)':''}"
+      onclick="jumpTo(${n.id})">
+      <div class="dot"></div>
+      <div style="flex:1"><div class="nt">${n.title}${sibBranch?' <span class="chip orange" style="font-size:10px">分支</span>':''}${isCur?' <span class="chip" style="font-size:10px">当前位置</span>':''}</div>
+      <div class="ns">${n.type} · 节点 #${n.id}</div></div>
+      <div class="nx">${isCur?'':'回到这里 →'}</div></div>`;
+  }).join('');
+}
+function jumpTo(id){
+  const n=state.nodes.find(x=>x.id===id);
+  if(state.cursor&&n.id===state.cursor.id){toast('已在此节点');return;}
+  state.cursor=n;
+  toast('已回到「'+n.title+'」。从这里继续探索将形成新分支。');
+  go('s-card-yuelu');renderPath();
+}
+
+/* ---------- 小组件 ---------- */
+let toastTimer;
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.innerText=msg;t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2600);
+}
+function tick(el){const c=el.querySelector('.cbx');c.classList.toggle('on');c.innerText=c.classList.contains('on')?'✓':'';}
+function onlyTick(el){document.querySelectorAll('#s-share .cbx').forEach(c=>{c.classList.remove('on');c.innerText='';});
+  const c=el.querySelector('.cbx');c.classList.add('on');c.innerText='✓';}
+renderPath();
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# Java
+target/
+*.class
+*.jar
+.idea/
+*.iml
+
+# Node
+node_modules/
+dist/
+.pnpm-store/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local
+*.log
+.env
+.env.local

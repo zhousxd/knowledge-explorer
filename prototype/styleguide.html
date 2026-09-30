@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识探索 · 主题与 UI 规范 v1.1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;900&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   tokens.css v1.1 —— 与 docs/04-主题与UI规范.md §11.1 同源，勿单独修改
+   方向：纸墨编辑部（靛青 × 暖纸 × 宋体标题 × 细线）
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  /* 品牌色 · 靛青（传统染料色，行动/当前/链接） */
+  --ke-primary:#3A5FCD; --ke-primary-deep:#2F53B8; --ke-primary-soft:#EEF2FD;
+  /* 三档可信色（独占语义，符号 ●◐○ 与颜色双编码） */
+  --ke-fact:#1F7A4D;  --ke-fact-soft:#EAF5EF;  --ke-fact-graphic:#2E8B57;   /* ● 事实 */
+  --ke-synth:#0E7490; --ke-synth-soft:#E3F4F8;                              /* ◐ 归纳 */
+  --ke-gen:#A85510;   --ke-gen-soft:#FDF1E7;   --ke-gen-graphic:#D97A2B;    /* ○ 生成 */
+  /* 功能与场景色 */
+  --ke-warn:#8F5E12;    --ke-warn-soft:#FDF6E3; --ke-warn-line:#F3DDAD;
+  --ke-danger:#C0392B;  --ke-danger-soft:#FDECEA;
+  --ke-private:#6B46C1; --ke-private-soft:#F1ECFA;
+  --ke-success:var(--ke-fact); --ke-success-soft:var(--ke-fact-soft);
+  /* 中性色 · 纸墨（暖） */
+  --ke-ink:#26221D; --ke-ink-2:#4A443A; --ke-sub:#6E675C; --ke-sub-2:#9A9284;
+  --ke-line:#E7E1D4; --ke-line-2:#EFEAE0; --ke-line-strong:#CDC5B4;
+  --ke-surface:#FFFFFF; --ke-surface-2:#F5F1E8; --ke-bg:#F7F3EB;
+  /* 暗色面板 · 墨（工作台侧栏，固定深色） */
+  --ke-side:#262119; --ke-side-2:#332D24; --ke-side-line:#3B342A;
+  --ke-side-text:#B0A794; --ke-side-text-2:#989180;
+  /* 透明层 */
+  --ke-mask:rgba(28,24,18,.55); --ke-toast:rgba(38,34,29,.92);
+  /* 圆角（印刷感：克制、偏小） */
+  --ke-radius-xs:3px; --ke-radius-s:5px; --ke-radius-m:8px; --ke-radius-l:12px; --ke-radius-full:999px;
+  /* 阴影：卡片一律细线描边，阴影只给悬浮层 */
+  --ke-shadow-1:0 2px 8px rgba(38,34,29,.07);
+  --ke-shadow-2:0 8px 24px rgba(38,34,29,.12);
+  --ke-shadow-3:0 16px 48px rgba(38,34,29,.18);
+  --ke-focus:0 0 0 3px rgba(58,95,205,.25);
+  /* 字体：显示层宋体（知识与品牌层专用），界面层黑体 */
+  --ke-font:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei",sans-serif;
+  --ke-font-display:"Noto Serif SC","Songti SC","STSong","Source Han Serif SC","SimSun",serif;
+  /* 动效 */
+  --ke-dur-fast:120ms; --ke-dur-base:150ms; --ke-dur-slow:250ms;
+  --ke-ease:cubic-bezier(.25,.8,.35,1);
+  /* 层级 */
+  --ke-z-sticky:10; --ke-z-bar:20; --ke-z-drawer:50; --ke-z-modal:100; --ke-z-toast:200;
+}
+/* ═══════════ 规范页骨架 ═══════════ */
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--ke-font);background:var(--ke-bg);color:var(--ke-ink);font-size:14px;line-height:1.7;
+  background-image:repeating-linear-gradient(0deg,transparent,transparent 31px,rgba(38,34,29,.025) 31px,rgba(38,34,29,.025) 32px)}
+.layout{display:grid;grid-template-columns:216px minmax(0,1fr);max-width:1240px;margin:0 auto}
+/* —— 左目录（印刷目录） —— */
+.rail{position:sticky;top:0;height:100vh;padding:34px 6px 30px 30px;border-right:1px solid var(--ke-line);overflow-y:auto}
+.rail .rl{font-family:var(--ke-font-display);font-weight:900;font-size:15px;letter-spacing:.5px;margin-bottom:4px}
+.rail .rs{font-size:10.5px;color:var(--ke-sub-2);letter-spacing:2px;margin-bottom:18px}
+.rail a{display:flex;align-items:baseline;gap:8px;text-decoration:none;color:var(--ke-sub);font-size:12.5px;padding:7px 2px;border-bottom:1px dotted var(--ke-line-strong)}
+.rail a .no{font-family:var(--ke-font-display);font-size:11px;color:var(--ke-sub-2);width:18px}
+.rail a:hover{color:var(--ke-primary)}
+.rail a:hover .no{color:var(--ke-primary)}
+.rail .stamp-s{margin-top:26px;width:38px;height:38px;border:2px solid var(--ke-primary);border-radius:var(--ke-radius-s);
+  display:flex;align-items:center;justify-content:center;font-family:var(--ke-font-display);font-weight:900;font-size:17px;color:var(--ke-primary)}
+.rail .ver{font-size:10.5px;color:var(--ke-sub-2);margin-top:10px;line-height:1.6}
+/* —— 内容列 —— */
+.main{padding:0 44px 90px 42px;min-width:0}
+/* —— Masthead —— */
+.mast{padding:52px 0 26px;border-bottom:2px solid var(--ke-ink)}
+.mast .kicker{display:flex;align-items:center;gap:10px;font-size:12px;letter-spacing:4px;color:var(--ke-sub);font-weight:600}
+.mast .kicker::before{content:"";width:26px;height:2px;background:var(--ke-primary)}
+.mast h1{font-family:var(--ke-font-display);font-weight:900;font-size:46px;line-height:1.25;margin-top:14px;letter-spacing:1px}
+.mast h1 em{font-style:normal;color:var(--ke-primary)}
+.mast .stance{margin-top:14px;font-size:14.5px;color:var(--ke-ink-2);max-width:560px}
+.mast .stance b{color:var(--ke-ink)}
+.stamp{width:74px;height:74px;background:var(--ke-primary);border-radius:var(--ke-radius-s);position:relative;
+  display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--ke-font-display);font-weight:900;font-size:34px}
+.stamp::after{content:"";position:absolute;inset:5px;border:1.5px solid rgba(255,255,255,.75);border-radius:2px}
+.mast .mrow{display:flex;justify-content:space-between;align-items:flex-end;gap:20px}
+.colo{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--ke-line);margin-top:6px}
+.colo div{padding:10px 0;font-size:11.5px;color:var(--ke-sub)}
+.colo b{display:block;font-size:10.5px;letter-spacing:2px;color:var(--ke-sub-2);font-weight:600;margin-bottom:2px}
+/* —— 章节头 —— */
+section{padding-top:58px}
+.shead{display:flex;align-items:baseline;gap:16px;border-bottom:1px solid var(--ke-ink);padding-bottom:10px}
+.shead .no{font-family:var(--ke-font-display);font-weight:900;font-size:34px;color:var(--ke-primary);line-height:1}
+.shead h2{font-family:var(--ke-font-display);font-weight:900;font-size:23px;letter-spacing:1px}
+.shead .en{margin-left:auto;font-size:10.5px;letter-spacing:3px;color:var(--ke-sub-2)}
+.lead{font-size:13px;color:var(--ke-sub);margin:14px 0 4px;max-width:680px}
+h3{font-size:13.5px;font-weight:700;margin:26px 0 10px;display:flex;align-items:center;gap:8px}
+h3::before{content:"";width:14px;height:2px;background:var(--ke-primary)}
+/* —— 通用块 —— */
+.sheet{border:1px solid var(--ke-line);background:var(--ke-surface);border-radius:var(--ke-radius-l);padding:22px;margin-top:14px}
+.grid{display:grid;gap:12px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g5{grid-template-columns:repeat(5,1fr)}
+table.tb{width:100%;border-collapse:collapse;font-size:12.5px}
+.tb th{text-align:left;padding:8px 10px;color:var(--ke-sub);font-weight:600;border-bottom:1px solid var(--ke-line-strong);font-size:11.5px;letter-spacing:.5px}
+.tb td{padding:8px 10px;border-bottom:1px solid var(--ke-line-2);vertical-align:top}
+.tb code{font-family:ui-monospace,Consolas,monospace;font-size:11px;background:var(--ke-surface-2);border-radius:3px;padding:1px 6px;color:var(--ke-ink-2)}
+.note{font-size:11.5px;color:var(--ke-sub);margin-top:10px;line-height:1.7}
+/* —— 原则 —— */
+.pcard{border:1px solid var(--ke-line);border-radius:var(--ke-radius-l);background:var(--ke-surface);padding:16px 18px}
+.pcard b{font-family:var(--ke-font-display);font-size:15px;font-weight:900;display:flex;align-items:baseline;gap:8px}
+.pcard b .pn{font-size:11px;color:var(--ke-primary);font-family:var(--ke-font-display);font-weight:900}
+.pcard p{font-size:12px;color:var(--ke-sub);margin-top:6px}
+/* —— 色卡行 —— */
+.swrow{display:grid;grid-template-columns:150px minmax(0,1fr);gap:16px;padding:12px 0;border-bottom:1px dashed var(--ke-line)}
+.swfield{height:60px;border-radius:var(--ke-radius-s);border:1px solid var(--ke-line);display:flex;align-items:flex-end;padding:7px 9px;font-size:10.5px;font-weight:700;letter-spacing:.5px}
+.swmeta .nm{font-family:var(--ke-font-display);font-weight:900;font-size:14px}
+.swmeta .hx{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--ke-sub-2);margin-left:8px;letter-spacing:.5px}
+.swmeta .us{font-size:11.5px;color:var(--ke-sub);margin-top:2px}
+.swmeta .cr{display:inline-block;font-size:10px;font-weight:700;border:1px solid var(--ke-fact);color:var(--ke-fact);border-radius:var(--ke-radius-xs);padding:0 6px;margin-left:8px;vertical-align:1px}
+/* —— 可信三色大卡 —— */
+.trust{border:1px solid var(--ke-line);border-radius:var(--ke-radius-l);background:var(--ke-surface);padding:20px;position:relative}
+.trust .sym{font-size:40px;line-height:1}
+.trust .tn{font-family:var(--ke-font-display);font-weight:900;font-size:17px;margin-top:10px}
+.trust .tuse{font-size:11.5px;color:var(--ke-sub);margin-top:6px;line-height:1.7}
+.trust .tsw{margin-top:14px;border-radius:var(--ke-radius-s);overflow:hidden;display:flex;border:1px solid var(--ke-line)}
+.trust .tsw i{flex:1;height:34px;font-style:normal;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center}
+/* —— 字阶 —— */
+.trow{display:grid;grid-template-columns:200px minmax(0,1fr);gap:16px;align-items:baseline;padding:9px 0;border-bottom:1px dashed var(--ke-line)}
+.trow .sp{font-size:11px;color:var(--ke-sub);line-height:1.5}
+.trow .sp b{color:var(--ke-primary);display:block;font-size:11.5px}
+/* —— 形状 —— */
+.rd{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap}
+.rdb{width:86px;height:58px;border:1.5px solid var(--ke-primary);background:var(--ke-primary-soft);display:flex;align-items:center;justify-content:center;font-size:10.5px;color:var(--ke-primary-deep);font-weight:700;flex-direction:column;gap:2px}
+.shd{flex:1;border:1px solid var(--ke-line);background:var(--ke-surface);border-radius:var(--ke-radius-m);padding:16px;text-align:center;font-size:11px;color:var(--ke-sub)}
+/* —— 共享组件 —— */
+.claim{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:1px 7px;border-radius:var(--ke-radius-xs);border:1px solid}
+.c-fact{background:var(--ke-fact-soft);color:var(--ke-fact);border-color:rgba(31,122,77,.28)}
+.c-synth{background:var(--ke-synth-soft);color:var(--ke-synth);border-color:rgba(14,116,144,.28)}
+.c-gen{background:var(--ke-gen-soft);color:var(--ke-gen);border-color:rgba(168,85,16,.28)}
+.cite{color:var(--ke-primary);font-weight:700;font-size:11px;vertical-align:super;cursor:pointer;font-family:ui-monospace,Consolas,monospace}
+.cite:hover{text-decoration:underline}
+.src{background:var(--ke-surface-2);border:1px solid var(--ke-line);border-radius:var(--ke-radius-s);padding:10px 13px;margin-top:10px;font-size:12px;color:var(--ke-sub);line-height:1.85}
+.src b{color:var(--ke-ink);font-weight:700}
+.src .gap{color:var(--ke-warn)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:var(--ke-radius-full);font-weight:600;border:1px solid transparent}
+.chip.pri{background:var(--ke-primary-soft);color:var(--ke-primary)}
+.chip.gray{background:var(--ke-surface-2);color:var(--ke-sub);border-color:var(--ke-line)}
+.chip.fact{background:var(--ke-fact-soft);color:var(--ke-fact)}
+.chip.gen{background:var(--ke-gen-soft);color:var(--ke-gen)}
+.chip.warn{background:var(--ke-warn-soft);color:var(--ke-warn);border-color:var(--ke-warn-line)}
+.chip.danger{background:var(--ke-danger-soft);color:var(--ke-danger)}
+.chip.private{background:var(--ke-private-soft);color:var(--ke-private)}
+.phasetag{display:inline-flex;align-items:center;font-size:11px;padding:1px 8px;border-radius:var(--ke-radius-full);
+  font-weight:600;background:transparent;color:var(--ke-sub);border:1px dashed var(--ke-line-strong)}
+.ico{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+/* —— 手机演示列 —— */
+.duo{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin-top:14px}
+.phone{width:375px;max-width:100%;background:var(--ke-bg);border:1px solid var(--ke-line-strong);border-radius:18px;overflow:hidden;box-shadow:var(--ke-shadow-2);flex-shrink:0}
+.ptop{display:flex;align-items:center;gap:10px;padding:13px 16px 9px;background:var(--ke-bg)}
+.pbtn{width:34px;height:34px;border-radius:var(--ke-radius-s);background:var(--ke-surface);border:1px solid var(--ke-line);
+  display:flex;align-items:center;justify-content:center;color:var(--ke-ink);cursor:pointer}
+.crumb{font-size:12px;color:var(--ke-sub);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumb b{color:var(--ke-ink);font-weight:600}
+.pbody{padding:0 16px 16px}
+.kcard{background:var(--ke-surface);border:1px solid var(--ke-line);border-radius:var(--ke-radius-l);padding:18px}
+.kcard .chiprow{display:flex;gap:6px;flex-wrap:wrap}
+.kcard .kt{font-family:var(--ke-font-display);font-weight:900;font-size:20px;margin-top:10px;line-height:1.4;letter-spacing:.5px}
+.kcard .ksum{font-size:13px;color:var(--ke-sub);line-height:1.75;margin-top:8px;padding-bottom:10px;border-bottom:1px dashed var(--ke-line-strong)}
+.para{font-size:14px;line-height:1.8;color:var(--ke-ink-2);margin-top:10px;text-align:justify}
+.para b{color:var(--ke-ink)}
+.sect{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;letter-spacing:1px;margin:16px 0 8px;color:var(--ke-ink)}
+.sect .ln{flex:1;height:1px;background:var(--ke-line-strong)}
+.sect .ct{font-size:10.5px;color:var(--ke-sub-2);font-weight:400;letter-spacing:0}
+.entry{display:flex;align-items:center;gap:11px;background:var(--ke-surface);border:1px solid var(--ke-line);border-radius:var(--ke-radius-m);padding:11px 13px;margin-top:8px;cursor:pointer;transition:transform var(--ke-dur-fast) var(--ke-ease),box-shadow var(--ke-dur-fast)}
+.entry:hover{box-shadow:var(--ke-shadow-1)}
+.entry:active{transform:scale(.97)}
+.entry .ei{width:36px;height:36px;border-radius:var(--ke-radius-s);background:var(--ke-primary-soft);color:var(--ke-primary-deep);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.entry .et{flex:1;min-width:0}
+.entry .en{font-size:14px;font-weight:600}
+.entry .er{font-size:12px;color:var(--ke-sub);margin-top:1px}
+.entry .ea{color:var(--ke-line-strong);display:flex}
+.entry.phased{opacity:.55;cursor:not-allowed}
+.addentry{display:flex;align-items:center;justify-content:center;gap:7px;border:1.5px dashed rgba(58,95,205,.5);color:var(--ke-primary);border-radius:var(--ke-radius-m);padding:11px;margin-top:10px;font-size:13px;font-weight:700;background:transparent}
+.fold{text-align:center;font-size:12px;color:var(--ke-sub);margin-top:8px;cursor:pointer}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:var(--ke-radius-m);font-size:14px;font-weight:600;padding:12px 22px;cursor:pointer;border:none;transition:transform var(--ke-dur-fast) var(--ke-ease);font-family:inherit}
+.btn.pri{background:var(--ke-primary);color:#fff}
+.btn.pri:active{transform:scale(.97);background:var(--ke-primary-deep)}
+.btn.ghost{background:var(--ke-surface);color:var(--ke-ink);border:1px solid var(--ke-line-strong)}
+.btn.soft{background:var(--ke-primary-soft);color:var(--ke-primary-deep)}
+.btn.sm{padding:8px 14px;font-size:12.5px;border-radius:var(--ke-radius-s)}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.svcbar{display:flex;gap:8px;padding:10px 12px 14px;background:var(--ke-surface);border-top:1px solid var(--ke-line)}
+.svc{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 0;border-radius:var(--ke-radius-m);font-size:13px;font-weight:700;background:var(--ke-primary-soft);color:var(--ke-primary-deep)}
+.svc.alt{background:var(--ke-surface);border:1px solid var(--ke-line-strong);color:var(--ke-ink)}
+.qabar{background:var(--ke-surface);border-top:1px solid var(--ke-line);padding:10px 16px 14px;display:flex;gap:8px}
+.qabar input{flex:1;border:1px solid var(--ke-line-strong);border-radius:var(--ke-radius-m);padding:11px 13px;font-size:13.5px;font-family:inherit;background:var(--ke-surface);color:var(--ke-ink)}
+.qabar input:focus{outline:none;border-color:var(--ke-primary);box-shadow:var(--ke-focus)}
+.qabar .send{width:44px;height:44px;border-radius:var(--ke-radius-m);background:var(--ke-primary);color:#fff;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer}
+.resume{background:var(--ke-primary-deep);color:#fff;border-radius:var(--ke-radius-l);padding:16px;cursor:pointer;position:relative;overflow:hidden}
+.resume .rk{font-size:10.5px;letter-spacing:2px;opacity:.75}
+.resume .rt{font-family:var(--ke-font-display);font-weight:900;font-size:16px;margin-top:6px;letter-spacing:.5px}
+.resume .rs{font-size:12px;opacity:.85;margin-top:4px}
+.resume .rb{display:inline-block;margin-top:10px;border:1px solid rgba(255,255,255,.45);border-radius:var(--ke-radius-xs);padding:4px 11px;font-size:11.5px}
+.themes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.theme{background:var(--ke-surface);border:1px solid var(--ke-line);border-radius:var(--ke-radius-m);padding:13px 8px;text-align:center;cursor:pointer}
+.theme .tico{width:38px;height:38px;margin:0 auto;color:var(--ke-primary-deep);display:flex;align-items:center;justify-content:center}
+.theme .tico .ico{width:24px;height:24px}
+.theme .tn{font-size:13px;font-weight:700;margin-top:6px}
+.theme .tc{font-size:11px;color:var(--ke-sub);margin-top:1px}
+.node{display:flex;align-items:flex-start;gap:9px;padding:10px 11px;border-radius:var(--ke-radius-m);margin-top:6px;background:var(--ke-surface);border:1px solid var(--ke-line)}
+.node .dot{width:9px;height:9px;border-radius:50%;background:var(--ke-primary);margin-top:6px;flex-shrink:0}
+.node.cur{border-color:var(--ke-primary);background:var(--ke-primary-soft)}
+.node.leaf .dot{background:var(--ke-line-strong)}
+.node .nt{font-size:13.5px;font-weight:600;line-height:1.4}
+.node .ns{font-size:11px;color:var(--ke-sub);margin-top:2px}
+.node .nx{margin-left:auto;font-size:11px;color:var(--ke-primary);white-space:nowrap;padding-top:2px}
+.tl{border-left:2px solid var(--ke-line-strong);padding-left:15px;margin:12px 0 4px}
+.tli{position:relative;padding-bottom:15px}
+.tli::before{content:"";position:absolute;left:-20.5px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--ke-surface);border:2px solid var(--ke-primary)}
+.tli.hl::before{background:var(--ke-primary)}
+.tly{font-size:11.5px;font-weight:800;color:var(--ke-primary);font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.tlt{font-family:var(--ke-font-display);font-weight:900;font-size:15px;margin-top:1px}
+.tlb{font-size:12.5px;color:var(--ke-sub);margin-top:2px}
+.spin{width:44px;height:44px;border:3px solid var(--ke-primary-soft);border-top-color:var(--ke-primary);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.runstep{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ke-sub);margin-top:11px}
+.runstep.done{color:var(--ke-ink)}
+.runstep.doing{color:var(--ke-primary);font-weight:700}
+label.fld{display:block;font-size:12px;font-weight:700;color:var(--ke-sub);margin:12px 0 5px}
+input.inp{width:100%;border:1px solid var(--ke-line-strong);border-radius:var(--ke-radius-s);padding:10px 12px;font-size:13.5px;font-family:inherit;background:var(--ke-surface);color:var(--ke-ink)}
+input.inp:focus{outline:none;border-color:var(--ke-primary);box-shadow:var(--ke-focus)}
+.cbx{width:18px;height:18px;border-radius:4px;border:2px solid var(--ke-line-strong);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff}
+.cbx.on{background:var(--ke-primary);border-color:var(--ke-primary)}
+.check{display:flex;align-items:center;gap:9px;padding:9px 4px;font-size:13.5px;border-bottom:1px solid var(--ke-line)}
+.shbanner{background:var(--ke-warn-soft);border:1px solid var(--ke-warn-line);color:var(--ke-warn);font-size:12px;border-radius:var(--ke-radius-s);padding:10px 12px;line-height:1.7;margin-top:12px}
+.toastd{display:inline-block;background:var(--ke-toast);color:#fff;font-size:13px;border-radius:var(--ke-radius-s);padding:10px 17px}
+.stop{display:flex;gap:12px;margin-top:10px}
+.stop .sm{width:44px;height:44px;border-radius:var(--ke-radius-m);background:var(--ke-primary-soft);color:var(--ke-primary-deep);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;flex-shrink:0;font-variant-numeric:tabular-nums}
+.stop .sm b{font-size:14px}
+.stop .st{font-size:14px;font-weight:700}
+.stop .sq{font-size:12.5px;color:var(--ke-sub);margin-top:3px;line-height:1.6;background:var(--ke-surface-2);border-radius:var(--ke-radius-xs);padding:7px 10px}
+/* —— 工作台演示 —— */
+.wb{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}
+.side{width:202px;background:var(--ke-side);border-radius:var(--ke-radius-m);padding:12px 10px;flex-shrink:0}
+.side .logo{padding:6px 10px 12px;border-bottom:1px solid var(--ke-side-line);color:#fff;font-family:var(--ke-font-display);font-weight:900;font-size:14px}
+.side .logo span{display:block;font-family:var(--ke-font);font-size:10.5px;color:var(--ke-side-text-2);font-weight:400;letter-spacing:1px;margin-top:2px}
+.nv{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:var(--ke-radius-s);font-size:13px;color:var(--ke-side-text);margin-top:2px}
+.nv .ico{width:17px;height:17px}
+.nv:hover{background:var(--ke-side-2);color:#fff}
+.nv.on{background:var(--ke-primary);color:#fff;font-weight:600}
+.nv .cnt{margin-left:auto;background:var(--ke-danger);color:#fff;font-size:10px;font-weight:700;border-radius:var(--ke-radius-full);padding:1px 7px}
+.panel{background:var(--ke-surface);border:1px solid var(--ke-line);border-radius:var(--ke-radius-l);overflow:hidden;flex:1;min-width:430px}
+.phead{padding:13px 16px;border-bottom:1px solid var(--ke-line);display:flex;align-items:center;gap:10px}
+.phead .pt{font-size:14px;font-weight:700}
+.wbtn{display:inline-flex;align-items:center;gap:6px;border-radius:var(--ke-radius-s);font-size:13px;font-weight:600;padding:8px 14px;cursor:pointer;border:none;font-family:inherit}
+.wbtn.pri{background:var(--ke-primary);color:#fff}
+.wbtn.ghost{background:var(--ke-surface);color:var(--ke-ink);border:1px solid var(--ke-line-strong)}
+.wbtn.green{background:var(--ke-fact);color:#fff}
+.wbtn.danger{background:var(--ke-surface);color:var(--ke-danger);border:1px solid #E8B4AD}
+.wbtn.sm{padding:5px 10px;font-size:12px}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.stat{background:var(--ke-surface);border:1px solid var(--ke-line);border-radius:var(--ke-radius-m);padding:14px 16px}
+.stat .sl{font-size:11.5px;color:var(--ke-sub);letter-spacing:.5px}
+.stat .sv{font-family:var(--ke-font-display);font-weight:900;font-size:27px;margin-top:3px;font-variant-numeric:tabular-nums}
+.stat .sd{font-size:11px;margin-top:2px}
+.up{color:var(--ke-fact)}.down{color:var(--ke-danger)}
+.flow{display:flex;align-items:center;margin:4px 0}
+.fs{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ke-sub)}
+.fs .fb{width:24px;height:24px;border-radius:50%;border:1.5px solid var(--ke-line-strong);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--ke-sub)}
+.fs.on{color:var(--ke-primary);font-weight:700}.fs.on .fb{background:var(--ke-primary);border-color:var(--ke-primary);color:#fff}
+.fs.done .fb{background:var(--ke-fact);border-color:var(--ke-fact);color:#fff}
+.fln{width:34px;height:1.5px;background:var(--ke-line-strong);margin:0 8px}
+.fln.done{background:var(--ke-fact)}
+.kv{display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--ke-line-2);font-size:13px}
+.kv .k{width:104px;color:var(--ke-sub);flex-shrink:0}
+.kv .v{flex:1;line-height:1.6}
+.lockf{position:relative}
+.lockf input{padding-right:34px;background:var(--ke-surface-2)}
+.lockf .lk{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--ke-sub);display:flex}
+.chart{display:flex;align-items:flex-end;gap:14px;height:128px;padding:8px 4px 0}
+.chart .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+.chart .b{width:64%;background:linear-gradient(180deg,#5D7EE8,var(--ke-primary));border-radius:3px 3px 0 0}
+.chart .bl{font-size:10.5px;color:var(--ke-sub)}
+.rev{border:1px solid var(--ke-line);border-radius:var(--ke-radius-m);padding:14px 16px;margin-top:12px;background:var(--ke-surface)}
+/* —— 状态 —— */
+.skel{background:var(--ke-line-2);border-radius:3px;position:relative;overflow:hidden}
+.skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);animation:sh 1.4s ease-in-out infinite}
+@keyframes sh{to{transform:translateX(100%)}}
+.empty{text-align:center;padding:28px 10px}
+.empty .em{color:var(--ke-sub-2)}
+.empty .e1{font-family:var(--ke-font-display);font-weight:900;font-size:15px;margin-top:8px}
+.empty .e2{font-size:12px;color:var(--ke-sub);margin-top:4px}
+.quota{height:8px;border-radius:var(--ke-radius-full);background:var(--ke-line-2);overflow:hidden}
+.quota i{display:block;height:100%;border-radius:var(--ke-radius-full);background:var(--ke-primary)}
+.quota.full i{background:var(--ke-warn)}
+.fdemo:focus-visible{outline:none;box-shadow:var(--ke-focus);border-color:var(--ke-primary)}
+/* —— 载入微动效 —— */
+section,.mast{animation:rise .5s var(--ke-ease) both}
+section:nth-of-type(2){animation-delay:.05s}section:nth-of-type(3){animation-delay:.1s}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:960px){
+  .layout{grid-template-columns:1fr}
+  .rail{position:static;height:auto;display:flex;gap:14px;align-items:center;overflow-x:auto;border-right:none;border-bottom:1px solid var(--ke-line);padding:12px 20px}
+  .rail .rl,.rail .rs,.rail .stamp-s,.rail .ver{display:none}
+  .rail a{border-bottom:none;white-space:nowrap}
+  .main{padding:0 20px 60px}
+  .mast h1{font-size:32px}
+  .colo{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<!-- ═══════════ SVG 图标集（24 网格 · stroke 1.7 · 系统图标，禁止用 emoji） ═══════════ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5 20 20"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5C6.5 4 9.8 4 12 5.7c2.2-1.7 5.5-1.7 8-.2V19c-2.5-1.5-5.8-1.5-8 .2-2.2-1.7-5.5-1.7-8-.2z"/><path d="M12 5.7V19.2"/></symbol>
+    <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 4v16M5 7.5h14M5 7.5 2.8 13h4.4zM19 7.5 16.8 13h4.4z"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3.5 20.5 8 12 12.5 3.5 8z"/><path d="M3.5 12.5 12 17l8.5-4.5M3.5 16.5 12 21l8.5-4.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 13l5 5L19 7"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 21 19H3z"/><path d="M12 10v4"/><path d="M12 16.8v.2"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.6"/><circle cx="17.5" cy="5.5" r="2.6"/><circle cx="17.5" cy="18.5" r="2.6"/><path d="M8.4 10.8l6.7-3.9M8.4 13.2l6.7 3.9"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.8l2.5 5.1 5.6.8-4 4 .9 5.6-5-2.7-5 2.7.9-5.6-4-4 5.6-.8z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5c0-3 2.5-5.2 5.5-5.2s5.5 2.2 5.5 5.2"/><circle cx="16.8" cy="9.2" r="2.5"/><path d="M16.5 14.6c2.3.3 4 2.2 4 4.9"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1.5-4.5L17 4l3 3L8.5 18.5z"/><path d="M14.5 6.5l3 3"/></symbol>
+    <symbol id="i-mountain" viewBox="0 0 24 24"><path d="M3 19 9.5 7.5l3.5 6 2.5-4L21 19z"/></symbol>
+    <symbol id="i-temple" viewBox="0 0 24 24"><path d="M4 9h16M6 9c1-4 3.5-6 6-6s5 2 6 6"/><path d="M12 3v3"/><path d="M7 9v8M17 9v8M4.5 20.5h15"/><path d="M7 17c0 1.5 1.2 2.5 2.5 2.5S12 18.5 12 17c0 1.5 1.2 2.5 2.5 2.5S17 18.5 17 17"/></symbol>
+    <symbol id="i-bowl" viewBox="0 0 24 24"><path d="M4 11h16c0 4.5-3.5 8-8 8s-8-3.5-8-8z"/><path d="M8.5 7.5c1-1.8 3-1.8 4 0M13 5.5c1-1.8 3-1.8 4 0"/><path d="M3 21h18"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.6"/><path d="M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7"/><path d="M5.8 18.2a9 9 0 0 1 0-12.4M18.2 5.8a9 9 0 0 1 0 12.4"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4.5 10.5 12 4l7.5 6.5V20h-15z"/><path d="M9.5 20v-6h5v6"/></symbol>
+    <symbol id="i-path" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="12" r="2.2"/><circle cx="8" cy="19" r="2.2"/><path d="M8 6.8c4 .8 4 4.4 7.8 5M7.3 8.1c-.4 4 0 8 0 8.8"/></symbol>
+    <symbol id="i-me" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6"/></symbol>
+  </defs>
+</svg>
+
+<div class="layout">
+<!-- ═══════════ 左目录 ═══════════ -->
+<nav class="rail">
+  <div class="rl">知识探索</div>
+  <div class="rs">DESIGN SPEC</div>
+  <a href="#s1"><span class="no">壹</span>设计原则</a>
+  <a href="#s2"><span class="no">贰</span>色彩</a>
+  <a href="#s3"><span class="no">叁</span>字体</a>
+  <a href="#s4"><span class="no">肆</span>形状层级</a>
+  <a href="#s5"><span class="no">伍</span>共享组件</a>
+  <a href="#s6"><span class="no">陆</span>探索端</a>
+  <a href="#s7"><span class="no">柒</span>工作台</a>
+  <a href="#s8"><span class="no">捌</span>状态</a>
+  <a href="#s9"><span class="no">玖</span>动效</a>
+  <a href="#s10"><span class="no">拾</span>Token</a>
+  <div class="stamp-s">探</div>
+  <div class="ver">v1.1 · 2026-09<br>与 docs/04 同源</div>
+</nav>
+
+<div class="main">
+
+<!-- ═══════════ Masthead ═══════════ -->
+<header class="mast">
+  <div class="kicker">知识探索卡片系统 · 设计交付</div>
+  <div class="mrow">
+    <div>
+      <h1>主题与 <em>UI 规范</em></h1>
+      <p class="stance"><b>像一本认真做的刊物，而不是一个后台模板。</b>这是面向文化知识产品的设计语言：靛青（传统染料色）× 纸墨底色 × 宋体标题 × 细线与印章。可信三色（事实 / 归纳 / 生成）是独占语义，任何组件不得挪用。</p>
+    </div>
+    <div class="stamp">探</div>
+  </div>
+  <div class="colo">
+    <div><b>版本</b>v1.1 · 2026-09 · 依据 docs/01–03 与双端原型</div>
+    <div><b>范围</b>探索端 H5 / 工作台 Web / 分享页 · 双端共用 Token</div>
+    <div><b>基准</b>Token 前缀 --ke- · 对比度全部实测 ≥4.5:1（WCAG AA）</div>
+  </div>
+</header>
+
+<!-- ═══════════ 1 原则 ═══════════ -->
+<section id="s1">
+  <div class="shead"><span class="no">01</span><h2>设计原则</h2><span class="en">PRINCIPLES</span></div>
+  <p class="lead">五条原则从产品价值观推导，每条都有对应的硬性规则——原则不是口号，是可验收的约束。</p>
+  <div class="grid g3" style="margin-top:14px">
+    <div class="pcard"><b><span class="pn">P1</span>可信可见</b><p>三档可信色是独占语义色；徽标与出处角标随正文渲染，不弱化、不装饰化。符号 ●◐○ 与颜色双编码。</p></div>
+    <div class="pcard"><b><span class="pn">P2</span>内容前进、界面后退</b><p>大面积纸墨底，品牌色只承担「行动」与「当前态」；正文区无渐变、无大色块、无装饰。</p></div>
+    <div class="pcard"><b><span class="pn">P3</span>来路常在</b><p>二级页永远有返回 + 路径入口；用户任何时候知道自己在哪、从哪来。</p></div>
+    <div class="pcard"><b><span class="pn">P4</span>一屏一事</b><p>移动端每屏一个主任务；常驻操作固定底部并让出安全区。</p></div>
+    <div class="pcard"><b><span class="pn">P5</span>边界诚实</b><p>未上线功能灰态 + 分期标签；失败、证据缺口、限额明说，不静默降级。</p></div>
+    <div class="pcard"><b><span class="pn">P6</span>纸墨编辑部</b><p>知识与品牌层（卡片标题 / 专题名 / 大标题）用宋体，工具层用黑体；细线优先于阴影，印刷感优先于圆角堆砌。</p></div>
+  </div>
+</section>
+
+<!-- ═══════════ 2 色彩 ═══════════ -->
+<section id="s2">
+  <div class="shead"><span class="no">02</span><h2>色彩</h2><span class="en">COLOR</span></div>
+  <p class="lead">锁色规则：三档可信色与功能色只用于其语义场景；主色仅用于可点、可继续、当前所在；分期边界不用彩色。对比度数值全部实测。</p>
+
+  <h3>品牌色 · 靛青（行动 / 当前 / 链接）</h3>
+  <div class="sheet">
+    <div class="swrow"><div class="swfield" style="background:#2F53B8;color:#fff">primary-deep</div><div class="swmeta"><span class="nm">深靛</span><span class="hx">#2F53B8</span><span class="cr">6.88:1</span><div class="us">hover / 按下 / 品牌实底面（继续探索卡）；品牌面用实底 + 细线描边，<b>不用渐变</b></div></div></div>
+    <div class="swrow"><div class="swfield" style="background:#3A5FCD;color:#fff">primary</div><div class="swmeta"><span class="nm">靛青</span><span class="hx">#3A5FCD</span><span class="cr">5.68:1</span><div class="us">主按钮、链接 / 引用角标、当前项、入口图标底。靛即传统染料色，与纸墨同源</div></div></div>
+    <div class="swrow"><div class="swfield" style="background:#EEF2FD;color:#2F53B8">primary-soft</div><div class="swmeta"><span class="nm">浅靛</span><span class="hx">#EEF2FD</span><span class="cr">5.07:1</span><div class="us">次级按钮底、选中底、表头；EP 衍生阶 light-3…light-9 见 docs/04 §11.3</div></div></div>
+    <div class="swrow" style="border-bottom:none"><div class="swfield" style="background:var(--ke-surface);color:#6E675C;border-style:dashed">—</div><div class="swmeta"><span class="nm">禁例</span><div class="us">正文文字不用品牌色；品牌色不做大面积铺底（占比 ≤8%）；不做靛紫渐变横幅</div></div></div>
+  </div>
+
+  <h3>三档可信色（系统核心资产 · 独占 · 符号 ●◐○）</h3>
+  <div class="grid g3" style="margin-top:4px">
+    <div class="trust">
+      <div class="sym" style="color:var(--ke-fact)">●</div>
+      <div class="tn">事实 <span style="font-size:11px;color:var(--ke-sub-2);font-family:ui-monospace,Consolas,monospace">#1F7A4D</span></div>
+      <div class="tuse">实心圆 = 落在出处上。有出处的陈述；成功 / 已核验同源共用。图形色 #2E8B57（仅时间线点、图表）。</div>
+      <div class="tsw"><i style="background:var(--ke-fact-soft);color:var(--ke-fact)">浅底 4.76:1</i><i style="background:var(--ke-fact);color:#fff">文本 5.32:1</i></div>
+    </div>
+    <div class="trust">
+      <div class="sym" style="color:var(--ke-synth)">◐</div>
+      <div class="tn">归纳 <span style="font-size:11px;color:var(--ke-sub-2);font-family:ui-monospace,Consolas,monospace">#0E7490</span></div>
+      <div class="tuse">半圆 = 由出处综合而来。青蓝与主色明确区分「可信档」≠「可点」；引用校验失败的段落自动降级为本档。</div>
+      <div class="tsw"><i style="background:var(--ke-synth-soft);color:var(--ke-synth)">浅底 4.74:1</i><i style="background:var(--ke-synth);color:#fff">文本 5.36:1</i></div>
+    </div>
+    <div class="trust">
+      <div class="sym" style="color:var(--ke-gen)">○</div>
+      <div class="tn">生成 <span style="font-size:11px;color:var(--ke-sub-2);font-family:ui-monospace,Consolas,monospace">#A85510</span></div>
+      <div class="tuse">空心圆 = 开放的创意生成。受控生成内容；图形色 #D97A2B（仅插图）。橙色为可信语义独占。</div>
+      <div class="tsw"><i style="background:var(--ke-gen-soft);color:var(--ke-gen)">浅底 4.76:1</i><i style="background:var(--ke-gen);color:#fff">文本 5.29:1</i></div>
+    </div>
+  </div>
+  <p class="note">徽标 = 浅底 + 深字 + 描边 + 符号，字号 ≥11px / 700；符号与颜色双编码（色觉无障碍）；读屏释义「事实陈述，有出处 / 归纳推断，基于出处综合 / 生成内容，仅供参考」。</p>
+
+  <h3>功能与场景色</h3>
+  <div class="sheet">
+    <div class="swrow"><div class="swfield" style="background:var(--ke-warn-soft);color:var(--ke-warn)">警示</div><div class="swmeta"><span class="nm">警示</span><span class="hx">#8F5E12 / #FDF6E3</span><span class="cr">5.15:1</span><div class="us">证据缺口 · 授权到期 · 待审核 · 驳回</div></div></div>
+    <div class="swrow"><div class="swfield" style="background:var(--ke-danger-soft);color:var(--ke-danger)">危险</div><div class="swmeta"><span class="nm">危险</span><span class="hx">#C0392B / #FDECEA</span><span class="cr">4.76:1</span><div class="us">停用 · 删除 · 失败；危险按钮白底红字描边，不做红底实心</div></div></div>
+    <div class="swrow"><div class="swfield" style="background:var(--ke-private-soft);color:var(--ke-private)">私人</div><div class="swmeta"><span class="nm">私人</span><span class="hx">#6B46C1 / #F1ECFA</span><span class="cr">5.54:1</span><div class="us">仅自己可见的入口与内容</div></div></div>
+    <div class="swrow" style="border-bottom:none"><div class="swfield" style="background:var(--ke-line-2);color:var(--ke-sub);border-style:dashed">分期</div><div class="swmeta"><span class="nm">分期边界</span><div class="us">二期 / 三期一律灰底虚线描边，不用彩色——分期不是状态，是边界（P5）</div></div></div>
+  </div>
+
+  <h3>中性色 · 纸墨（暖）与墨色侧栏</h3>
+  <div class="sheet">
+    <div class="swrow"><div class="swfield" style="background:#26221D;color:#fff">ink</div><div class="swmeta"><span class="nm">墨</span><span class="hx">#26221D</span><span class="cr">15.8:1</span><div class="us">主文字（暖黑，纸上调墨）</div></div></div>
+    <div class="swrow"><div class="swfield" style="background:#4A443A;color:#fff">ink-2</div><div class="swmeta"><span class="nm">浓灰</span><span class="hx">#4A443A</span><span class="cr">9.6:1</span><div class="us">次强调、正文长文</div></div></div>
+    <div class="swrow"><div class="swfield" style="background:#6E675C;color:#fff">sub</div><div class="swmeta"><span class="nm">次文字</span><span class="hx">#6E675C</span><span class="cr">5.05:1</span><div class="us">副标题、说明、占位描述（纸底上仍 ≥4.5:1）</div></div></div>
+    <div class="swrow"><div class="swfield" style="background:#E7E1D4;color:#6E675C">line</div><div class="swmeta"><span class="nm">细线</span><span class="hx">#E7E1D4 · strong #CDC5B4 · -2 #EFEAE0</span><div class="us">分隔线 / 输入描边 / 弱分隔——卡片靠细线成型，不靠阴影</div></div></div>
+    <div class="swrow" style="border-bottom:none"><div class="swfield" style="background:#F7F3EB;color:#6E675C">bg / surface</div><div class="swmeta"><span class="nm">纸与卡面</span><span class="hx">bg #F7F3EB · surface-2 #F5F1E8 · surface #FFFFFF</span><div class="us">暖纸底 / 次级面（表头、出处框）/ 纯白卡面；工作台侧栏墨色 #262119（文字 #B0A794，6.7:1）</div></div></div>
+  </div>
+</section>
+
+<!-- ═══════════ 3 字体 ═══════════ -->
+<section id="s3">
+  <div class="shead"><span class="no">03</span><h2>字体</h2><span class="en">TYPE</span></div>
+  <p class="lead">两层字族：<b>宋体显示层</b>（知识与品牌层专用——卡片标题、专题名、页面大标题、统计数字）× <b>黑体界面层</b>（正文、表单、工具界面）。系统栈优先，不加载外部正文字体，保首屏 ≤1.5s。</p>
+  <div class="sheet">
+    <div class="trow"><div class="sp"><b>显示层 · 宋体</b>--ke-font-display<br>Noto Serif SC → Songti SC → SimSun</div><div style="font-family:var(--ke-font-display);font-weight:900;font-size:34px;line-height:1.3">岳麓书院</div></div>
+    <div class="trow"><div class="sp"><b>界面层 · 黑体</b>--ke-font<br>PingFang SC → HarmonyOS → MiSans → YaHei</div><div style="font-size:14px">界面文字、正文与工作台。中文优先，数字英文由系统栈先行。</div></div>
+    <div class="trow"><div class="sp"><b>探索端 · 卡标题</b>宋体 900 · 20 / 1.4</div><div style="font-family:var(--ke-font-display);font-weight:900;font-size:20px">书院千年大事记</div></div>
+    <div class="trow"><div class="sp"><b>探索端 · 正文</b>14 / 1.8 / 400 · 两端对齐</div><div style="font-size:14px;line-height:1.8;max-width:520px;color:var(--ke-ink-2);text-align:justify">岳麓书院位于长沙湘江西岸的岳麓山脚下，由潭州太守朱洞于北宋开宝九年（976 年）创办，千年弦歌不绝。</div></div>
+    <div class="trow"><div class="sp"><b>探索端 · 次要 / 微字</b>12 / 11 · 信息文字最小 11px</div><div style="font-size:12px;color:var(--ke-sub)">副标题与说明 <span class="chip pri" style="font-size:11px">chip 11px</span> <span class="claim c-fact">● 事实</span></div></div>
+    <div class="trow"><div class="sp"><b>工作台 · 指标数</b>宋体 900 · 27 · tabular-nums</div><div style="font-family:var(--ke-font-display);font-weight:900;font-size:27px;font-variant-numeric:tabular-nums">1,024 <span style="font-family:var(--ke-font);font-size:12px;color:var(--ke-sub);font-weight:400">次服务 · 数字表格化防跳动</span></div></div>
+    <div class="trow" style="border-bottom:none"><div class="sp"><b>工作台 · 基准</b>13 / 1.6 / 400（EP base=13px）· 工具界面不用宋体</div><div style="font-size:13px">表格、表单与正文默认字号，信息密度优先；页 / 面板标题 15/700 黑体。</div></div>
+  </div>
+</section>
+
+<!-- ═══════════ 4 形状层级 ═══════════ -->
+<section id="s4">
+  <div class="shead"><span class="no">04</span><h2>形状与层级</h2><span class="en">FORM</span></div>
+  <div class="sheet">
+    <h3 style="margin-top:0">圆角（印刷感：克制、偏小；同屏不超过 3 种档位）</h3>
+    <div class="rd">
+      <div class="rdb" style="border-radius:3px">xs 3<p style="margin:0;font-size:9.5px;font-weight:400">徽标 / 角标</p></div>
+      <div class="rdb" style="border-radius:5px">s 5<p style="margin:0;font-size:9.5px;font-weight:400">输入 / 小件</p></div>
+      <div class="rdb" style="border-radius:8px">m 8<p style="margin:0;font-size:9.5px;font-weight:400">按钮 / 入口行</p></div>
+      <div class="rdb" style="border-radius:12px">l 12<p style="margin:0;font-size:9.5px;font-weight:400">卡片 / 面板</p></div>
+      <div class="rdb" style="border-radius:999px;width:104px">full 999<p style="margin:0;font-size:9.5px;font-weight:400">chip / 进度条</p></div>
+    </div>
+    <h3>阴影：细线优先，阴影只给悬浮层</h3>
+    <div class="grid g3">
+      <div class="shd" style="border-radius:var(--ke-radius-m)">卡片：1px 细线描边<br>无阴影（静态）</div>
+      <div class="shd" style="box-shadow:var(--ke-shadow-1);border-radius:var(--ke-radius-m)">shadow-1 · hover / 下拉浮层</div>
+      <div class="shd" style="box-shadow:var(--ke-shadow-2);border-radius:var(--ke-radius-m)">shadow-2 / 3 · 抽屉 / 模态</div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <button class="btn ghost fdemo" style="cursor:pointer">用 Tab 聚焦我：焦点环 --ke-focus</button>
+      <span style="font-size:11.5px;color:var(--ke-sub)">z-index：顶栏 10 · 常驻栏 20 · 抽屉 50 · 模态 100 · Toast 200 · 遮罩 rgba(28,24,18,.55)</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 5 共享组件 ═══════════ -->
+<section id="s5">
+  <div class="shead"><span class="no">05</span><h2>共享语义组件</h2><span class="en">SHARED</span></div>
+  <p class="lead">packages/shared · 双端复用。可信标识在任何端长得一样——这是「可信」本身的界面承诺。</p>
+  <div class="sheet">
+    <h3 style="margin-top:0">ClaimBadge 可信徽标 + CitationTag 引用角标（正文内联）</h3>
+    <p style="font-size:14px;line-height:1.8;max-width:640px;color:var(--ke-ink-2);text-align:justify">岳麓书院由潭州太守朱洞于北宋开宝九年（976 年）创办<span class="cite">[1]</span>，背山面江，与长沙古城隔江相望<span class="cite">[2]</span>。<span class="claim c-fact">● 事实</span></p>
+    <p style="font-size:14px;line-height:1.8;max-width:640px;color:var(--ke-ink-2);text-align:justify">综合来看，其选址反映了宋代书院「山水—渡口—城市」三位一体的空间智慧。<span class="claim c-synth">◐ 归纳</span></p>
+    <p style="font-size:14px;line-height:1.8;max-width:640px;color:var(--ke-ink-2);text-align:justify">如果为它写一段想象性的导览词，可以这样开始：<span class="claim c-gen">○ 生成</span></p>
+    <p class="note">角标可点 → 高亮出处清单对应行；校验降级的段落只渲染「归纳」。系统图标一律 SVG（本页 <code>&lt;symbol&gt;</code> 集），<b>禁止用 emoji 做控件图标</b>。</p>
+    <h3>SourceList 出处清单（含证据缺口行）</h3>
+    <div class="src" style="max-width:560px">
+      <b>出处清单</b><br>
+      [1]《岳麓书院史略》第一章 · p12–14（已授权）<br>
+      [2]《中国古代书院选址研究》· 第 2 节（专题库已授权）<br>
+      <span class="gap">⚠ 证据缺口：宋代原始文献中直接论述「选址理由」的记载有限，[2] 的结论主要为现代学者归纳。</span>
+    </div>
+    <h3>PhaseTag 与场景小标（每行入口 ≤1 个）</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span class="phasetag">二期 · 地图卡</span><span class="phasetag">三期 · 互动组件</span>
+      <span style="border-left:1px solid var(--ke-line-strong);width:1px;height:18px"></span>
+      <span class="chip private">私人入口</span>
+      <span class="chip pri">入口模板</span>
+      <span class="chip fact">已核验</span>
+      <span class="chip warn">待审核</span>
+      <span class="chip gray">草稿</span>
+      <span class="chip danger">已停用</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 6 探索端 ═══════════ -->
+<section id="s6">
+  <div class="shead"><span class="no">06</span><h2>探索端组件</h2><span class="en">EXPLORER</span></div>
+  <p class="lead">Vue3 + Vant 基座 · 基准 375px。卡片标题用宋体，入口图标用 SVG 图标集，底部常驻区让出安全区。</p>
+  <div class="duo">
+    <div class="phone">
+      <div class="ptop">
+        <div class="pbtn"><svg class="ico"><use href="#i-back"/></svg></div>
+        <div class="crumb">书院地标 · <b>岳麓书院</b></div>
+        <div class="pbtn"><svg class="ico"><use href="#i-compass"/></svg></div>
+      </div>
+      <div class="pbody">
+        <div class="kcard">
+          <div class="chiprow"><span class="chip pri">图文卡 · 地标</span><span class="chip fact">已核验</span></div>
+          <div class="kt">岳麓书院</div>
+          <div class="ksum">中国四大书院之一，北宋创办于岳麓山下，千年弦歌不绝。</div>
+          <p class="para"><b>水源与讲学传统。</b>岳麓书院位于长沙湘江西岸的岳麓山脚下，由潭州太守朱洞于北宋开宝九年（976 年）创办<span class="cite">[1]</span>。<span class="claim c-fact">● 事实</span></p>
+          <p class="para">综合来看，选址体现了「山水—渡口—城市」三位一体的空间智慧。<span class="claim c-synth">◐ 归纳</span></p>
+          <div class="src"><b>来源依据</b><br>[1]《岳麓书院史略》第一章 · p12–14（已授权）</div>
+        </div>
+        <div class="sect">解释版本<span class="ct">会话内记住选择</span><span class="ln"></span></div>
+        <div style="display:flex;gap:8px">
+          <span class="chip pri">简明</span><span class="chip gray">深入</span><span class="chip gray">儿童</span>
+        </div>
+        <div class="sect">探索入口<span class="ct">默认展示 5 个</span><span class="ln"></span></div>
+        <div class="entry"><div class="ei"><svg class="ico"><use href="#i-mountain"/></svg></div><div class="et"><div class="en">为什么建在这里</div><div class="er">深入了解 · 历史 × 地理</div></div><span class="ea"><svg class="ico"><use href="#i-chev"/></svg></span></div>
+        <div class="entry"><div class="ei"><svg class="ico"><use href="#i-wave"/></svg></div><div class="et"><div class="en">这道菜为什么形成这样的风味 <span class="chip private" style="font-size:10px;margin-left:4px">私人入口</span></div><div class="er">深入了解 · 你创建的入口</div></div><span class="ea"><svg class="ico"><use href="#i-chev"/></svg></span></div>
+        <div class="entry"><div class="ei"><svg class="ico"><use href="#i-pen"/></svg></div><div class="et"><div class="en">从一处题刻开始讲故事 <span class="chip pri" style="font-size:10px;margin-left:4px">入口模板</span></div><div class="er">去实践 · 来自 @老周的探索</div></div><span class="ea"><svg class="ico"><use href="#i-chev"/></svg></span></div>
+        <div class="entry phased"><div class="ei"><svg class="ico"><use href="#i-search"/></svg></div><div class="et"><div class="en">建筑空间布局 <span class="phasetag" style="font-size:10px;margin-left:4px">二期</span></div><div class="er">深入了解 · 地图卡</div></div><span class="ea"><svg class="ico"><use href="#i-chev"/></svg></span></div>
+        <div class="fold">还有 2 个入口，展开 ∨</div>
+        <div class="addentry"><svg class="ico" style="width:16px;height:16px"><use href="#i-plus"/></svg>用一句话新增入口</div>
+        <div class="sect">我的路径（节选）<span class="ln"></span></div>
+        <div class="node leaf"><div class="dot"></div><div><div class="nt">岳麓书院（起点）</div><div class="ns">首页进入 · 09-28 14:02</div></div><div class="nx">回到此节点</div></div>
+        <div class="node"><div class="dot"></div><div><div class="nt">讲解：为什么建在这里 <span class="chip pri" style="font-size:10px;margin-left:4px">分支</span></div><div class="ns">经入口「为什么建在这里」</div></div></div>
+        <div class="node cur"><div class="dot"></div><div><div class="nt">时间线：书院千年大事记</div><div class="ns">经入口「书院大事记」· 当前</div></div></div>
+        <div class="sect">服务执行态<span class="ln"></span></div>
+        <div style="background:var(--ke-surface);border:1px solid var(--ke-line);border-radius:var(--ke-radius-l);padding:20px;text-align:center">
+          <div class="spin" style="margin:0 auto 12px"></div>
+          <div style="font-family:var(--ke-font-display);font-weight:900;font-size:16px">为什么建在这里？</div>
+          <div style="font-size:12px;color:var(--ke-sub);margin-top:4px">讲解与问答服务 · 通常 5–15 秒</div>
+          <div style="text-align:left;margin:14px auto 0;width:232px">
+            <div class="runstep done"><svg class="ico" style="width:15px;height:15px"><use href="#i-check"/></svg>读取卡片资料与路径上下文</div>
+            <div class="runstep done"><svg class="ico" style="width:15px;height:15px"><use href="#i-check"/></svg>检索已授权知识资源（6 条命中）</div>
+            <div class="runstep doing"><span style="font-size:13px">◐</span>生成讲解并校验出处</div>
+          </div>
+        </div>
+        <div style="margin-top:12px" class="resume">
+          <div class="rk">继续探索 · 昨天暂存</div>
+          <div class="rt">岳麓书院：从选址到人物</div>
+          <div class="rs">已探索 5 个节点 · 1 个分支 · 2 条未决疑问</div>
+          <div class="rb">继续上次探索 →</div>
+        </div>
+        <div class="sect">主题专题<span class="ln"></span></div>
+        <div class="themes">
+          <div class="theme"><div class="tico"><svg class="ico"><use href="#i-temple"/></svg></div><div class="tn">书院地标</div><div class="tc">12 张卡</div></div>
+          <div class="theme"><div class="tico"><svg class="ico"><use href="#i-bowl"/></svg></div><div class="tn">湘菜风物</div><div class="tc">9 张卡</div></div>
+          <div class="theme"><div class="tico"><svg class="ico"><use href="#i-wave"/></svg></div><div class="tn">声音科学</div><div class="tc">7 张卡</div></div>
+        </div>
+        <div class="sect">表单（分享设置）<span class="ln"></span></div>
+        <label class="fld">分享标题</label>
+        <input class="inp" value="岳麓书院的一次深入探索">
+        <div class="check"><div class="cbx on"><svg class="ico" style="width:12px;height:12px;stroke-width:2.5"><use href="#i-check"/></svg></div><span>包含成果报告</span></div>
+        <div class="check"><div class="cbx"></div><span>指定成员（二期）</span></div>
+        <div class="shbanner">分享前已自动移除：2 条私人追问 · 1 个隐藏分支。接收者可免登录浏览，登录后可沿此路径继续（生成副本，不改你的原路径）。</div>
+        <div class="sect">任务卡站点<span class="ln"></span></div>
+        <div class="stop">
+          <div class="sm"><b>1</b>10min</div>
+          <div><div class="st">大门 · 题刻</div><div class="sq">观察：门额「千年学府」是谁题写的？拍下细节。</div></div>
+        </div>
+        <div class="sect">按钮 / Toast<span class="ln"></span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn pri" style="cursor:pointer">主按钮（同屏 ≤1）</button>
+          <button class="btn soft" style="cursor:pointer">次级</button>
+          <button class="btn ghost" style="cursor:pointer">幽灵</button>
+          <button class="btn pri" disabled>禁用</button>
+        </div>
+        <div style="margin-top:12px;text-align:center"><span class="toastd">已保存到我的路径</span></div>
+      </div>
+      <div class="svcbar">
+        <div class="svc"><svg class="ico" style="width:17px;height:17px"><use href="#i-book"/></svg>讲清楚</div>
+        <div class="svc alt"><svg class="ico" style="width:17px;height:17px"><use href="#i-scale"/></svg>帮我比较</div>
+        <div class="svc alt"><svg class="ico" style="width:17px;height:17px"><use href="#i-layers"/></svg>整理发现</div>
+      </div>
+      <div class="qabar">
+        <input placeholder="就这张卡继续追问…"><button class="send" style="cursor:pointer"><svg class="ico"><use href="#i-chev"/></svg></button>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:270px">
+      <table class="tb">
+        <tr><th colspan="2">探索端关键规则（docs/04 §7.2）</th></tr>
+        <tr><td>卡片</td><td>细线描边无阴影；标题宋体 900；摘要下虚线分隔；来源依据在入口之前（先证后行）</td></tr>
+        <tr><td>入口行</td><td>副标题以关系词开头（深入了解 / 相关联 / 相比较 / 去实践）；图标 = SVG + 浅靛底 36×36；默认 5 个 + 收起；末尾固定虚线新增按钮</td></tr>
+        <tr><td>服务栏</td><td>三键语义全站固定不得增删换序；高 ≈48 + 安全区</td></tr>
+        <tr><td>顶栏</td><td>返回 + 面包屑 + 指南针，第二页起必现</td></tr>
+        <tr><td>路径节点</td><td>当前节点浅靛底靛描边；分支带「分支」微标；点击历史节点 = 回到该节点</td></tr>
+        <tr><td>执行态</td><td>可离开不丢任务；60s 超时由后端置 timeout，前端不得无限等待</td></tr>
+        <tr><td>继续探索卡</td><td>品牌实底（深靛）+ 宋体标题 + 细线描边按钮，不用渐变</td></tr>
+        <tr><td>追问条</td><td>输入高 44、聚焦靛描边 + 焦点环；发送 44×44</td></tr>
+        <tr><td>专题格</td><td>SVG 图标（殿顶 / 器物 / 声波），不用 emoji；二期换统一插画</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 7 工作台 ═══════════ -->
+<section id="s7">
+  <div class="shead"><span class="no">07</span><h2>工作台组件</h2><span class="en">WORKBENCH</span></div>
+  <p class="lead">Vue3 + Element Plus 基座 · 侧栏 220 / 顶栏 56 / 内容 padding 24 · 基准字 13px。工具界面不用宋体（效率层），墨色侧栏为固定深色。</p>
+  <div class="wb">
+    <div class="side">
+      <div class="logo">知识探索<span>创作 · 审核 · 运营</span></div>
+      <div style="height:8px"></div>
+      <div class="nv on"><svg class="ico"><use href="#i-layers"/></svg>卡片管理</div>
+      <div class="nv"><svg class="ico"><use href="#i-plus"/></svg>入口编排</div>
+      <div class="nv"><svg class="ico"><use href="#i-check"/></svg>审核中心 <span class="cnt">3</span></div>
+      <div class="nv"><svg class="ico"><use href="#i-book"/></svg>知识资源</div>
+      <div class="nv"><svg class="ico"><use href="#i-scale"/></svg>数据看板</div>
+    </div>
+    <div style="flex:1;min-width:430px">
+      <div class="stat3">
+        <div class="stat"><div class="sl">有效深入率</div><div class="sv">62%</div><div class="sd up">▲ 4.2% 较上周</div></div>
+        <div class="stat"><div class="sl">服务成本</div><div class="sv">¥0.031<span style="font-size:13px;color:var(--ke-sub);font-weight:400">/次</span></div><div class="sd down">▼ 0.004</div></div>
+        <div class="stat"><div class="sl">待审核</div><div class="sv">3</div><div class="sd" style="color:var(--ke-sub)">卡片 2 · 入口 1</div></div>
+      </div>
+      <div class="panel" style="margin-top:12px">
+        <div class="phead"><span class="pt">卡片管理</span>
+          <span class="chip gray">全部 28</span><span class="chip pri">已发布 21</span><span class="chip warn">待审核 3</span>
+          <span style="flex:1"></span><button class="wbtn pri sm" style="cursor:pointer">＋ 新建卡片</button>
+        </div>
+        <table class="tb" style="padding:0 12px 6px">
+          <tr><th>卡片</th><th>模板</th><th>状态</th><th>版本</th><th>操作</th></tr>
+          <tr><td><b>岳麓书院</b></td><td>图文卡</td><td><span class="chip fact">已发布</span></td><td style="font-variant-numeric:tabular-nums">v3</td><td><button class="wbtn ghost sm" style="cursor:pointer">详情</button> <button class="wbtn danger sm" style="cursor:pointer">停用</button></td></tr>
+          <tr><td><b>剁椒鱼头</b></td><td>对比卡</td><td><span class="chip warn">待审核</span></td><td style="font-variant-numeric:tabular-nums">v1</td><td><button class="wbtn ghost sm" style="cursor:pointer">详情</button> <button class="wbtn danger sm" style="cursor:pointer">驳回</button></td></tr>
+          <tr><td><b>书院大事记</b></td><td>时间线卡</td><td><span class="chip gray">草稿</span></td><td style="font-variant-numeric:tabular-nums">v2</td><td><button class="wbtn ghost sm" style="cursor:pointer">编辑</button> <button class="wbtn green sm" style="cursor:pointer">送审</button></td></tr>
+        </table>
+      </div>
+      <div class="rev">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:14px">待审：入口「对比剁椒鱼头与清蒸鲈鱼」</b><span class="chip pri">公共入口</span></div>
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+          <span class="chip fact">出处有效</span><span class="chip fact">无越权</span><span class="chip fact">敏感词通过</span><span class="chip gray">机器预检</span>
+        </div>
+        <div class="kv" style="margin-top:8px"><div class="k">资料范围</div><div class="v">本卡已授权的 4 个知识单元（白名单锁定，不可自然语言扩权）</div></div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="wbtn green" style="cursor:pointer">通过并发布</button>
+          <button class="wbtn danger" style="cursor:pointer">驳回</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sheet">
+    <h3 style="margin-top:0">入口编排 · 步骤条（四步）与锁定字段</h3>
+    <div class="flow">
+      <div class="fs done"><span class="fb"><svg class="ico" style="width:13px;height:13px;stroke-width:2.4"><use href="#i-check"/></svg></span>一句话</div><div class="fln done"></div>
+      <div class="fs on"><span class="fb">2</span>配置</div><div class="fln"></div>
+      <div class="fs"><span class="fb">3</span>试运行</div><div class="fln"></div>
+      <div class="fs"><span class="fb">4</span>发布</div>
+    </div>
+    <div class="grid g2" style="margin-top:12px">
+      <div>
+        <label class="fld">入口名称</label>
+        <input class="inp" value="帮我比较：剁椒鱼头 vs 清蒸鲈鱼">
+        <label class="fld">资料范围（系统锁定）</label>
+        <div class="lockf"><input class="inp" disabled value="本卡已授权 4 个知识单元"><span class="lk"><svg class="ico" style="width:16px;height:16px"><use href="#i-lock"/></svg></span></div>
+      </div>
+      <div>
+        <div class="chart">
+          <div class="bar"><div class="b" style="height:78%"></div><div class="bl">周一</div></div>
+          <div class="bar"><div class="b" style="height:52%"></div><div class="bl">周二</div></div>
+          <div class="bar"><div class="b" style="height:90%"></div><div class="bl">周三</div></div>
+          <div class="bar"><div class="b" style="height:64%"></div><div class="bl">周四</div></div>
+          <div class="bar"><div class="b" style="height:40%"></div><div class="bl">周五</div></div>
+        </div>
+        <p class="note">图表柱体可用品牌渐变（仅图形）；数值 tabular-nums；成本时延直出 ¥/次。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 8 状态 ═══════════ -->
+<section id="s8">
+  <div class="shead"><span class="no">08</span><h2>状态规范</h2><span class="en">STATES</span></div>
+  <div class="grid g2" style="margin-top:4px">
+    <div class="sheet">
+      <h3 style="margin-top:0">加载 · 骨架屏（首屏用）</h3>
+      <div style="border:1px solid var(--ke-line);border-radius:var(--ke-radius-m);padding:14px;background:var(--ke-surface)">
+        <div class="skel" style="height:16px;width:42%"></div>
+        <div class="skel" style="height:12px;width:88%;margin-top:10px"></div>
+        <div class="skel" style="height:12px;width:70%;margin-top:8px"></div>
+        <div class="skel" style="height:92px;width:100%;margin-top:12px"></div>
+      </div>
+      <p class="note">服务执行不用骨架屏，用专属执行态页（有进度语义）。</p>
+    </div>
+    <div class="sheet">
+      <h3 style="margin-top:0">空态</h3>
+      <div class="empty">
+        <span class="em"><svg class="ico" style="width:40px;height:40px;stroke-width:1.2"><use href="#i-compass"/></svg></span>
+        <div class="e1">还没有探索路径</div>
+        <div class="e2">从首页任一张卡片开始，路径会自动记录</div>
+        <button class="btn soft sm" style="margin-top:12px;cursor:pointer">去首页逛逛</button>
+      </div>
+    </div>
+    <div class="sheet">
+      <h3 style="margin-top:0">服务失败 / 超时</h3>
+      <div style="text-align:center;padding:8px 0">
+        <span style="color:var(--ke-danger);display:inline-flex"><svg class="ico" style="width:28px;height:28px"><use href="#i-alert"/></svg></span>
+        <div style="font-family:var(--ke-font-display);font-weight:900;font-size:15px;margin-top:8px">生成没有成功，你的路径不受影响</div>
+        <div style="font-size:12px;color:var(--ke-sub);margin-top:4px">服务超时（60 秒上限）· 今日剩余 22 次</div>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+          <button class="btn pri sm" style="cursor:pointer">重试</button>
+          <button class="btn ghost sm" style="cursor:pointer">换个问法</button>
+        </div>
+      </div>
+    </div>
+    <div class="sheet">
+      <h3 style="margin-top:0">配额</h3>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ke-sub)"><span>今日智能服务</span><span style="font-variant-numeric:tabular-nums">8 / 30 次</span></div>
+      <div class="quota" style="margin-top:8px"><i style="width:27%"></i></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ke-sub);margin-top:14px"><span>今日智能服务（已用完）</span><span style="font-variant-numeric:tabular-nums">30 / 30 次</span></div>
+      <div class="quota full" style="margin-top:8px"><i style="width:100%"></i></div>
+      <div style="font-size:11.5px;color:var(--ke-warn);margin-top:8px">今日 30 次已用完，明早 8 点恢复。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 9 动效 ═══════════ -->
+<section id="s9">
+  <div class="shead"><span class="no">09</span><h2>动效</h2><span class="en">MOTION</span></div>
+  <div class="sheet">
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+      <button class="btn pri" style="cursor:pointer">按我试试（scale .97 · 120ms）</button>
+      <span class="spin" style="width:32px;height:32px;border-width:3px"></span>
+      <span style="font-size:11.5px;color:var(--ke-sub)">spinner 1s linear · shimmer 1.4s（见骨架屏）</span>
+    </div>
+    <table class="tb" style="margin-top:14px">
+      <tr><th>场景</th><th>时长/缓动</th><th>效果</th><th>禁用</th></tr>
+      <tr><td>按压反馈（探索端）</td><td>120ms</td><td>scale(.97)</td><td rowspan="5">入场级联 / 视差 / 弹跳一律不做；<code>prefers-reduced-motion</code> 时关闭位移仅留透明度</td></tr>
+      <tr><td>屏幕切换</td><td>150ms</td><td>透明度渐变（不位移）</td></tr>
+      <tr><td>展开 / 收起</td><td>250ms</td><td>高度过渡</td></tr>
+      <tr><td>抽屉滑入 / Toast</td><td>250ms ease-out</td><td>右滑 / 淡入</td></tr>
+      <tr><td>骨架 shimmer</td><td>1.4s 循环</td><td>高光扫过</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════ 10 Token ═══════════ -->
+<section id="s10">
+  <div class="shead"><span class="no">10</span><h2>Token 清单</h2><span class="en">TOKENS</span></div>
+  <p class="lead">唯一来源 <code>frontend/packages/shared/src/tokens.css</code>（与本页 <code>:root</code> 同源）；Vant / Element Plus 映射见 docs/04 §11.2–11.3；组件代码禁止裸色值与裸 emoji 图标。</p>
+  <div class="sheet">
+    <details>
+      <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--ke-primary)">展开 / 收起 tokens.css 完整清单（v1.1）</summary>
+      <pre style="font-size:11.5px;line-height:1.7;background:var(--ke-surface-2);border:1px solid var(--ke-line);border-radius:var(--ke-radius-s);padding:14px;margin-top:10px;overflow:auto;font-family:ui-monospace,Consolas,monospace">:root{
+  /* 品牌色 · 靛青 */
+  --ke-primary:#3A5FCD; --ke-primary-deep:#2F53B8; --ke-primary-soft:#EEF2FD;
+  /* 三档可信色（独占 · 符号 ●◐○） */
+  --ke-fact:#1F7A4D;  --ke-fact-soft:#EAF5EF;  --ke-fact-graphic:#2E8B57;   /* ● 事实 */
+  --ke-synth:#0E7490; --ke-synth-soft:#E3F4F8;                               /* ◐ 归纳 */
+  --ke-gen:#A85510;   --ke-gen-soft:#FDF1E7;   --ke-gen-graphic:#D97A2B;    /* ○ 生成 */
+  /* 功能与场景色 */
+  --ke-warn:#8F5E12;    --ke-warn-soft:#FDF6E3; --ke-warn-line:#F3DDAD;
+  --ke-danger:#C0392B;  --ke-danger-soft:#FDECEA;
+  --ke-private:#6B46C1; --ke-private-soft:#F1ECFA;
+  --ke-success:var(--ke-fact); --ke-success-soft:var(--ke-fact-soft);
+  /* 中性色 · 纸墨（暖） */
+  --ke-ink:#26221D; --ke-ink-2:#4A443A; --ke-sub:#6E675C; --ke-sub-2:#9A9284;
+  --ke-line:#E7E1D4; --ke-line-2:#EFEAE0; --ke-line-strong:#CDC5B4;
+  --ke-surface:#FFFFFF; --ke-surface-2:#F5F1E8; --ke-bg:#F7F3EB;
+  /* 暗色面板 · 墨（工作台侧栏） */
+  --ke-side:#262119; --ke-side-2:#332D24; --ke-side-line:#3B342A;
+  --ke-side-text:#B0A794; --ke-side-text-2:#989180;
+  /* 透明层 */
+  --ke-mask:rgba(28,24,18,.55); --ke-toast:rgba(38,34,29,.92);
+  /* 圆角（印刷感） */
+  --ke-radius-xs:3px; --ke-radius-s:5px; --ke-radius-m:8px; --ke-radius-l:12px; --ke-radius-full:999px;
+  /* 阴影：细线优先，阴影只给悬浮层 */
+  --ke-shadow-1:0 2px 8px rgba(38,34,29,.07);
+  --ke-shadow-2:0 8px 24px rgba(38,34,29,.12);
+  --ke-shadow-3:0 16px 48px rgba(38,34,29,.18);
+  --ke-focus:0 0 0 3px rgba(58,95,205,.25);
+  /* 字体：显示层宋体 × 界面层黑体 */
+  --ke-font:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei",sans-serif;
+  --ke-font-display:"Noto Serif SC","Songti SC","STSong","Source Han Serif SC","SimSun",serif;
+  /* 动效 */
+  --ke-dur-fast:120ms; --ke-dur-base:150ms; --ke-dur-slow:250ms;
+  --ke-ease:cubic-bezier(.25,.8,.35,1);
+  /* 层级 */
+  --ke-z-sticky:10; --ke-z-bar:20; --ke-z-drawer:50; --ke-z-modal:100; --ke-z-toast:200;
+}</pre>
+    </details>
+    <p class="note">v1.1 变更：中性色转暖（纸墨）、生成色加深 #B45309→#A85510、圆角收紧 6/8/10/12/16→3/5/8/12、移除品牌渐变 Token、新增宋体显示字栈、可信符号 📎✦✧→●◐○、系统图标去 emoji 化（SVG 图标集）。走查清单见 docs/04 §13。</p>
+  </div>
+</section>
+
+<div style="margin-top:70px;padding-top:16px;border-top:1px solid var(--ke-ink);display:flex;justify-content:space-between;align-items:center">
+  <span style="font-size:11px;color:var(--ke-sub-2)">本页与 docs/04-主题与UI规范.md 不一致时，以文档 §11.1 为准并立即同步本页</span>
+  <span class="stamp-s" style="width:32px;height:32px;font-size:14px;margin:0">探</span>
+</div>
+
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>知识探索卡片系统 · 创作/运营工作台原型</title>
+<style>
+:root{
+  --ink:#1f2d3d;--sub:#69758a;--line:#e6eaf1;--bg:#f5f6fa;--side:#1c2333;
+  --pri:#3a5fcd;--pri-soft:#eef2fd;--green:#2e8b57;--green-soft:#eaf5ef;
+  --amber:#b7791f;--amber-soft:#fdf6e3;--red:#c0392b;--red-soft:#fdecea;--orange:#d97a2b;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);display:flex;height:100vh;overflow:hidden}
+/* ---------- 侧边栏 ---------- */
+.side{width:220px;background:var(--side);color:#aab4c8;display:flex;flex-direction:column;flex-shrink:0}
+.logo{padding:20px 18px 16px;border-bottom:1px solid #2a3348}
+.logo b{color:#fff;font-size:15px;display:block}
+.logo span{font-size:11px;color:#7a8699}
+.nav{padding:10px 10px;flex:1;overflow-y:auto}
+.nv{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;font-size:13.5px;cursor:pointer;margin-top:2px}
+.nv:hover{background:#252e42;color:#fff}
+.nv.on{background:var(--pri);color:#fff;font-weight:600}
+.side .ft{padding:14px 18px;font-size:11px;color:#5d6a82;border-top:1px solid #2a3348;line-height:1.7}
+/* ---------- 主区 ---------- */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{height:56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 22px;gap:12px;flex-shrink:0}
+.topbar .tt{font-size:15px;font-weight:700}
+.topbar .crumbpath{font-size:12px;color:var(--sub)}
+.topbar .sp{flex:1}
+.avt{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#e8eef9,#f7efe6);display:flex;align-items:center;justify-content:center;font-size:14px}
+.body{flex:1;overflow-y:auto;padding:22px}
+.view{display:none}.view.active{display:block}
+/* ---------- 通用组件 ---------- */
+.btn{display:inline-flex;align-items:center;gap:6px;border-radius:9px;font-size:13px;font-weight:600;padding:8px 14px;cursor:pointer;border:none;transition:.15s}
+.btn.pri{background:var(--pri);color:#fff}.btn.pri:hover{filter:brightness(1.08)}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.green{background:var(--green);color:#fff}
+.btn.danger{background:#fff;color:var(--red);border:1px solid #f2c6bf}
+.btn.sm{padding:5px 10px;font-size:12px}
+.tag{display:inline-flex;align-items:center;font-size:11px;padding:2px 9px;border-radius:999px;font-weight:600}
+.t-pri{background:var(--pri-soft);color:var(--pri)}
+.t-green{background:var(--green-soft);color:var(--green)}
+.t-amber{background:var(--amber-soft);color:var(--amber)}
+.t-gray{background:#eef0f4;color:var(--sub)}
+.t-red{background:var(--red-soft);color:var(--red)}
+.t-orange{background:#fdf1e7;color:var(--orange)}
+.panel{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.phead{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.phead .pt{font-size:14px;font-weight:700}
+table.tb{width:100%;border-collapse:collapse;font-size:13px}
+.tb th{background:#fafbfd;text-align:left;padding:10px 14px;color:var(--sub);font-weight:600;border-bottom:1px solid var(--line);white-space:nowrap}
+.tb td{padding:11px 14px;border-bottom:1px solid #f0f2f6;vertical-align:middle}
+.tb tr:hover td{background:#fafbff}
+.tb tr{cursor:default}
+.grid2{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;align-items:start}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.stat .sl{font-size:12px;color:var(--sub)}
+.stat .sv{font-size:26px;font-weight:800;margin-top:4px}
+.stat .sd{font-size:11px;margin-top:4px}
+.up{color:var(--green)}.down{color:var(--red)}
+.tabs{display:flex;gap:6px;margin-bottom:14px}
+.tab{padding:7px 16px;border-radius:9px;font-size:13px;background:#fff;border:1px solid var(--line);cursor:pointer;color:var(--sub)}
+.tab.on{background:var(--pri);color:#fff;border-color:var(--pri);font-weight:600}
+input.inp,textarea.inp,select.inp{width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px;font-family:inherit;color:var(--ink)}
+textarea.inp{min-height:80px;resize:vertical;line-height:1.6}
+label.fld{display:block;font-size:12px;font-weight:700;color:var(--sub);margin:12px 0 5px}
+.kv{display:flex;gap:8px;padding:8px 0;border-bottom:1px solid #f0f2f6;font-size:12.5px}
+.kv .k{width:110px;color:var(--sub);flex-shrink:0}
+.kv .v{flex:1;color:var(--ink);line-height:1.6}
+.note{font-size:12px;color:var(--sub);line-height:1.7;background:#f8fafc;border-radius:9px;padding:10px 12px;margin-top:10px}
+/* 抽屉 */
+.drawer{position:fixed;top:0;right:-480px;width:460px;height:100%;background:#fff;border-left:1px solid var(--line);z-index:50;transition:.25s;display:flex;flex-direction:column;box-shadow:-10px 0 40px rgba(31,45,61,.1)}
+.drawer.open{right:0}
+.dhead{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center}
+.dhead .dt{font-size:15px;font-weight:700;flex:1}
+.dbody{flex:1;overflow-y:auto;padding:16px 20px}
+/* 流程步骤 */
+.flow{display:flex;align-items:center;gap:0;margin:6px 0 16px}
+.fstep{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub)}
+.fstep .fb{width:24px;height:24px;border-radius:50%;background:#e8ecf2;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--sub)}
+.fstep.on{color:var(--pri);font-weight:700}.fstep.on .fb{background:var(--pri);color:#fff}
+.fstep.done .fb{background:var(--green);color:#fff}
+.fline{width:36px;height:2px;background:#e8ecf2;margin:0 8px}
+.fline.done{background:var(--green)}
+/* CSS 柱状图 */
+.chart{display:flex;align-items:flex-end;gap:14px;height:150px;padding:10px 6px 0}
+.bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+.bar .b{width:70%;background:linear-gradient(180deg,#5d7ee8,var(--pri));border-radius:6px 6px 0 0}
+.bar .bl{font-size:10.5px;color:var(--sub)}
+.toast{position:fixed;top:70px;right:24px;background:rgba(31,45,61,.94);color:#fff;font-size:13px;border-radius:10px;padding:11px 18px;opacity:0;transition:.25s;z-index:99;pointer-events:none;max-width:340px;line-height:1.5}
+.toast.show{opacity:1}
+.review-item{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:12px;background:#fff}
+</style>
+</head>
+<body>
+
+<!-- ═══════ 侧边栏 ═══════ -->
+<aside class="side">
+  <div class="logo"><b>知识探索 · 工作台</b><span>创作 / 审核 / 运营</span></div>
+  <nav class="nav">
+    <div class="nv on" data-v="v-cards" onclick="sw(this)">🗂️ 卡片管理</div>
+    <div class="nv" data-v="v-entry" onclick="sw(this)">✚ 入口编排</div>
+    <div class="nv" data-v="v-review" onclick="sw(this)">🛡️ 审核中心 <span class="tag t-red" style="margin-left:auto">3</span></div>
+    <div class="nv" data-v="v-assets" onclick="sw(this)">📚 知识资源</div>
+    <div class="nv" data-v="v-metrics" onclick="sw(this)">📊 数据看板</div>
+    <div class="nv" style="opacity:.4;cursor:not-allowed">⚙️ 系统设置</div>
+  </nav>
+  <div class="ft">一期 MVP 工作台<br>编辑：@老周 · 角色：内容审核</div>
+</aside>
+
+<!-- ═══════ 主区 ═══════ -->
+<div class="main">
+  <div class="topbar">
+    <span class="tt" id="pg-title">卡片管理</span>
+    <span class="crumbpath" id="pg-crumb">工作台 / 卡片管理</span>
+    <span class="sp"></span>
+    <span class="tag t-green">服务正常</span>
+    <div class="avt">🧑‍🏫</div>
+  </div>
+  <div class="body">
+
+  <!-- ═══ 视图1 卡片管理 ═══ -->
+  <div class="view active" id="v-cards">
+    <div class="tabs">
+      <div class="tab on">全部 28</div><div class="tab">已发布 21</div><div class="tab">草稿 4</div>
+      <div class="tab" onclick="sw2('v-review')">待审核 2</div><div class="tab">已停用 1</div>
+    </div>
+    <div class="panel">
+      <div class="phead"><span class="pt">卡片列表 · 书院地标 / 湘菜风物 / 声音科学</span><span style="flex:1"></span>
+        <button class="btn ghost sm">⬇ 导入</button><button class="btn pri sm" onclick="toast('新建卡片：选择模板 → 表单编辑 → 送审（原型示意）')">＋ 新建卡片</button></div>
+      <table class="tb">
+        <tr><th>标题</th><th>模板</th><th>专题</th><th>版本</th><th>状态</th><th>入口数</th><th>出处</th><th>更新</th><th>操作</th></tr>
+        <tr onclick="openCard('岳麓书院','图文卡')"><td><b>岳麓书院</b></td><td><span class="tag t-pri">图文卡</span></td><td>书院地标</td><td>v6</td><td><span class="tag t-green">已发布</span></td><td>6</td><td>5 单元</td><td>09-28</td><td><button class="btn ghost sm" onclick="event.stopPropagation();openCard('岳麓书院','图文卡')">详情</button></td></tr>
+        <tr onclick="openCard('朱张会讲','时间线卡')"><td><b>书院千年大事记</b></td><td><span class="tag t-pri">时间线卡</span></td><td>书院地标</td><td>v3</td><td><span class="tag t-green">已发布</span></td><td>3</td><td>3 单元</td><td>09-26</td><td><button class="btn ghost sm">详情</button></td></tr>
+        <tr onclick="openCard('剁椒鱼头','图文卡')"><td><b>剁椒鱼头</b></td><td><span class="tag t-pri">图文卡</span></td><td>湘菜风物</td><td>v2</td><td><span class="tag t-green">已发布</span></td><td>4</td><td>3 单元</td><td>09-25</td><td><button class="btn ghost sm">详情</button></td></tr>
+        <tr onclick="openCard('湘菜地理','图文卡')"><td><b>湘菜的风味地图</b></td><td><span class="tag t-gray">地图卡（二期）</span></td><td>湘菜风物</td><td>v1</td><td><span class="tag t-gray">草稿</span></td><td>—</td><td>0 单元</td><td>09-29</td><td><button class="btn ghost sm">详情</button></td></tr>
+        <tr onclick="openCard('声音与振动','图文卡')"><td><b>声音：振动与传播</b></td><td><span class="tag t-pri">图文卡</span></td><td>声音科学</td><td>v4</td><td><span class="tag t-amber">待审核</span></td><td>2</td><td>2 单元</td><td>09-30</td><td><button class="btn ghost sm" onclick="event.stopPropagation();sw2('v-review')">去审核</button></td></tr>
+        <tr onclick="openCard('赫曦台','图文卡')"><td><b>赫曦台</b></td><td><span class="tag t-pri">图文卡</span></td><td>书院地标</td><td>v5</td><td><span class="tag t-amber">待审核</span></td><td>2</td><td>2 单元</td><td>09-30</td><td><button class="btn ghost sm" onclick="event.stopPropagation();sw2('v-review')">去审核</button></td></tr>
+        <tr onclick="toast('互动卡模板为三期功能')"><td><b>频率与波形（互动）</b></td><td><span class="tag t-gray">互动卡（三期）</span></td><td>声音科学</td><td>—</td><td><span class="tag t-gray">规划中</span></td><td>—</td><td>—</td><td>—</td><td><button class="btn ghost sm">详情</button></td></tr>
+      </table>
+    </div>
+    <div class="note">💡 版本不可变：编辑产生新版本 v(n+1)，发布后探索者的历史路径仍引用旧版本，保证「探索实例可回溯」。卡片资料更新后，系统会提示引用该卡的入口<b>重新测试</b>。</div>
+  </div>
+
+  <!-- ═══ 视图2 入口编排 ═══ -->
+  <div class="view" id="v-entry">
+    <div class="flow">
+      <div class="fstep on"><span class="fb">1</span>一句话描述</div><div class="fline"></div>
+      <div class="fstep"><span class="fb">2</span>确认配置</div><div class="fline"></div>
+      <div class="fstep"><span class="fb">3</span>试运行</div><div class="fline"></div>
+      <div class="fstep"><span class="fb">4</span>发布</div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="phead"><span class="pt">① 自然语言 → 配置草稿</span></div>
+        <div style="padding:16px 18px">
+          <label class="fld">目标卡片</label>
+          <select class="inp"><option>岳麓书院（图文卡 · 书院地标）</option><option>剁椒鱼头</option><option>声音：振动与传播</option></select>
+          <label class="fld">你想要的入口（一句话）</label>
+          <textarea class="inp" id="wb-nl">给第一次来这里的家庭设计一条 60 分钟的文化探索路线，每一站附一个可以观察的问题。</textarea>
+          <div style="display:flex;gap:10px;margin-top:12px">
+            <button class="btn pri" onclick="nlDraft()">✨ 生成配置草稿</button>
+            <button class="btn ghost" onclick="toast('已插入方案中的三条示例之一（菜系/科学示例同理）')">插入示例</button>
+          </div>
+          <div class="note">白名单意图：链接已有卡 / 讲解服务 / 对比生成。超出范围（预订、购买、要求新数据权限）会被拒绝并给出替代建议——<b>自然语言不能赋予新工具或数据权限</b>。</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="phead"><span class="pt">② 配置草稿（可编辑）</span><span class="tag t-green" id="nl-status" style="display:none">识别成功：任务卡生成</span></div>
+        <div style="padding:16px 18px" id="cfg-form">
+          <label class="fld">入口名称</label><input class="inp" value="60 分钟家庭文化探索路线">
+          <label class="fld">所需输入</label><input class="inp" value="儿童年龄；可用时间（默认 60 分钟）">
+          <label class="fld">资料与上下文</label><input class="inp" value="本卡片 + 已授权专题库（12 条）" disabled style="background:#f8fafc;color:var(--sub)">
+          <label class="fld">服务与输出</label><input class="inp" value="讲解服务 → 1 张任务卡（4–6 站 + 观察问题 + 出处）">
+          <label class="fld">适用范围</label>
+          <select class="inp"><option>私人（仅自己）</option><option>公共（需审核后发布）</option></select>
+          <div style="display:flex;gap:10px;margin-top:14px">
+            <button class="btn green" onclick="testRun()">🧪 试运行</button>
+            <button class="btn ghost" onclick="toast('已保存为个人入口（仅自己可见）')">保存私人入口</button>
+            <button class="btn ghost" onclick="sw2('v-review');toast('已提交公共审核，进入审核队列')">提交公共审核</button>
+          </div>
+          <div id="test-result" style="display:none;margin-top:14px;border:1px solid var(--line);border-radius:11px;padding:13px;font-size:12.5px;line-height:1.7;background:#fafbfd">
+            <b style="color:var(--green)">✓ 试运行成功</b>（8.2s · 大模型 · 输出 1 张任务卡）<br>
+            ① 大门·赫曦台（10min）观察「赫曦」二字 ② 讲堂（15min）寻找「实事求是」匾 ③ 御书楼（10min）为什么建在最高处 ④ 爱晚亭（15min）诗与亭的关系<br>
+            <span style="color:var(--sub)">出处：官方导览（2024-04）· 生成内容标识：创意生成（基于已核验信息编排）</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <div class="phead"><span class="pt">本卡已有入口</span><span style="flex:1"></span><span style="font-size:12px;color:var(--sub)">入口更新后保留版本，可停用与回退</span></div>
+      <table class="tb">
+        <tr><th>入口</th><th>类型</th><th>范围</th><th>状态</th><th>版本</th><th>近7日使用</th><th>试运行合格率</th><th>操作</th></tr>
+        <tr><td><b>为什么建在这里</b></td><td><span class="tag t-pri">讲解服务</span></td><td>公共</td><td><span class="tag t-green">已发布</span></td><td>v3</td><td>412 次</td><td class="up">98%</td><td><button class="btn ghost sm">编辑</button> <button class="btn ghost sm">停用</button></td></tr>
+        <tr><td><b>哪些人物与这里有关</b></td><td><span class="tag t-pri">链接已有卡</span></td><td>公共</td><td><span class="tag t-green">已发布</span></td><td>v2</td><td>305 次</td><td class="up">—</td><td><button class="btn ghost sm">编辑</button> <button class="btn ghost sm">停用</button></td></tr>
+        <tr><td><b>60 分钟家庭路线</b></td><td><span class="tag t-pri">任务卡生成</span></td><td>私人（@小舟）</td><td><span class="tag t-gray">仅自己</span></td><td>v1</td><td>6 次</td><td class="up">100%</td><td><button class="btn ghost sm">复制为模板</button></td></tr>
+        <tr><td><b>从一处题刻开始讲故事</b></td><td><span class="tag t-orange">入口模板</span></td><td>公共</td><td><span class="tag t-amber">待审核</span></td><td>v1</td><td>—</td><td>—</td><td><button class="btn ghost sm" onclick="sw2('v-review')">去审核</button></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ 视图3 审核中心 ═══ -->
+  <div class="view" id="v-review">
+    <div class="tabs">
+      <div class="tab on" onclick="toast('待审卡片 2 项')">待审卡片 2</div>
+      <div class="tab" onclick="toast('待审公共入口 1 项')">待审入口 1</div>
+      <div class="tab" onclick="toast('一期以人工审核为主；二期上线机器预检')">反馈纠错 5</div>
+    </div>
+    <div class="review-item">
+      <div style="display:flex;align-items:center;gap:10px">
+        <b style="font-size:14px">赫曦台</b><span class="tag t-pri">图文卡 v5</span><span class="tag t-amber">待审核</span>
+        <span style="flex:1"></span><span style="font-size:12px;color:var(--sub)">@老陈 提交于 09-30 10:22</span>
+      </div>
+      <div style="margin-top:10px">
+        <div class="kv"><div class="k">变更摘要</div><div class="v">新增「赫曦」释义段落（引用《朱子语类》专题库）；更新 2 处出处定位（页码修正）</div></div>
+        <div class="kv"><div class="k">机器预检</div><div class="v"><span class="tag t-green">出处定位有效</span> <span class="tag t-green">无越权引用</span> <span class="tag t-green">敏感词通过</span> <span class="tag t-amber">1 处「归纳」段落建议补充出处</span></div></div>
+        <div class="kv"><div class="k">影响提示</div><div class="v">该卡被 3 个公共入口引用，发布后需通知入口作者重新测试</div></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button class="btn green" onclick="approve(this,'赫曦台 v5')">✓ 通过并发布</button>
+        <button class="btn danger" onclick="reject(this,'赫曦台 v5')">✕ 驳回</button>
+        <button class="btn ghost" onclick="openCard('赫曦台','图文卡')">查看全文与版本对比</button>
+      </div>
+    </div>
+    <div class="review-item">
+      <div style="display:flex;align-items:center;gap:10px">
+        <b style="font-size:14px">从一处题刻开始讲故事</b><span class="tag t-orange">公共入口</span><span class="tag t-amber">待审核</span>
+        <span style="flex:1"></span><span style="font-size:12px;color:var(--sub)">@老周 提交于 09-30 09:40</span>
+      </div>
+      <div style="margin-top:10px">
+        <div class="kv"><div class="k">入口配置</div><div class="v">讲解服务 → 3 张图文卡（题刻位置 / 书法风格 / 典籍出处）；输入：无；范围：本卡 + 已授权专题库</div></div>
+        <div class="kv"><div class="k">试运行</div><div class="v"><span class="tag t-green">5/5 次合格</span> 平均 9.1s · 全部输出带出处 · 无越权请求</div></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button class="btn green" onclick="approve(this,'入口「从一处题刻开始讲故事」')">✓ 通过并发布</button>
+        <button class="btn danger" onclick="reject(this,'入口「从一处题刻开始讲故事」')">✕ 驳回</button>
+      </div>
+    </div>
+    <div class="note">审核动作全量留痕（审计日志）；无依据的生成内容不会自动成为公共知识——所有公共内容必经此队列（方案「服务结果的可信表达」要求）。</div>
+  </div>
+
+  <!-- ═══ 视图4 知识资源 ═══ -->
+  <div class="view" id="v-assets">
+    <div class="panel">
+      <div class="phead"><span class="pt">知识单元库（512 条）</span><span style="flex:1"></span>
+        <button class="btn ghost sm" onclick="toast('批量导入：结构化表格（类型/标题/来源/定位/授权），导入后人工抽检定位信息')">⬇ 批量导入</button>
+        <button class="btn pri sm" onclick="toast('新建知识单元：登记类型、来源与定位（卷/章/页/时间戳），挂接专题库')">＋ 新建单元</button></div>
+      <table class="tb">
+        <tr><th>类型</th><th>标题</th><th>来源</th><th>定位</th><th>授权</th><th>被引用</th><th>操作</th></tr>
+        <tr><td><span class="tag t-pri">图书</span></td><td><b>《岳麓书院史略》</b></td><td>出版社授权（2026-01）</td><td>第一章 · p12–14</td><td><span class="tag t-green">有效</span></td><td>37 次</td><td><button class="btn ghost sm">引用预览</button></td></tr>
+        <tr><td><span class="tag t-pri">文章</span></td><td><b>中国古代书院选址研究</b></td><td>期刊库授权</td><td>第 2 节</td><td><span class="tag t-green">有效</span></td><td>12 次</td><td><button class="btn ghost sm">引用预览</button></td></tr>
+        <tr><td><span class="tag t-pri">图书</span></td><td><b>《中国菜谱·湖南》</b></td><td>出版社授权</td><td>剁椒蒸鱼头 · p88</td><td><span class="tag t-green">有效</span></td><td>21 次</td><td><button class="btn ghost sm">引用预览</button></td></tr>
+        <tr><td><span class="tag t-gray">音视频</span></td><td><b>书院导览音频</b></td><td>自制（版权自有）</td><td>00:12:30–00:15:00</td><td><span class="tag t-green">有效</span></td><td>8 次</td><td><button class="btn ghost sm">引用预览</button></td></tr>
+        <tr><td><span class="tag t-pri">教材</span></td><td><b>物理八年级上册</b></td><td>教材授权（教辅场景）</td><td>第 2 章 · 声现象</td><td><span class="tag t-amber">续期中（2026-12 到期）</span></td><td>15 次</td><td><button class="btn ghost sm">引用预览</button></td></tr>
+      </table>
+    </div>
+    <div class="note">来源完整率 = 需引证的事实内容中「出处可定位」的占比（当前 <b>96%</b>）。授权到期前 60 天提醒；到期单元自动从检索结果中摘除，引用处标记「来源待续期」。</div>
+  </div>
+
+  <!-- ═══ 视图5 数据看板 ═══ -->
+  <div class="view" id="v-metrics">
+    <div class="stat-grid">
+      <div class="stat"><div class="sl">有效深入率</div><div class="sv">42%</div><div class="sd up">▲ 3pt · 判断入口是否促进理解</div></div>
+      <div class="stat"><div class="sl">成果保存率</div><div class="sv">18%</div><div class="sd up">▲ 1pt · 探索是否形成可用结果</div></div>
+      <div class="stat"><div class="sl">分享接续率</div><div class="sv">27%</div><div class="sd up">▲ 5pt · 分享带来继续使用</div></div>
+      <div class="stat"><div class="sl">入口成功率（NL 编排）</div><div class="sv">71%</div><div class="sd down">▼ 2pt · 目标 ≥60%，白名单收窄后回升</div></div>
+      <div class="stat"><div class="sl">来源完整率</div><div class="sv">96%</div><div class="sd up">— · 知识可信度</div></div>
+      <div class="stat"><div class="sl">服务成本 / 时延</div><div class="sv">¥0.021 <span style="font-size:13px;color:var(--sub)">/ 6.8s</span></div><div class="sd up">▼ 分级路由后成本下降 38%</div></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><div class="phead"><span class="pt">近 7 日服务次数与成本</span></div>
+        <div style="padding:12px 14px">
+          <div class="chart">
+            <div class="bar"><div class="b" style="height:40%"></div><div class="bl">一</div></div>
+            <div class="bar"><div class="b" style="height:55%"></div><div class="bl">二</div></div>
+            <div class="bar"><div class="b" style="height:48%"></div><div class="bl">三</div></div>
+            <div class="bar"><div class="b" style="height:66%"></div><div class="bl">四</div></div>
+            <div class="bar"><div class="b" style="height:78%"></div><div class="bl">五</div></div>
+            <div class="bar"><div class="b" style="height:100%"></div><div class="bl">六</div></div>
+            <div class="bar"><div class="b" style="height:85%"></div><div class="bl">日</div></div>
+          </div>
+          <div style="font-size:11.5px;color:var(--sub);padding:8px 6px 4px">周峰值 1,240 次/日 · 成本 ¥26.0/日 · 缓存命中率 31%（二期开启复用后预计再降 20%）</div>
+        </div>
+      </div>
+      <div class="panel"><div class="phead"><span class="pt">专题运营速览</span></div>
+        <div style="padding:8px 16px 14px">
+          <div class="kv"><div class="k">书院地标</div><div class="v">会话 820 · 深入率 46% · 最热入口「为什么建在这里」</div></div>
+          <div class="kv"><div class="k">湘菜风物</div><div class="v">会话 640 · 深入率 39% · 跨主题跳转最多（→ 科学）</div></div>
+          <div class="kv"><div class="k">声音科学</div><div class="v">会话 410 · 深入率 44% · 教师入口使用占比 35%</div></div>
+          <div class="kv"><div class="k">高价值成果</div><div class="v">3 份探索报告待编辑评估，可沉淀为公共卡组（方案「成果沉淀」）</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="note">指标口径与用途来自方案第九章：先建立行为数据与质量抽样基线，再设定目标；优先验证「用户愿意继续、结果值得保存、他人能够接续」。</div>
+  </div>
+
+  </div>
+</div>
+
+<!-- ═══════ 卡片详情抽屉 ═══════ -->
+<div class="drawer" id="drawer">
+  <div class="dhead"><span class="dt" id="d-title">卡片详情</span><button class="btn ghost sm" onclick="closeDrawer()">✕ 关闭</button></div>
+  <div class="dbody">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+      <span class="tag t-green">已发布</span><span class="tag t-pri">图文卡</span><span style="font-size:12px;color:var(--sub)">书院地标 · v6</span>
+    </div>
+    <div class="kv"><div class="k">维护人</div><div class="v">@老陈（创作者）· 最后编辑 09-28</div></div>
+    <div class="kv"><div class="k">状态流转</div><div class="v">草稿 → 待审核 → <b>已发布</b>（→ 可停用）；停用后分享页保留摘要并标识不可用节点</div></div>
+    <div class="kv"><div class="k">版本历史</div><div class="v">
+      v6 · 09-28 · 更新人物段落出处（当前发布）<br>
+      v5 · 09-20 · 新增「跨江空间」段落<br>
+      v4 · 09-12 · 修订大事记年代（编辑核验）<br>
+      <span style="color:var(--pri);cursor:pointer" onclick="toast('版本对比视图（原型示意）：逐段 diff + 出处变化')">查看版本对比 →</span></div></div>
+    <div class="kv"><div class="k">入口（6）</div><div class="v">为什么建在这里 · 哪些人物与这里有关 · 千年大事记 · 题刻故事（模板）· 建筑布局（二期）· 文化影响</div></div>
+    <div class="kv"><div class="k">出处（5）</div><div class="v">《岳麓书院史略》p12–14 · 选址研究·第2节 · 官方导览 2024-04 · 校史官网 · 大事年表</div></div>
+    <div class="kv"><div class="k">引用提示</div><div class="v">本卡被 3 个公共入口引用、出现在 41 条分享路径中</div></div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn pri" onclick="toast('进入内容编辑器：模板表单（摘要/段落/出处/入口），保存即产生新版本')">✎ 编辑新版本</button>
+      <button class="btn ghost" onclick="toast('已送审，进入审核队列')">📤 送审</button>
+      <button class="btn danger" onclick="toast('停用需二次确认；进行中的分享将标识不可用节点')">停用</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="wtoast"></div>
+
+<script>
+const titles={'v-cards':['卡片管理','工作台 / 卡片管理'],'v-entry':['入口编排','工作台 / 入口编排'],
+ 'v-review':['审核中心','工作台 / 审核中心'],'v-assets':['知识资源','工作台 / 知识资源'],'v-metrics':['数据看板','工作台 / 数据看板']};
+function sw(el){
+  document.querySelectorAll('.nv').forEach(n=>n.classList.remove('on'));el.classList.add('on');
+  const v=el.dataset.v;sw2(v);
+}
+function sw2(v){
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  document.getElementById(v).classList.add('active');
+  document.getElementById('pg-title').innerText=titles[v][0];
+  document.getElementById('pg-crumb').innerText=titles[v][1];
+}
+let tt;function toast(m){const t=document.getElementById('wtoast');t.innerText=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),2800);}
+function openCard(title,tpl){document.getElementById('d-title').innerText=title+' · '+tpl;document.getElementById('drawer').classList.add('open');}
+function closeDrawer(){document.getElementById('drawer').classList.remove('open');}
+function nlDraft(){
+  document.getElementById('nl-status').style.display='inline-flex';
+  const fs=document.querySelectorAll('#v-entry .fstep');fs[0].classList.add('done');fs[1].classList.add('on');
+  toast('意图识别：任务卡生成（讲解服务）· 已生成配置草稿，全部字段可编辑');
+}
+function testRun(){
+  document.getElementById('test-result').style.display='block';
+  const fs=document.querySelectorAll('#v-entry .fstep');
+  fs[1].classList.add('done');fs[2].classList.add('done');fs[2].classList.replace('on','done');fs[3].classList.add('on');
+  toast('试运行成功：输出合格（1 张任务卡 · 全部带出处）');
+}
+function approve(el,name){el.closest('.review-item').style.opacity=.35;el.closest('.review-item').style.pointerEvents='none';toast('已通过并发布：'+name+'（审核动作已记入审计日志）');}
+function reject(el,name){el.closest('.review-item').style.opacity=.35;el.closest('.review-item').style.pointerEvents='none';toast('已驳回：'+name+'（可填写驳回意见，作者会收到通知）');}
+</script>
+</body>
+</html>
