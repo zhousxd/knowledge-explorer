@@ -82,16 +82,28 @@ const templateLabel = (item: ReviewItem): string => TEMPLATE_LABELS[parseSummary
 
 // ---------- 裁决 ----------
 
+/** 裁决进行中的任务 id:期间两钮禁用、同/异任务重复触发直接忽略;队列重拉完成才释放,
+ *  防止「成功 toast 刚出、双击又吃一个『该审核任务已被处理』错误 toast」 */
+const busyId = ref<number | null>(null);
+
 /** 通过并发布:一击,不填意见(通过不允许意见,保持单步) */
 async function onApprove(item: ReviewItem): Promise<void> {
-  try {
-    await approveReview(item.id);
-    ElMessage.success(`已通过并发布「${parseSummary(item).title}」`);
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '操作失败');
+  if (busyId.value !== null) {
     return;
   }
-  await afterAction();
+  busyId.value = item.id;
+  try {
+    try {
+      await approveReview(item.id);
+      ElMessage.success(`已通过并发布「${parseSummary(item).title}」`);
+    } catch (e) {
+      ElMessage.error(e instanceof Error ? e.message : '操作失败');
+      return;
+    }
+    await afterAction();
+  } finally {
+    busyId.value = null;
+  }
 }
 
 /** 驳回:点开意见框 → 填意见 → 确认,共 3 击;意见必填(空/空白时确认禁用) */
@@ -111,15 +123,23 @@ function closeReject(): void {
 const notesFilled = computed(() => notes.value.trim().length > 0);
 
 async function onConfirmReject(item: ReviewItem): Promise<void> {
-  try {
-    await rejectReview(item.id, notes.value.trim());
-    ElMessage.success(`已驳回「${parseSummary(item).title}」,退回草稿`);
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '操作失败');
+  if (busyId.value !== null) {
     return;
   }
-  closeReject();
-  await afterAction();
+  busyId.value = item.id;
+  try {
+    try {
+      await rejectReview(item.id, notes.value.trim());
+      ElMessage.success(`已驳回「${parseSummary(item).title}」,退回草稿`);
+    } catch (e) {
+      ElMessage.error(e instanceof Error ? e.message : '操作失败');
+      return;
+    }
+    closeReject();
+    await afterAction();
+  } finally {
+    busyId.value = null;
+  }
 }
 
 /** 裁决成功后:重拉当前队列 + 刷新侧栏待审计数徽标 */
@@ -259,6 +279,7 @@ onMounted(() => {
             <el-button
               class="act-approve"
               type="success"
+              :disabled="busyId !== null"
               @click="onApprove(item)"
             >
               通过并发布
@@ -289,7 +310,7 @@ onMounted(() => {
               <el-button
                 class="confirm-reject"
                 type="danger"
-                :disabled="!notesFilled"
+                :disabled="!notesFilled || busyId !== null"
                 @click="onConfirmReject(item)"
               >
                 确认驳回

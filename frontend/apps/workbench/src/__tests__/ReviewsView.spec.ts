@@ -125,6 +125,36 @@ describe('ReviewsView', () => {
     expect(listReviewsMock).toHaveBeenCalledWith({ status: 'PENDING', page: 1, size: 1 });
   });
 
+  it('裁决进行中防双击:pending 期间两钮禁用,第二次点击不重复调用,settle 后恢复', async () => {
+    let resolveApprove: (v: unknown) => void = () => {};
+    approveMock.mockImplementationOnce(() => new Promise((resolve) => { resolveApprove = resolve; }));
+    const wrapper = await mountView();
+    const approveBtn = wrapper.findAll('.review-card')[0]?.find('.act-approve');
+
+    await approveBtn?.trigger('click');
+    // 请求未 settle:approve 已调用 1 次,通过钮禁用
+    expect(approveMock).toHaveBeenCalledTimes(1);
+    expect(approveBtn?.attributes('disabled')).toBeDefined();
+
+    // 打开另一卡的驳回框并填好意见:确认驳回仍被 busy 守卫禁用
+    const card2 = wrapper.findAll('.review-card')[1];
+    await card2?.find('.act-reject').trigger('click');
+    await card2?.find('.reject-box textarea').setValue('意见');
+    const confirmBtn = card2?.find('.confirm-reject');
+    expect(confirmBtn?.attributes('disabled')).toBeDefined();
+
+    // 双击/切到他卡确认:不再发第二次请求(approve 与 reject 均不重放)
+    await approveBtn?.trigger('click');
+    await confirmBtn?.trigger('click');
+    expect(approveMock).toHaveBeenCalledTimes(1);
+    expect(rejectMock).not.toHaveBeenCalled();
+
+    // settle(含队列重拉)后守卫释放,按钮恢复可用
+    resolveApprove({});
+    await flushPromises();
+    expect(wrapper.findAll('.review-card')[0]?.find('.act-approve').attributes('disabled')).toBeUndefined();
+  });
+
   it('驳回三步:意见为空确认禁用,填写后确认调 reject 带 notes 并刷新', async () => {
     const wrapper = await mountView();
     listReviewsMock.mockClear();
