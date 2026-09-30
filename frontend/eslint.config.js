@@ -1,0 +1,13 @@
+import pluginVue from 'eslint-plugin-vue';
+import tseslint from 'typescript-eslint';
+
+export default [
+  { ignores: ['**/dist/**', '**/node_modules/**'] },
+  ...tseslint.configs.recommended,
+  ...pluginVue.configs['flat/recommended'],
+  {
+    rules: {
+      'vue/multi-word-component-names': 'off'
+    }
+  }
+];

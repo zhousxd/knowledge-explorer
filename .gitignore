@@ -9,6 +9,7 @@ target/
 node_modules/
 dist/
 .pnpm-store/
+*.local
 
 # OS
 .DS_Store
