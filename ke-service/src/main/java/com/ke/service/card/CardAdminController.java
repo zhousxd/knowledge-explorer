@@ -104,6 +104,15 @@ public class CardAdminController {
         return ApiResponse.ok(cards.versionsOf(id));
     }
 
+    /**
+     * 工作台单卡读取（编辑器回填）：content 内嵌 JSON 对象 + sources 数组，全状态可见；
+     * 归属与写路径同则（CREATOR 仅自己的卡 → 他人卡 403），版本历史走 /versions。
+     */
+    @GetMapping("/{id}")
+    public ApiResponse<CardService.WbCardDetail> detail(@PathVariable long id) {
+        return ApiResponse.ok(cards.detailForWorkbench(id, currentUserId(), editorOrAbove()));
+    }
+
     private static long currentUserId() {
         return Long.parseLong(SecurityContextHolder.getContext().getAuthentication().getName());
     }

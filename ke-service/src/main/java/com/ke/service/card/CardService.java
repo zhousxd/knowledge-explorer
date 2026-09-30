@@ -102,6 +102,14 @@ public class CardService {
     public record VersionItem(Integer versionNo, String createdByNickname, OffsetDateTime createdAt) {
     }
 
+    /**
+     * 工作台单卡详情（编辑器回填）：content 为内嵌 JSON 对象、sources 数组
+     * （citations 为指向 sources 的 1-based 索引）；版本历史由 /versions 单独取。
+     */
+    public record WbCardDetail(Long id, String theme, String templateType, String title, String status,
+                               JsonNode content, JsonNode sources) {
+    }
+
     /** 工作台管理列表页（FR-C07 界面）：offset 分页契约（page 从 1 起；total 恒在） */
     public record WbCardPage(List<WbCardListItem> items, long total, int page, int size) {
     }
@@ -307,6 +315,31 @@ public class CardService {
     }
 
     // ---------- 读路径（工作台管理列表，FR-C07 界面） ----------
+
+    /**
+     * 工作台单卡读取（四模板编辑器回填）：全状态可见（草稿/待审也可编辑回填），
+     * 归属规则与写路径一致（EDITOR/OPERATOR 全量，CREATOR 仅自己维护的卡，否则 403）；
+     * 内容取最新版本（current_version_id 未回填的 DRAFT/PENDING 卡按 version_no 最大行）。
+     */
+    @Transactional(readOnly = true)
+    public WbCardDetail detailForWorkbench(long cardId, long userId, boolean editorOrAbove) {
+        CardEntity card = requireCard(cardId);
+        assertWritable(card, userId, editorOrAbove);
+        CardVersionEntity latest = versions.selectOne(new LambdaQueryWrapper<CardVersionEntity>()
+                .eq(CardVersionEntity::getCardId, cardId)
+                .orderByDesc(CardVersionEntity::getVersionNo)
+                .last("LIMIT 1"));
+        if (latest == null) {
+            throw new BadRequestException("卡片没有可用版本");
+        }
+        try {
+            return new WbCardDetail(card.getId(), card.getTheme(), card.getTemplateType(), card.getTitle(),
+                    card.getStatus(), objectMapper.readTree(latest.getContentJson()),
+                    sourcesNode(latest.getSources()));
+        } catch (JsonProcessingException e) {
+            throw new BadRequestException("卡片内容损坏");
+        }
+    }
 
     /** offset 分页上限与默认值（size ≤ 100，默认 20） */
     static final int WB_MAX_PAGE_SIZE = 100;
