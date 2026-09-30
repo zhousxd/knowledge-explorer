@@ -221,6 +221,51 @@ class AssetImportIT {
     }
 
     @Test
+    void wrongHeaderRejectedWithoutImport() {
+        String editor = newUserToken("13900001009", "编辑庚", "EDITOR");
+        // 表头缺 locator（列名集合必须包含 kind/title/locator）：imported=0，错误指向表头行
+        byte[] badHeader = ("kind,title,source_meta,license\n"
+                + "book,《表头缺失书》,,已授权\n")
+                .getBytes(StandardCharsets.UTF_8);
+
+        ResponseEntity<String> res = importCsv(badHeader, editor);
+        assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(200);
+        assertThat((int) JsonPath.read(res.getBody(), "$.data.imported")).isZero();
+        assertThat((int) JsonPath.read(res.getBody(), "$.data.skipped")).isEqualTo(1);
+        assertThat((int) JsonPath.read(res.getBody(), "$.data.errors[0].line")).isEqualTo(1);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.errors[0].reason"))
+                .contains("表头缺少列").contains("locator");
+
+        // 列名集合判断与顺序/大小写无关：表头乱序 + 大写仍可通过（数据行仍按固定列位解析）
+        byte[] shuffledHeader = ("TITLE,KIND,LOCATOR,source_meta,license,license_expire,content_extract\n"
+                + "book,《乱序表头书》,,\"{\"\"chapter\"\":\"\"一\"\"}\",,,\n")
+                .getBytes(StandardCharsets.UTF_8);
+        ResponseEntity<String> ok = importCsv(shuffledHeader, editor);
+        assertThat(ok.getStatusCode().value()).as("body=%s", ok.getBody()).isEqualTo(200);
+        assertThat((int) JsonPath.read(ok.getBody(), "$.data.imported")).isEqualTo(1);
+        Integer rows = jdbc.queryForObject(
+                "select count(*) from knowledge_asset where title=?", Integer.class, "《乱序表头书》");
+        assertThat(rows).isEqualTo(1);
+    }
+
+    @Test
+    void missingFilePartRejectedAs400() {
+        String editor = newUserToken("13900001010", "编辑辛", "EDITOR");
+        // multipart 不带 file part → MissingServletRequestPartException → 400 envelope
+        MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
+        form.add("notFile", "oops");
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        headers.setBearerAuth(editor);
+        ResponseEntity<String> res = http.postForEntity("/api/wb/assets/import",
+                new HttpEntity<>(form, headers), String.class);
+        assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(400);
+        assertThat((Integer) JsonPath.read(res.getBody(), "$.code")).isEqualTo(400);
+        assertThat((String) JsonPath.read(res.getBody(), "$.message")).contains("缺少上传文件");
+        assertThat((String) JsonPath.read(res.getBody(), "$.traceId")).isNotBlank();
+    }
+
+    @Test
     void expiredFlagSet() {
         String editor = newUserToken("13900001003", "编辑丙", "EDITOR");
         importCsv(csv(

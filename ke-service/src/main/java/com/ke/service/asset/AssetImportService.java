@@ -5,6 +5,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.ResolverStyle;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,7 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 知识资产导入与统一引用（FR-O01/O02）：
- * - CSV 批量导入：逐行校验（kind 枚举小写、title 必填、locator 必为 JSON 对象、
+ * - CSV 批量导入：表头行必须包含 kind/title/locator 列（集合包含、顺序无关），否则整文件
+ *   imported=0 并回报缺失列；数据行逐行校验（kind 枚举小写、title 必填、locator 必为 JSON 对象、
  *   source_meta 可空但给则须为 JSON 对象、license_expire 可空 yyyy-MM-dd），
  *   合法行入库；非法行与结构坏行（引号未闭合等，只作废该行）均跳过并按物理行号回报原因
  *   （部分成功语义，不做整文件回滚）；
@@ -40,6 +42,9 @@ public class AssetImportService {
     static final int DEFAULT_SIZE = 20;
     static final int MAX_SIZE = 100;
     static final int TITLE_MAX = 200;
+
+    /** 表头行必须包含的列（集合包含而非全等，顺序无关；多余列如 source_meta 照常存在） */
+    private static final List<String> REQUIRED_COLUMNS = List.of("kind", "title", "locator");
 
     private static final Set<String> KINDS = Set.of("book", "article", "audio", "video");
     private static final Set<String> CITATION_TYPES = Set.of("card_version", "agent_run");
@@ -66,13 +71,19 @@ public class AssetImportService {
 
     public ImportResult importCsv(byte[] bytes) {
         List<SimpleCsvParser.Row> rows = SimpleCsvParser.parse(bytes);
-        // 第一个非空行为表头行，跳过
-        if (!rows.isEmpty()) {
-            rows = rows.subList(1, rows.size());
+        if (rows.isEmpty()) {
+            return new ImportResult(0, 0, List.of());
         }
+        // 表头行校验（列名集合必须包含 kind/title/locator）：列结构错则整文件 imported=0，
+        // 以表头行号回报缺失列，避免把数据行错当列位导出垃圾
+        ImportError headerError = checkHeader(rows.get(0));
+        if (headerError != null) {
+            return new ImportResult(0, 1, List.of(headerError));
+        }
+        List<SimpleCsvParser.Row> dataRows = rows.subList(1, rows.size());
         int imported = 0;
         List<ImportError> errors = new ArrayList<>();
-        for (SimpleCsvParser.Row row : rows) {
+        for (SimpleCsvParser.Row row : dataRows) {
             // 结构坏行（引号未闭合等）只作废该行，回报行号后继续，绝不让整个请求 500
             if (row.failed()) {
                 errors.add(new ImportError(row.line(), row.error()));
@@ -87,6 +98,21 @@ public class AssetImportService {
             imported++;
         }
         return new ImportResult(imported, errors.size(), List.copyOf(errors));
+    }
+
+    /** 表头行合法返回 null；缺失必需列（或表头行本身是结构坏行）返回 ImportError */
+    private ImportError checkHeader(SimpleCsvParser.Row header) {
+        Set<String> columns = new HashSet<>();
+        if (!header.failed()) {
+            for (String field : header.fields()) {
+                columns.add(field.trim().toLowerCase(Locale.ROOT));
+            }
+        }
+        List<String> missing = REQUIRED_COLUMNS.stream().filter(c -> !columns.contains(c)).toList();
+        if (missing.isEmpty()) {
+            return null;
+        }
+        return new ImportError(header.line(), "表头缺少列: " + String.join(",", missing));
     }
 
     /** 行级校验，返回首个错误原因；合法返回 null */

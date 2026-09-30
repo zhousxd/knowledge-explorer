@@ -102,6 +102,31 @@ class CardContentValidatorTest {
     }
 
     @Test
+    void nullListElementsRejected() {
+        // P1-2：容器元素级 @NotNull（objects/sections/events），null 元素不得入库
+        assertThatThrownBy(() -> CardContentValidator.parseAndValidate("COMPARE", """
+            {"objects":["甲",null],"dimensions":["价格"],"cells":[["低",null]]}
+            """))
+            .isInstanceOf(InvalidCardContentException.class)
+            .hasMessageContaining("objects");
+        assertThatThrownBy(() -> CardContentValidator.parseAndValidate("COMPARE", """
+            {"objects":["甲","乙"],"dimensions":[null],"cells":[["低"]]}
+            """))
+            .isInstanceOf(InvalidCardContentException.class)
+            .hasMessageContaining("dimensions");
+        assertThatThrownBy(() -> CardContentValidator.parseAndValidate("TEXT", """
+            {"summary":"摘要","sections":[null]}
+            """))
+            .isInstanceOf(InvalidCardContentException.class)
+            .hasMessageContaining("sections");
+        assertThatThrownBy(() -> CardContentValidator.parseAndValidate("TIMELINE", """
+            {"events":[null]}
+            """))
+            .isInstanceOf(InvalidCardContentException.class)
+            .hasMessageContaining("events");
+    }
+
+    @Test
     void unknownPropertiesIgnored() {
         String json = """
             {"summary":"摘要","sections":[{"h":"h","body":"b"}],"futureField":{"x":1}}

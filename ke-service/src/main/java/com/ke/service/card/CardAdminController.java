@@ -40,7 +40,7 @@ public class CardAdminController {
 
     public CardAdminController(CardService cards) { this.cards = cards; }
 
-    public record CreateCardReq(@NotBlank String theme,
+    public record CreateCardReq(@NotBlank @Size(max = 50) String theme,
                                 @NotBlank String templateType,
                                 @NotBlank @Size(max = 120) String title,
                                 @NotNull JsonNode content,

@@ -80,13 +80,23 @@ public final class CardContentValidator {
         } else if (content instanceof TextCardContent t) {
             if (t.sections() != null) {
                 for (int i = 0; i < t.sections().size(); i++) {
-                    checkCitations("sections[" + i + "].citations", t.sections().get(i).citations(), errors);
+                    TextCardContent.Section section = t.sections().get(i);
+                    if (section == null) {
+                        errors.add("sections[" + i + "]: 元素不能为 null");
+                        continue;
+                    }
+                    checkCitations("sections[" + i + "].citations", section.citations(), errors);
                 }
             }
         } else if (content instanceof TimelineCardContent tl) {
             if (tl.events() != null) {
                 for (int i = 0; i < tl.events().size(); i++) {
-                    checkCitations("events[" + i + "].citations", tl.events().get(i).citations(), errors);
+                    TimelineCardContent.Event event = tl.events().get(i);
+                    if (event == null) {
+                        errors.add("events[" + i + "]: 元素不能为 null");
+                        continue;
+                    }
+                    checkCitations("events[" + i + "].citations", event.citations(), errors);
                 }
             }
         }

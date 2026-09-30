@@ -8,10 +8,10 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-/** 图文卡（FR-C03）。summary ≤120 字，sections 非空，related.relation 非空。 */
+/** 图文卡（FR-C03）。summary ≤120 字，sections 非空且元素非 null，related.relation 非空。 */
 public record TextCardContent(
     @NotBlank @Size(max = 120) String summary,
-    @NotEmpty @Valid List<Section> sections,
+    @NotEmpty @Valid List<@NotNull Section> sections,
     @Valid List<Related> related) implements CardContent {
 
   public record Section(@NotBlank String h, @NotBlank String body, List<Integer> citations) {}

@@ -448,10 +448,19 @@ public class CardService {
             return t.summary();
         }
         if (content instanceof CompareCardContent c) {
-            return "对比：" + String.join(" vs ", c.objects());
+            // 防御：跳过 null 元素（容器级 @NotNull 已拦新数据，这里兜旧数据/历史版本）
+            String objects = c.objects().stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .collect(Collectors.joining(" vs "));
+            return "对比：" + objects;
         }
-        if (content instanceof TimelineCardContent tl && !tl.events().isEmpty()) {
-            return tl.events().get(0).title();
+        if (content instanceof TimelineCardContent tl && tl.events() != null) {
+            return tl.events().stream()
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .map(e -> e.title() == null ? "" : e.title())
+                    .orElse("");
         }
         if (content instanceof TaskCardContent task) {
             return task.goal();
@@ -459,8 +468,12 @@ public class CardService {
         return "";
     }
 
+    /** 按码点截断（不切断 surrogate pair，避免摘要末尾出现半个 emoji/生僻字） */
     private static String truncate(String s, int max) {
-        return s.length() > max ? s.substring(0, max) : s;
+        if (s.codePointCount(0, s.length()) <= max) {
+            return s;
+        }
+        return s.substring(0, s.offsetByCodePoints(0, max));
     }
 
     // ---------- keyset 游标（(sort,id) 的 base64url 不透明编码） ----------

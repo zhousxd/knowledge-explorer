@@ -487,4 +487,24 @@ class CardLifecycleIT {
                 Integer.class, cardId);
         assertThat(audits).isEqualTo(1);
     }
+
+    @Test
+    void inputBoundaryViolationsRejected() {
+        String creator = newUserToken("13800001020", "边界创作者", "CREATOR");
+
+        // COMPARE objects 含 null 元素（容器级 @NotNull）→ 400
+        String compareNullObject = "{\"objects\":[\"甲\",null],\"dimensions\":[\"价格\"],"
+                + "\"cells\":[[\"低\",null]]}";
+        ResponseEntity<String> nullObject = http.postForEntity("/api/wb/cards",
+                jsonWithToken("{\"theme\":\"湖湘文化\",\"templateType\":\"COMPARE\",\"title\":\"空元素对比卡\","
+                        + "\"content\":" + compareNullObject + "}", creator), String.class);
+        assertThat(nullObject.getStatusCode().value()).as("body=%s", nullObject.getBody()).isEqualTo(400);
+        assertThat((String) JsonPath.read(nullObject.getBody(), "$.message")).contains("objects");
+
+        // theme 超 50 字 → 400
+        ResponseEntity<String> themeTooLong = http.postForEntity("/api/wb/cards",
+                jsonWithToken(createBody("长".repeat(51), "超长专题卡", textContent("边界摘要")), creator), String.class);
+        assertThat(themeTooLong.getStatusCode().value()).as("body=%s", themeTooLong.getBody()).isEqualTo(400);
+        assertThat((String) JsonPath.read(themeTooLong.getBody(), "$.message")).contains("theme");
+    }
 }
