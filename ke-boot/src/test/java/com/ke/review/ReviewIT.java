@@ -227,4 +227,32 @@ class ReviewIT {
         assertThat(jdbc.queryForObject("select status from review_task where id=?", String.class, reviewId))
                 .isEqualTo("PENDING");
     }
+
+    @Test
+    void doubleApproveSecondRejectedWithSingleAudit() {
+        // 并发窗口回归：第二次 approve 必须被状态谓词（WHERE status='PENDING'）拦下（400），
+        // 而非覆盖式成功——否则会出现双审计行与 reviewer_id 互相覆盖。
+        String creator = newUserToken("13800002009", "创作者丁", "CREATOR");
+        String editor = newUserToken("13800002010", "编辑戊", "EDITOR");
+        long cardId = createAndSubmitCard(creator, "湖湘文化", "并发双审卡", "并发双审摘要");
+
+        long reviewId = pendingReviewId(editor, cardId);
+        ResponseEntity<String> first = post(editor, "/api/wb/reviews/" + reviewId + "/approve", "{}");
+        assertThat(first.getStatusCode().value()).as("first body=%s", first.getBody()).isEqualTo(200);
+
+        ResponseEntity<String> second = post(editor, "/api/wb/reviews/" + reviewId + "/approve", "{}");
+        assertThat(second.getStatusCode().value()).as("second body=%s", second.getBody()).isEqualTo(400);
+        assertThat((Integer) JsonPath.read(second.getBody(), "$.code")).isEqualTo(400);
+        assertThat((String) JsonPath.read(second.getBody(), "$.traceId")).isNotBlank();
+
+        // 已处理任务再 reject 同样 400；卡片仍 PUBLISHED；CARD_PUBLISH 审计恰好一行（无双审计）
+        ResponseEntity<String> late = post(editor, "/api/wb/reviews/" + reviewId + "/reject", "{\"notes\":\"迟到的驳回\"}");
+        assertThat(late.getStatusCode().value()).as("late reject body=%s", late.getBody()).isEqualTo(400);
+        assertThat((Integer) JsonPath.read(late.getBody(), "$.code")).isEqualTo(400);
+        assertThat(jdbc.queryForObject("select status from card where id=?", String.class, cardId)).isEqualTo("PUBLISHED");
+        Integer audits = jdbc.queryForObject(
+                "select count(*) from audit_log where action='CARD_PUBLISH' and object_type='CARD' and object_id=?",
+                Integer.class, cardId);
+        assertThat(audits).isEqualTo(1);
+    }
 }

@@ -25,8 +25,11 @@ import com.ke.infra.mapper.AuditLogMapper;
  *   <li>actor = SecurityContext 当前用户（JWT subject 即用户 id）；无认证上下文则留空，不抛错；</li>
  *   <li>object_id = 返回值（Long）或 {@link AuditId} 标记的参数；都取不到则跳过并告警；</li>
  *   <li>detail_json = 方法参数名→toString 快照（每值截 500 字符）；</li>
- *   <li>审计写入整体 try/catch：audit_log 故障只告警，绝不回滚业务动作；</li>
- *   <li>与业务同事务执行：业务成功提交则审计必然落库（集成测试断言依赖此语义）。</li>
+ *   <li>审计与业务同事务执行：业务成功提交则审计必然落库（集成测试断言依赖此语义）；反之间一 PG 事务中
+ *       审计 INSERT 故障（约束/连接等）会 abort 整个事务，业务提交将一并失败——审计与业务完全解耦
+ *       （REQUIRES_NEW）记入二期 backlog；</li>
+ *   <li>审计写入整体 try/catch：仅隔离审计侧的序列化/解析类失败（如 detail_json 组装），避免这类
+ *       可降级故障无谓拖垮业务，并非使数据库级故障与业务解耦。</li>
  * </ul>
  */
 @Aspect
@@ -50,7 +53,7 @@ public class AuditAspect {
         try {
             record(pjp, audited, result);
         } catch (Exception e) {
-            log.error("audit_log 写入失败（不回滚业务）: action={} objectType={}",
+            log.error("audit_log 写入失败（同事务已失败，业务提交将一并失败）: action={} objectType={}",
                     audited.action(), audited.objectType(), e);
         }
         return result;

@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.ke.domain.card.content.CardContent;
@@ -139,42 +140,59 @@ public class ReviewService {
 
     // ---------- 裁决 ----------
 
-    /** 通过：任务 APPROVED → 委托对象动作（CARD 的 CARD_PUBLISH 审计由切面在其 publish 内落库） */
+    /** 通过：PENDING→APPROVED 条件更新抢并发锁（只可能一人成功）→ 再委托对象动作（CARD 的
+     *  CARD_PUBLISH 审计由切面在其 publish 内落库） */
     @Transactional
     public ReviewItem approve(long reviewId, long reviewerId, String notes) {
-        ReviewTaskEntity task = requirePending(reviewId);
+        ReviewTaskEntity task = requireTask(reviewId);
         guardNotSelf(task, reviewerId);
+        transitionPending(reviewId, ReviewStatus.APPROVED, reviewerId,
+                notes != null && !notes.isBlank() ? notes.trim() : null);
         dispatch(task);
-        task.setStatus(ReviewStatus.APPROVED.name());
-        applyReviewerNotes(task, reviewerId, notes);
-        return toItem(updated(task));
+        return toItem(reviewTasks.selectById(reviewId));
     }
 
-    /** 驳回：notes 必填；任务 REJECTED，对象回到来源状态（CARD → DRAFT） */
+    /** 驳回：notes 必填；PENDING→REJECTED 条件更新抢并发锁 → 对象回到来源状态（CARD → DRAFT） */
     @Transactional
     public ReviewItem reject(long reviewId, long reviewerId, String notes) {
         if (notes == null || notes.isBlank()) {
             throw new BadRequestException("notes 不能为空");
         }
-        ReviewTaskEntity task = requirePending(reviewId);
-        task.setStatus(ReviewStatus.REJECTED.name());
-        task.setNotes(notes.trim());
+        ReviewTaskEntity task = requireTask(reviewId);
+        transitionPending(reviewId, ReviewStatus.REJECTED, reviewerId, notes.trim());
         dispatchReturn(task);
-        applyReviewerNotes(task, reviewerId, task.getNotes());
-        return toItem(updated(task));
+        return toItem(reviewTasks.selectById(reviewId));
     }
 
     // ---------- 内部 ----------
 
-    private ReviewTaskEntity requirePending(long reviewId) {
+    private ReviewTaskEntity requireTask(long reviewId) {
         ReviewTaskEntity task = reviewTasks.selectById(reviewId);
         if (task == null) {
             throw new NotFoundException("审核任务不存在");
         }
-        if (!ReviewStatus.PENDING.name().equals(task.getStatus())) {
-            throw new BadRequestException("该审核任务已处理");
-        }
         return task;
+    }
+
+    /**
+     * PENDING 条件更新（CAS）：UPDATE ... WHERE id=? AND status='PENDING'。
+     * 「先读后判」存在并发窗口（两人同时 approve 双双过守卫 → 双审计行、reviewer 互相覆盖），
+     * 落库必须带状态谓词：命中 0 行 = 已被他人处理 → 400。业务动作（publish/returnToDraft）
+     * 只在本方法成功后执行，失败则整个事务回滚、任务保持 PENDING。
+     */
+    private void transitionPending(long reviewId, ReviewStatus target, long reviewerId, String notes) {
+        LambdaUpdateWrapper<ReviewTaskEntity> cas = new LambdaUpdateWrapper<ReviewTaskEntity>()
+                .eq(ReviewTaskEntity::getId, reviewId)
+                .eq(ReviewTaskEntity::getStatus, ReviewStatus.PENDING.name())
+                .set(ReviewTaskEntity::getStatus, target.name())
+                .set(ReviewTaskEntity::getReviewerId, reviewerId)
+                .set(ReviewTaskEntity::getUpdatedAt, java.time.OffsetDateTime.now());
+        if (notes != null) {
+            cas.set(ReviewTaskEntity::getNotes, notes);
+        }
+        if (reviewTasks.update(cas) == 0) {
+            throw new BadRequestException("该审核任务已被处理");
+        }
     }
 
     /** 自审禁绝：提交人（card.maintainer_id）与审核人相同 → 403 语义，交给 envelope */
@@ -202,18 +220,5 @@ public class ReviewService {
             case "ENTRY" -> throw new BadRequestException("入口审核在 Task 6 接入");
             default -> throw new BadRequestException("未知审核对象类型: " + task.getObjectType());
         }
-    }
-
-    private void applyReviewerNotes(ReviewTaskEntity task, long reviewerId, String notes) {
-        task.setReviewerId(reviewerId);
-        if (notes != null && !notes.isBlank()) {
-            task.setNotes(notes.trim());
-        }
-        task.setUpdatedAt(java.time.OffsetDateTime.now());
-    }
-
-    private ReviewTaskEntity updated(ReviewTaskEntity task) {
-        reviewTasks.updateById(task);
-        return task;
     }
 }
