@@ -12,14 +12,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 import com.ke.service.common.ApiResponse;
 import com.ke.service.review.ReviewService.ReviewItem;
+import com.ke.service.review.ReviewService.ReviewPage;
 
 /**
  * 审核队列（FR-O03）：仅编辑/运营可见可裁决（类级 @PreAuthorize，越权 → 403 envelope）。
- * GET /api/wb/reviews?status=PENDING&objectType= 队列查询；
+ * GET /api/wb/reviews?status=PENDING&objectType=&page=&size= 队列查询（offset 分页，
+ * 返回 {items,total,page,size}，size ≤100 默认 20）；
  * POST /{id}/approve（notes 可选）、POST /{id}/reject（notes 必填，@Valid 兜底 400）。
  */
 @RestController
@@ -38,9 +38,11 @@ public class ReviewController {
     }
 
     @GetMapping
-    public ApiResponse<List<ReviewItem>> list(@RequestParam(defaultValue = "PENDING") String status,
-                                              @RequestParam(required = false) String objectType) {
-        return ApiResponse.ok(reviews.list(status, objectType));
+    public ApiResponse<ReviewPage> list(@RequestParam(defaultValue = "PENDING") String status,
+                                        @RequestParam(required = false) String objectType,
+                                        @RequestParam(defaultValue = "1") int page,
+                                        @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(reviews.page(status, objectType, page, size));
     }
 
     @PostMapping("/{id}/approve")

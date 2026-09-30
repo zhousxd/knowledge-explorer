@@ -82,10 +82,10 @@ class ReviewIT {
         return "{\"summary\":\"" + summary + "\",\"sections\":[{\"h\":\"缘起\",\"body\":\"正文内容。\"}],\"related\":[]}";
     }
 
-    /** 建卡（TEXT）+ 送审，返回 cardId */
-    private long createAndSubmitCard(String authorToken, String theme, String title, String summary) {
-        String body = "{\"theme\":\"" + theme + "\",\"templateType\":\"TEXT\",\"title\":\"" + title
-                + "\",\"content\":" + textContent(summary) + "}";
+    /** 建卡（指定模板与 content）+ 送审，返回 cardId */
+    private long createCard(String authorToken, String theme, String title, String templateType, String contentJson) {
+        String body = "{\"theme\":\"" + theme + "\",\"templateType\":\"" + templateType + "\",\"title\":\"" + title
+                + "\",\"content\":" + contentJson + "}";
         ResponseEntity<String> created = http.postForEntity("/api/wb/cards", jsonWithToken(body, authorToken), String.class);
         assertThat(created.getStatusCode().value()).as("create body=%s", created.getBody()).isEqualTo(201);
         long cardId = ((Number) JsonPath.read(created.getBody(), "$.data.cardId")).longValue();
@@ -95,14 +95,35 @@ class ReviewIT {
         return cardId;
     }
 
+    /** 建卡（TEXT）+ 送审，返回 cardId */
+    private long createAndSubmitCard(String authorToken, String theme, String title, String summary) {
+        return createCard(authorToken, theme, title, "TEXT", textContent(summary));
+    }
+
     /** 在审核队列里按 objectId 找到对应 review_task id */
     private long pendingReviewId(String editorToken, long objectId) {
         ResponseEntity<String> res = http.exchange("/api/wb/reviews?status=PENDING", HttpMethod.GET,
                 bearer(editorToken), String.class);
         assertThat(res.getStatusCode().value()).as("queue body=%s", res.getBody()).isEqualTo(200);
-        List<Integer> ids = JsonPath.read(res.getBody(), "$.data[?(@.objectId == " + objectId + ")].id");
+        List<Integer> ids = JsonPath.read(res.getBody(), "$.data.items[?(@.objectId == " + objectId + ")].id");
         assertThat(ids).as("queue should contain review for object %s: %s", objectId, res.getBody()).isNotEmpty();
         return ids.get(0).longValue();
+    }
+
+    /** 从队列响应里按 objectId 取 contentPreview */
+    private String previewOf(String queueBody, long objectId) {
+        List<String> previews = JsonPath.read(queueBody,
+                "$.data.items[?(@.objectId == " + objectId + ")].contentPreview");
+        assertThat(previews).as("queue item for object %s: %s", objectId, queueBody).isNotEmpty();
+        return previews.get(0);
+    }
+
+    /** 当前 PENDING 队列总数（同类其他用例会残留 PENDING 任务，计数断言一律以基线为参照） */
+    private int pendingTotal(String editorToken) {
+        ResponseEntity<String> res = http.exchange("/api/wb/reviews?status=PENDING&page=1&size=100", HttpMethod.GET,
+                bearer(editorToken), String.class);
+        assertThat(res.getStatusCode().value()).isEqualTo(200);
+        return (Integer) JsonPath.read(res.getBody(), "$.data.total");
     }
 
     private ResponseEntity<String> post(String token, String path, String body) {
@@ -122,16 +143,16 @@ class ReviewIT {
                 bearer(editor), String.class);
         assertThat(queue.getStatusCode().value()).as("queue body=%s", queue.getBody()).isEqualTo(200);
         assertThat((Integer) JsonPath.read(queue.getBody(), "$.code")).isZero();
-        List<String> types = JsonPath.read(queue.getBody(), "$.data[?(@.objectId == " + cardId + ")].objectType");
+        List<String> types = JsonPath.read(queue.getBody(), "$.data.items[?(@.objectId == " + cardId + ")].objectType");
         assertThat(types).containsExactly("CARD");
-        List<String> actions = JsonPath.read(queue.getBody(), "$.data[?(@.objectId == " + cardId + ")].action");
+        List<String> actions = JsonPath.read(queue.getBody(), "$.data.items[?(@.objectId == " + cardId + ")].action");
         assertThat(actions).containsExactly("SUBMIT");
-        List<String> statuses = JsonPath.read(queue.getBody(), "$.data[?(@.objectId == " + cardId + ")].status");
+        List<String> statuses = JsonPath.read(queue.getBody(), "$.data.items[?(@.objectId == " + cardId + ")].status");
         assertThat(statuses).containsExactly("PENDING");
-        List<String> summaries = JsonPath.read(queue.getBody(), "$.data[?(@.objectId == " + cardId + ")].summary");
+        List<String> summaries = JsonPath.read(queue.getBody(), "$.data.items[?(@.objectId == " + cardId + ")].summary");
         assertThat(summaries.get(0)).contains("岳麓书院").contains("TEXT").contains("创作者甲");
         List<Boolean> contentValid = JsonPath.read(queue.getBody(),
-                "$.data[?(@.objectId == " + cardId + ")].precheck.contentValid");
+                "$.data.items[?(@.objectId == " + cardId + ")].precheck.contentValid");
         assertThat(contentValid).containsExactly(true);
 
         long reviewId = pendingReviewId(editor, cardId);
@@ -270,5 +291,79 @@ class ReviewIT {
                 "select count(*) from audit_log where action='CARD_PUBLISH' and object_type='CARD' and object_id=?",
                 Integer.class, cardId);
         assertThat(audits).isEqualTo(1);
+    }
+
+    @Test
+    void queuePaginatesAndPreviewsContent() {
+        String creator = newUserToken("13800002021", "创作者庚", "CREATOR");
+        String editor = newUserToken("13800002022", "编辑辛", "EDITOR");
+        int baseline = pendingTotal(editor);
+
+        // 9 条新 PENDING：前 5 张覆盖四模板 contentPreview 与超长截断，后 4 张补量
+        long textCard = createAndSubmitCard(creator, "湖湘文化", "预检卡", "千年学府简介");
+        long compareCard = createCard(creator, "湖湘文化", "对比卡", "COMPARE",
+                "{\"objects\":[\"岳麓书院\",\"石鼓书院\"],\"dimensions\":[\"始建年代\",\"地位影响\"],"
+                        + "\"cells\":[[\"976\",\"古代四大书院\"],[\"805\",\"六大书院之列\"]]}");
+        long timelineCard = createCard(creator, "湖湘文化", "年表卡", "TIMELINE",
+                "{\"events\":[{\"year\":\"976\",\"title\":\"岳麓书院创建\"},{\"year\":\"1015\",\"title\":\"真宗赐书匾\"}]}");
+        long taskCard = createCard(creator, "湖湘文化", "任务卡", "TASK",
+                "{\"goal\":\"完成书院考察\",\"steps\":[{\"place\":\"岳麓书院\",\"observe\":\"记录建筑布局\",\"minutes\":60}],"
+                        + "\"recordSchema\":[\"考察点\"]}");
+        String summary120 = "长".repeat(120);
+        long longCard = createCard(creator, "湖湘文化", "长摘要卡", "TEXT",
+                "{\"summary\":\"" + summary120 + "\",\"sections\":[{\"h\":\"缘起\",\"body\":\"正文内容。\"}],\"related\":[]}");
+        for (int i = 1; i <= 4; i++) {
+            createAndSubmitCard(creator, "湖湘文化", "补量卡" + i, "补量摘要" + i);
+        }
+        int expectedTotal = baseline + 9;
+
+        // 第 1 页 size=5：items=5、total=9+基线、page/size 回显
+        ResponseEntity<String> page1 = http.exchange("/api/wb/reviews?status=PENDING&page=1&size=5", HttpMethod.GET,
+                bearer(editor), String.class);
+        assertThat(page1.getStatusCode().value()).as("page1 body=%s", page1.getBody()).isEqualTo(200);
+        assertThat((Integer) JsonPath.read(page1.getBody(), "$.data.page")).isEqualTo(1);
+        assertThat((Integer) JsonPath.read(page1.getBody(), "$.data.size")).isEqualTo(5);
+        assertThat((Integer) JsonPath.read(page1.getBody(), "$.data.total")).isEqualTo(expectedTotal);
+        List<Integer> page1Ids = JsonPath.read(page1.getBody(), "$.data.items[*].id");
+        assertThat(page1Ids).hasSize(5);
+
+        // contentPreview 断言取全量页（同类其他用例可能残留 PENDING 任务，页内位置不可钉死）：
+        // 审批人不点开就能看到内容大意（TEXT=summary，其余模板取对应摘要）
+        ResponseEntity<String> full = http.exchange("/api/wb/reviews?status=PENDING&page=1&size=100", HttpMethod.GET,
+                bearer(editor), String.class);
+        assertThat((Integer) JsonPath.read(full.getBody(), "$.data.total")).isEqualTo(expectedTotal);
+        assertThat(previewOf(full.getBody(), textCard)).isEqualTo("千年学府简介");
+        assertThat(previewOf(full.getBody(), compareCard)).isEqualTo("岳麓书院 vs 石鼓书院 · 始建年代、地位影响");
+        assertThat(previewOf(full.getBody(), timelineCard)).isEqualTo("976 岳麓书院创建 等 2 条");
+        assertThat(previewOf(full.getBody(), taskCard)).isEqualTo("完成书院考察");
+        // 超长摘要截 100 字并加省略号
+        String longPreview = previewOf(full.getBody(), longCard);
+        assertThat(longPreview).hasSize(101).endsWith("…").startsWith("长".repeat(100));
+
+        // 第 2 页：剩余 expectedTotal - 5 条（≤5）
+        ResponseEntity<String> page2 = http.exchange("/api/wb/reviews?status=PENDING&page=2&size=5", HttpMethod.GET,
+                bearer(editor), String.class);
+        assertThat((Integer) JsonPath.read(page2.getBody(), "$.data.total")).isEqualTo(expectedTotal);
+        List<Integer> page2Ids = JsonPath.read(page2.getBody(), "$.data.items[*].id");
+        assertThat(page2Ids).hasSize(Math.min(5, expectedTotal - 5));
+
+        // 省略 page/size → 默认 page=1、size=20
+        ResponseEntity<String> defaults = http.exchange("/api/wb/reviews?status=PENDING", HttpMethod.GET,
+                bearer(editor), String.class);
+        assertThat((Integer) JsonPath.read(defaults.getBody(), "$.data.page")).isEqualTo(1);
+        assertThat((Integer) JsonPath.read(defaults.getBody(), "$.data.size")).isEqualTo(20);
+
+        // 通过其中一条 → 从 PENDING 队列消失（total 9+基线 → 8+基线）
+        long reviewId = pendingReviewId(editor, textCard);
+        ResponseEntity<String> approved = post(editor, "/api/wb/reviews/" + reviewId + "/approve", "{}");
+        assertThat(approved.getStatusCode().value()).as("approve body=%s", approved.getBody()).isEqualTo(200);
+        ResponseEntity<String> after = http.exchange("/api/wb/reviews?status=PENDING&page=1&size=100", HttpMethod.GET,
+                bearer(editor), String.class);
+        assertThat((Integer) JsonPath.read(after.getBody(), "$.data.total")).isEqualTo(expectedTotal - 1);
+        List<Integer> afterIds = JsonPath.read(after.getBody(), "$.data.items[*].id");
+        assertThat(afterIds).isNotEmpty().doesNotContain((int) reviewId);
+        List<Integer> goneObject = JsonPath.read(after.getBody(),
+                "$.data.items[?(@.objectId == " + textCard + ")].id");
+        assertThat(goneObject).isEmpty();
     }
 }

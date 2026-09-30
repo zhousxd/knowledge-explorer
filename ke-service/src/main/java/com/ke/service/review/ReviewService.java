@@ -13,6 +13,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.ke.domain.card.content.CardContent;
 import com.ke.domain.card.content.CardContentValidator;
+import com.ke.domain.card.content.CompareCardContent;
+import com.ke.domain.card.content.TaskCardContent;
+import com.ke.domain.card.content.TextCardContent;
+import com.ke.domain.card.content.TimelineCardContent;
 import com.ke.domain.enums.ReviewStatus;
 import com.ke.infra.entity.CardEntity;
 import com.ke.infra.entity.CardVersionEntity;
@@ -31,7 +35,11 @@ import com.ke.service.common.NotFoundException;
  * <ul>
  *   <li>队列 item：id/objectType/objectId/action/status/createdAt + summary（CARD＝
  *       标题 · 模板类型 · 提交人昵称）+ precheck（CARD＝contentValid 当前版本内容可过校验、
- *       hasSources 来源非空；ENTRY 等 Phase 6（Task 28）接入后才有意义，暂为 null）；</li>
+ *       hasSources 来源非空；ENTRY 等 Phase 6（Task 28）接入后才有意义，暂为 null）+
+ *       contentPreview（CARD＝当前版本内容大意：TEXT 取 summary、COMPARE/TIMELINE/TASK 取
+ *       对应摘要，截 100 字；内容不可解析或非 CARD 为 null）——审批人不点开即可见内容大意；</li>
+ *   <li>队列查询为 offset 分页（page 从 1 起，size 夹取 [1,100] 默认 20），返回
+ *       {items, total, page, size}；</li>
  *   <li>approve：任务置 APPROVED 并委托对象动作（CARD → {@link CardService#publish}，
  *       其 @Audited 切面落 CARD_PUBLISH；ENTRY → 400 待 Task 6）；</li>
  *   <li>reject：notes 必填，任务置 REJECTED，CARD 经 returnToDraft 回 DRAFT；</li>
@@ -40,6 +48,12 @@ import com.ke.service.common.NotFoundException;
  */
 @Service
 public class ReviewService {
+
+    /** 与工作台卡片列表一致的 offset 分页上界 */
+    private static final int MAX_PAGE_SIZE = 100;
+
+    /** contentPreview 截断长度：审批人扫一眼即知大意 */
+    private static final int MAX_PREVIEW_LENGTH = 100;
 
     private final ReviewTaskMapper reviewTasks;
     private final CardMapper cards;
@@ -59,39 +73,58 @@ public class ReviewService {
         this.objectMapper = objectMapper;
     }
 
-    /** 队列 item：precheck 仅 CARD 有值（contentValid/hasSources），其余对象为 null */
+    /** 队列 item：precheck/contentPreview 仅 CARD 有值（contentValid/hasSources/内容大意），其余对象为 null */
     public record ReviewPrecheck(boolean contentValid, boolean hasSources) {
     }
 
     public record ReviewItem(Long id, String objectType, Long objectId, String action, String status,
-                             java.time.OffsetDateTime createdAt, String summary, ReviewPrecheck precheck) {
+                             java.time.OffsetDateTime createdAt, String summary, ReviewPrecheck precheck,
+                             String contentPreview) {
+    }
+
+    /** 队列分页响应：page 从 1 起，size 夹取 [1,100] 默认 20，total 恒在 */
+    public record ReviewPage(List<ReviewItem> items, long total, int page, int size) {
     }
 
     // ---------- 查询 ----------
 
     @Transactional(readOnly = true)
-    public List<ReviewItem> list(String status, String objectType) {
+    public ReviewPage page(String status, String objectType, int page, int size) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        long total = reviewTasks.selectCount(queueFilter(status, objectType));
+        QueryWrapper<ReviewTaskEntity> listWrapper = queueFilter(status, objectType)
+                .orderByAsc("id")
+                .last("LIMIT " + safeSize + " OFFSET " + (long) (safePage - 1) * safeSize);
+        List<ReviewItem> items = reviewTasks.selectList(listWrapper).stream().map(this::toItem).toList();
+        return new ReviewPage(items, total, safePage, safeSize);
+    }
+
+    /** 队列过滤：status 空缺省 PENDING，objectType 可选 */
+    private QueryWrapper<ReviewTaskEntity> queueFilter(String status, String objectType) {
         QueryWrapper<ReviewTaskEntity> wrapper = new QueryWrapper<>();
         wrapper.eq("status", status == null || status.isBlank() ? ReviewStatus.PENDING.name() : status.trim());
         if (objectType != null && !objectType.isBlank()) {
             wrapper.eq("object_type", objectType.trim());
         }
-        wrapper.orderByAsc("id");
-        return reviewTasks.selectList(wrapper).stream().map(this::toItem).toList();
+        return wrapper;
     }
 
     private ReviewItem toItem(ReviewTaskEntity task) {
         String summary = null;
         ReviewPrecheck precheck = null;
+        String contentPreview = null;
         if ("CARD".equals(task.getObjectType())) {
             CardEntity card = cards.selectById(task.getObjectId());
             if (card != null) {
                 summary = card.getTitle() + " · " + card.getTemplateType() + " · " + nicknameOf(card.getMaintainerId());
             }
-            precheck = cardPrecheck(task.getObjectId());
+            CardVersionEntity latest = latestVersion(task.getObjectId());
+            precheck = precheckOf(card, latest);
+            contentPreview = previewOf(card, latest);
         }
         return new ReviewItem(task.getId(), task.getObjectType(), task.getObjectId(), task.getAction(),
-                task.getStatus(), task.getCreatedAt(), summary, precheck);
+                task.getStatus(), task.getCreatedAt(), summary, precheck, contentPreview);
     }
 
     private String nicknameOf(Long maintainerId) {
@@ -102,24 +135,66 @@ public class ReviewService {
         return user == null ? null : user.getNickname();
     }
 
-    /** 诚实且廉价的卡片预检：当前版本内容过校验 + 来源非空（无版本/内容损坏按不合格） */
-    private ReviewPrecheck cardPrecheck(long cardId) {
-        CardVersionEntity latest = versions.selectOne(new LambdaQueryWrapper<CardVersionEntity>()
+    private CardVersionEntity latestVersion(long cardId) {
+        return versions.selectOne(new LambdaQueryWrapper<CardVersionEntity>()
                 .eq(CardVersionEntity::getCardId, cardId)
                 .orderByDesc(CardVersionEntity::getVersionNo)
                 .last("LIMIT 1"));
+    }
+
+    /** 诚实且廉价的卡片预检：当前版本内容过校验 + 来源非空（无版本/内容损坏按不合格） */
+    private ReviewPrecheck precheckOf(CardEntity card, CardVersionEntity latest) {
         if (latest == null) {
             return new ReviewPrecheck(false, false);
         }
         boolean contentValid;
         try {
-            CardEntity card = cards.selectById(cardId);
             CardContentValidator.parseAndValidate(card == null ? null : card.getTemplateType(), latest.getContentJson());
             contentValid = true;
         } catch (RuntimeException e) {
             contentValid = false;
         }
         return new ReviewPrecheck(contentValid, hasSources(latest));
+    }
+
+    /** 内容大意：解析成功才给（TEXT=summary，COMPARE/TIMELINE/TASK=对应摘要），截 100 字 */
+    private String previewOf(CardEntity card, CardVersionEntity latest) {
+        if (latest == null) {
+            return null;
+        }
+        try {
+            CardContent content = CardContentValidator.parseAndValidate(
+                    card == null ? null : card.getTemplateType(), latest.getContentJson());
+            return truncate(describe(content), MAX_PREVIEW_LENGTH);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** 四模板 → 摘要文本（供队列 contentPreview） */
+    private static String describe(CardContent content) {
+        if (content instanceof TextCardContent t) {
+            return t.summary();
+        }
+        if (content instanceof TaskCardContent k) {
+            return k.goal();
+        }
+        if (content instanceof CompareCardContent c) {
+            return String.join(" vs ", c.objects()) + " · " + String.join("、", c.dimensions());
+        }
+        if (content instanceof TimelineCardContent tl && !tl.events().isEmpty()) {
+            TimelineCardContent.Event first = tl.events().get(0);
+            String head = first.year() + " " + first.title();
+            return tl.events().size() > 1 ? head + " 等 " + tl.events().size() + " 条" : head;
+        }
+        return null;
+    }
+
+    private static String truncate(String text, int max) {
+        if (text == null || text.length() <= max) {
+            return text;
+        }
+        return text.substring(0, max) + "…";
     }
 
     private boolean hasSources(CardVersionEntity version) {
