@@ -19,3 +19,6 @@ Thumbs.db
 *.log
 .env
 .env.local
+
+# OpenAPI 生成产物（W2 契约冻结时再定入库策略）
+frontend/packages/shared/src/api/
