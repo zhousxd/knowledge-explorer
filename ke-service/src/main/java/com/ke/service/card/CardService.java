@@ -13,12 +13,17 @@ import com.ke.domain.card.content.TaskCardContent;
 import com.ke.domain.card.content.TextCardContent;
 import com.ke.domain.card.content.TimelineCardContent;
 import com.ke.domain.enums.CardStatus;
+import com.ke.domain.enums.ReviewStatus;
 import com.ke.infra.entity.CardEntity;
 import com.ke.infra.entity.CardVersionEntity;
+import com.ke.infra.entity.ReviewTaskEntity;
 import com.ke.infra.mapper.CardMapper;
 import com.ke.infra.mapper.CardVersionMapper;
+import com.ke.infra.mapper.ReviewTaskMapper;
 import com.ke.service.common.BadRequestException;
 import com.ke.service.common.NotFoundException;
+import com.ke.service.review.AuditId;
+import com.ke.service.review.Audited;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,11 +50,14 @@ public class CardService {
 
     private final CardMapper cards;
     private final CardVersionMapper versions;
+    private final ReviewTaskMapper reviewTasks;
     private final ObjectMapper objectMapper;
 
-    public CardService(CardMapper cards, CardVersionMapper versions, ObjectMapper objectMapper) {
+    public CardService(CardMapper cards, CardVersionMapper versions, ReviewTaskMapper reviewTasks,
+                       ObjectMapper objectMapper) {
         this.cards = cards;
         this.versions = versions;
+        this.reviewTasks = reviewTasks;
         this.objectMapper = objectMapper;
     }
 
@@ -96,13 +104,24 @@ public class CardService {
         return next;
     }
 
+    /** DRAFT → PENDING，并在同事务挂入审核队列（FR-O03） */
     @Transactional
-    public CardEntity submit(long cardId) {
-        return transition(cardId, CardStatus.PENDING);
+    @Audited(action = "CARD_SUBMIT", objectType = "CARD")
+    public CardEntity submit(@AuditId long cardId) {
+        CardEntity card = transition(cardId, CardStatus.PENDING);
+        ReviewTaskEntity task = new ReviewTaskEntity();
+        task.setObjectType("CARD");
+        task.setObjectId(card.getId());
+        task.setAction("SUBMIT");
+        task.setStatus(ReviewStatus.PENDING.name());
+        reviewTasks.insert(task);
+        return card;
     }
 
+    /** PENDING → PUBLISHED，回填当前版本 summary 与 current_version_id（审核通过即委托到此） */
     @Transactional
-    public CardEntity publish(long cardId) {
+    @Audited(action = "CARD_PUBLISH", objectType = "CARD")
+    public CardEntity publish(@AuditId Long cardId) {
         CardEntity card = transition(cardId, CardStatus.PUBLISHED);
         CardVersionEntity latest = versions.selectOne(new LambdaQueryWrapper<CardVersionEntity>()
                 .eq(CardVersionEntity::getCardId, cardId)
@@ -123,6 +142,13 @@ public class CardService {
     @Transactional
     public CardEntity disable(long cardId) {
         return transition(cardId, CardStatus.DISABLED);
+    }
+
+    /** 驳回回落：PENDING → DRAFT（审核 reject 委托到此，FR-O03） */
+    @Transactional
+    @Audited(action = "CARD_RETURN_DRAFT", objectType = "CARD")
+    public CardEntity returnToDraft(@AuditId Long cardId) {
+        return transition(cardId, CardStatus.DRAFT);
     }
 
     // ---------- 读路径（探索端，仅 PUBLISHED） ----------
