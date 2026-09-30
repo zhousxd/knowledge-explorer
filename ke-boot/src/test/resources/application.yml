@@ -11,7 +11,14 @@ spring:
     username: ke
     password: ke
   flyway:
-    enabled: false
+    enabled: true
+    locations: classpath:db/migration
   ai:
     openai:
       api-key: ${KE_LLM_API_KEY:test-dummy-key}
+
+ke:
+  jwt:
+    secret: test-secret-key-32-bytes!!test-only!!
+    access-ttl: 2h
+    refresh-ttl: 7d
