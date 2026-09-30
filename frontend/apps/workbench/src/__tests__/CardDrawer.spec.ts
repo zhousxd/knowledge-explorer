@@ -84,4 +84,23 @@ describe('CardDrawer', () => {
     expect(wrapper.find('.drawer-error').exists()).toBe(true);
     expect(wrapper.find('.drawer-error').text()).toContain('服务异常');
   });
+
+  it('「编辑内容」:非停用卡显示,PUBLISHED 注明存新版本,点击 emit edit(id)', async () => {
+    getVersionsMock.mockResolvedValue(VERSIONS);
+    const wrapper = await mountDrawer();
+    await wrapper.setProps({ open: true });
+    await flushPromises();
+
+    // PUBLISHED 卡:编辑入口 + 「将生成新版本」备注
+    expect(wrapper.find('.edit-btn').exists()).toBe(true);
+    expect(wrapper.find('.edit-note').text()).toContain('将生成新版本');
+    await wrapper.find('.edit-btn').trigger('click');
+    expect(wrapper.emitted('edit')).toEqual([[7]]);
+
+    // DISABLED 卡:无编辑入口
+    await wrapper.setProps({ card: { ...CARD, status: 'DISABLED' } });
+    await flushPromises();
+    expect(wrapper.find('.edit-btn').exists()).toBe(false);
+    expect(wrapper.find('.edit-note').exists()).toBe(false);
+  });
 });

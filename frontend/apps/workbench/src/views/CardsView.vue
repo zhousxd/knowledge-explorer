@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { KeIcon } from '@ke/shared';
-import { createCard, disableCard, listCards, submitCard } from '../api/cards';
-import type { CardListItem, CardStatus, CardTemplateType } from '../api/types';
+import { disableCard, listCards, submitCard } from '../api/cards';
+import type { CardListItem, CardStatus } from '../api/types';
 import { STATUS_META, TEMPLATE_LABELS } from '../cardMeta';
 import { formatDateTime } from '../format';
 import { useAuthStore } from '../stores/auth';
 import CardDrawer from '../components/CardDrawer.vue';
 
 const auth = useAuthStore();
+const router = useRouter();
 
 /** 与后端 offset 契约一致:size ≤ 100,默认 20 */
 const PAGE_SIZE = 20;
@@ -37,13 +39,6 @@ const STATUS_TABS = [
   { label: '已发布', value: 'PUBLISHED' },
   { label: '已停用', value: 'DISABLED' }
 ] as const;
-
-const CREATE_TEMPLATES: Array<{ value: CardTemplateType; label: string }> = [
-  { value: 'TEXT', label: '图文卡' },
-  { value: 'COMPARE', label: '对比卡' },
-  { value: 'TIMELINE', label: '时间线卡' },
-  { value: 'TASK', label: '任务卡' }
-];
 
 const activeStatus = ref<'' | CardStatus>('');
 const keyword = ref('');
@@ -145,64 +140,16 @@ async function onDisable(row: CardListItem): Promise<void> {
   await load();
 }
 
-// ---------- 新建 ----------
-
-const createOpen = ref(false);
-const creating = ref(false);
-const createTheme = ref('');
-const createTemplate = ref<CardTemplateType>('TEXT');
-const createTitle = ref('');
-
-function openCreate(): void {
-  createTheme.value = '';
-  createTemplate.value = 'TEXT';
-  createTitle.value = '';
-  createOpen.value = true;
+/** 编辑走独立路由页(四模板编辑器):非 DISABLED 行均可进入,PUBLISHED 保存即新版本 */
+function onEdit(id: number): void {
+  drawerOpen.value = false;
+  router.push(`/cards/edit/${id}`);
 }
 
-/** 新建首版占位内容:各模板的最小合法形态,创作者随后在内容编辑器补全 */
-function seedContent(templateType: CardTemplateType, title: string): Record<string, unknown> {
-  switch (templateType) {
-    case 'COMPARE':
-      return { objects: ['对象甲', '对象乙'], dimensions: ['维度一'], cells: [['待补充', '待补充']] };
-    case 'TIMELINE':
-      return { events: [{ year: '待补充', title, body: '待补充。' }] };
-    case 'TASK':
-      return { goal: title, steps: [{ place: '待补充', observe: '待补充', minutes: 30 }], recordSchema: ['记录项'] };
-    default:
-      return { summary: title, sections: [{ h: '概述', body: '待补充。' }], related: [] };
-  }
-}
+// ---------- 新建:跳独立编辑页 ----------
 
-async function submitCreate(): Promise<void> {
-  const theme = createTheme.value.trim();
-  const title = createTitle.value.trim();
-  if (!theme) {
-    ElMessage.warning('请填写专题');
-    return;
-  }
-  if (!title) {
-    ElMessage.warning('请填写标题');
-    return;
-  }
-  creating.value = true;
-  try {
-    await createCard({
-      theme,
-      templateType: createTemplate.value,
-      title,
-      content: seedContent(createTemplate.value, title)
-    });
-    ElMessage.success('已创建草稿卡,可补全内容后送审');
-    createOpen.value = false;
-    activeStatus.value = 'DRAFT';
-    page.value = 1;
-    await load();
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '创建失败');
-  } finally {
-    creating.value = false;
-  }
+function goCreate(): void {
+  router.push('/cards/new');
 }
 
 onMounted(() => {
@@ -219,7 +166,7 @@ onMounted(() => {
       <button
         class="create-btn"
         type="button"
-        @click="openCreate"
+        @click="goCreate"
       >
         <KeIcon name="plus" />
         <span>新建卡片</span>
@@ -381,70 +328,8 @@ onMounted(() => {
       :card="current"
       :open="drawerOpen"
       @update:open="drawerOpen = $event"
+      @edit="onEdit"
     />
-
-    <el-dialog
-      v-model="createOpen"
-      title="新建卡片"
-      width="420px"
-    >
-      <form
-        class="create-form"
-        @submit.prevent="submitCreate"
-      >
-        <label class="field">
-          <span class="field-label">专题</span>
-          <input
-            v-model="createTheme"
-            class="input"
-            type="text"
-            maxlength="50"
-            placeholder="如:湖湘文化"
-          >
-        </label>
-        <label class="field">
-          <span class="field-label">模板</span>
-          <select
-            v-model="createTemplate"
-            class="input"
-          >
-            <option
-              v-for="tpl in CREATE_TEMPLATES"
-              :key="tpl.value"
-              :value="tpl.value"
-            >
-              {{ tpl.label }}
-            </option>
-          </select>
-        </label>
-        <label class="field">
-          <span class="field-label">标题</span>
-          <input
-            v-model="createTitle"
-            class="input"
-            type="text"
-            maxlength="120"
-            placeholder="卡片标题"
-          >
-        </label>
-        <p class="form-hint">
-          创建后生成草稿首版占位内容,可在内容编辑器中补全。
-        </p>
-      </form>
-      <template #footer>
-        <el-button @click="createOpen = false">
-          取消
-        </el-button>
-        <el-button
-          class="btn-create"
-          type="primary"
-          :disabled="creating"
-          @click="submitCreate"
-        >
-          创建
-        </el-button>
-      </template>
-    </el-dialog>
   </section>
 </template>
 
@@ -472,10 +357,5 @@ onMounted(() => {
 .tpl-chip { padding: 2px 8px; border-radius: var(--ke-radius-full); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 11px; font-weight: 600; }
 .num { font-variant-numeric: tabular-nums; }
 .page-foot { display: flex; justify-content: flex-end; }
-.create-form { display: flex; flex-direction: column; gap: 12px; }
-.field { display: block; }
-.field-label { display: block; margin-bottom: 6px; color: var(--ke-ink-2); font-size: 12px; }
-.input { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-s); background: var(--ke-surface); color: var(--ke-ink); font-size: 13px; box-sizing: border-box; }
-.input:focus { outline: none; border-color: var(--ke-primary); box-shadow: var(--ke-focus); }
-.form-hint { margin: 0; color: var(--ke-sub-2); font-size: 12px; }
+
 </style>

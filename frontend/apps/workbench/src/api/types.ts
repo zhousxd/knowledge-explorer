@@ -67,3 +67,30 @@ export interface VersionItem {
   createdByNickname: string | null;
   createdAt: string;
 }
+
+/** 来源引用(card_version.sources 元素;content 内 citations 为指向本数组的 1-based 索引) */
+export interface SourceRef {
+  /** 关联知识单元 id;null = 暂未挂接 */
+  assetId: number | null;
+  title: string;
+  locator: string;
+  license: string | null;
+}
+
+/** GET /api/wb/cards/{id} 响应 data(编辑器回填:content 内嵌对象 + sources) */
+export interface WbCardDetail {
+  id: number;
+  theme: string;
+  templateType: CardTemplateType;
+  title: string;
+  status: CardStatus;
+  /** 模板内容对象(形状随 templateType,见四编辑器) */
+  content: Record<string, unknown>;
+  sources: SourceRef[];
+}
+
+/** PUT /api/wb/cards/{id}/content 请求体(存新版本) */
+export interface SaveContentPayload {
+  content: Record<string, unknown>;
+  sources: SourceRef[];
+}

@@ -3,6 +3,7 @@ import { TOKEN_KEY } from '../api/http';
 import LoginView from '../views/LoginView.vue';
 import WbLayout from '../layout/WbLayout.vue';
 import CardsView from '../views/CardsView.vue';
+import CardEditView from '../views/CardEditView.vue';
 import EntriesView from '../views/EntriesView.vue';
 import ReviewsView from '../views/ReviewsView.vue';
 import AssetsView from '../views/AssetsView.vue';
@@ -11,6 +12,8 @@ import MetricsView from '../views/MetricsView.vue';
 declare module 'vue-router' {
   interface RouteMeta {
     title?: string;
+    /** 不在侧栏菜单显示(编辑器页从列表/抽屉进入) */
+    hidden?: boolean;
   }
 }
 
@@ -24,6 +27,8 @@ const router = createRouter({
       redirect: '/cards',
       children: [
         { path: 'cards', component: CardsView, meta: { title: '卡片管理' } },
+        { path: 'cards/new', component: CardEditView, meta: { title: '新建卡片', hidden: true } },
+        { path: 'cards/edit/:id', component: CardEditView, meta: { title: '编辑卡片', hidden: true } },
         { path: 'entries', component: EntriesView, meta: { title: '入口编排' } },
         { path: 'reviews', component: ReviewsView, meta: { title: '审核中心' } },
         { path: 'assets', component: AssetsView, meta: { title: '知识资源' } },

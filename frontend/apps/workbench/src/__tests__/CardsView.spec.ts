@@ -4,24 +4,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CardsView from '../views/CardsView.vue';
 import type { CardListItem, MeResp } from '../api/types';
 
-const { listCardsMock, getVersionsMock, submitCardMock, disableCardMock, createCardMock, authStateMock } = vi.hoisted(
-  () => ({
-    listCardsMock: vi.fn(),
-    getVersionsMock: vi.fn(),
-    submitCardMock: vi.fn(),
-    disableCardMock: vi.fn(),
-    createCardMock: vi.fn(),
-    authStateMock: { user: null as MeResp | null }
-  })
-);
+const { listCardsMock, getVersionsMock, submitCardMock, disableCardMock, pushMock, authStateMock } = vi.hoisted(() => ({
+  listCardsMock: vi.fn(),
+  getVersionsMock: vi.fn(),
+  submitCardMock: vi.fn(),
+  disableCardMock: vi.fn(),
+  pushMock: vi.fn(),
+  authStateMock: { user: null as MeResp | null }
+}));
 
 vi.mock('../api/cards', () => ({
   listCards: listCardsMock,
   getCardVersions: getVersionsMock,
   submitCard: submitCardMock,
-  disableCard: disableCardMock,
-  createCard: createCardMock
+  disableCard: disableCardMock
 }));
+
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: pushMock }) }));
 
 vi.mock('../stores/auth', () => ({ useAuthStore: () => authStateMock }));
 
@@ -77,7 +76,7 @@ describe('CardsView', () => {
     getVersionsMock.mockReset().mockResolvedValue([]);
     submitCardMock.mockReset().mockResolvedValue({ cardId: 1, status: 'PENDING' });
     disableCardMock.mockReset().mockResolvedValue({ cardId: 1, status: 'DISABLED' });
-    createCardMock.mockReset().mockResolvedValue({ cardId: 99 });
+    pushMock.mockReset();
     vi.spyOn(ElMessageBox, 'confirm').mockReset();
     // 默认 EDITOR:全量可管(送审/停用按钮出现)
     authStateMock.user = { id: 1, nickname: '阿编', role: 'EDITOR' };
@@ -197,28 +196,28 @@ describe('CardsView', () => {
     expect(wrapper.findAll('.act-detail')).toHaveLength(3);
   });
 
-  it('新建卡片:必填校验 + 提交后带默认内容创建并刷新', async () => {
+  it('新建卡片按钮跳转 /cards/new 编辑页', async () => {
     const wrapper = await mountView();
     await wrapper.find('.create-btn').trigger('click');
-    const dialog = wrapper.find('.el-dialog');
-    expect(dialog.exists()).toBe(true);
+    expect(pushMock).toHaveBeenCalledTimes(1);
+    expect(pushMock).toHaveBeenCalledWith('/cards/new');
+  });
 
-    // 未填标题不提交
-    await wrapper.find('.create-form input[type="text"]').setValue('湖湘文化');
-    await wrapper.find('.btn-create').trigger('click');
-    expect(createCardMock).not.toHaveBeenCalled();
-
-    const inputs = wrapper.findAll('.create-form input[type="text"]');
-    await inputs[1]?.setValue('爱晚亭');
-    await wrapper.find('.btn-create').trigger('click');
+  it('抽屉「编辑内容」:非停用卡可见,PUBLISHED 注明存新版本,点击跳编辑页', async () => {
+    const wrapper = await mountView();
+    // 打开已发布卡(PUBLISHED)抽屉
+    await wrapper.findAll('.el-table__row')[0]?.trigger('click');
     await flushPromises();
-    expect(createCardMock).toHaveBeenCalledWith({
-      theme: '湖湘文化',
-      templateType: 'TEXT',
-      title: '爱晚亭',
-      content: expect.objectContaining({ summary: '爱晚亭' })
-    });
-    // 创建后切到草稿筛选刷新
-    expect(listCardsMock).toHaveBeenLastCalledWith({ status: 'DRAFT', q: '', page: 1, size: 20 });
+    expect(wrapper.find('.edit-btn').exists()).toBe(true);
+    expect(wrapper.find('.edit-note').text()).toContain('将生成新版本');
+
+    await wrapper.find('.edit-btn').trigger('click');
+    expect(pushMock).toHaveBeenCalledWith('/cards/edit/1');
+
+    // 草稿卡抽屉:编辑入口同样可见,无「新版本」备注
+    await wrapper.findAll('.el-table__row')[2]?.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.edit-btn').exists()).toBe(true);
+    expect(wrapper.find('.edit-note').exists()).toBe(false);
   });
 });

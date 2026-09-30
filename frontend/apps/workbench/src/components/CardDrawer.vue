@@ -6,7 +6,10 @@ import { STATUS_META, TEMPLATE_LABELS } from '../cardMeta';
 import { formatDateTime } from '../format';
 
 const props = defineProps<{ card: CardListItem | null; open: boolean }>();
-const emit = defineEmits<{ (e: 'update:open', value: boolean): void }>();
+const emit = defineEmits<{
+  (e: 'update:open', value: boolean): void;
+  (e: 'edit', id: number): void;
+}>();
 
 const versions = ref<VersionItem[]>([]);
 const loading = ref(false);
@@ -68,6 +71,23 @@ watch(
         <span class="dot">·</span>维护人 {{ card.maintainerNickname ?? '—' }}
       </p>
 
+      <div
+        v-if="card.status !== 'DISABLED'"
+        class="drawer-actions"
+      >
+        <button
+          class="edit-btn"
+          type="button"
+          @click="emit('edit', card.id)"
+        >
+          编辑内容
+        </button>
+        <span
+          v-if="card.status === 'PUBLISHED'"
+          class="edit-note"
+        >已发布内容不可变,保存将生成新版本</span>
+      </div>
+
       <h4 class="section-title">
         版本历史
       </h4>
@@ -128,6 +148,10 @@ watch(
 .tpl-chip { padding: 2px 8px; border-radius: var(--ke-radius-full); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 11px; font-weight: 600; }
 .drawer-meta { margin: 0; color: var(--ke-sub); font-size: 12px; }
 .dot { margin: 0 4px; }
+.drawer-actions { display: flex; align-items: center; gap: 10px; }
+.edit-btn { padding: 6px 16px; border: none; border-radius: var(--ke-radius-s); background: var(--ke-primary); color: var(--ke-white); font-size: 12px; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); }
+.edit-btn:hover { background: var(--ke-primary-deep); }
+.edit-note { color: var(--ke-sub-2); font-size: 11px; }
 .section-title { margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--ke-line); color: var(--ke-ink-2); font-size: 13px; font-weight: 600; }
 .drawer-error { margin: 0; padding: 8px 12px; border-radius: var(--ke-radius-s); background: var(--ke-danger-soft); color: var(--ke-danger); font-size: 12px; }
 .drawer-hint { margin: 4px 0 0; color: var(--ke-sub-2); font-size: 12px; }

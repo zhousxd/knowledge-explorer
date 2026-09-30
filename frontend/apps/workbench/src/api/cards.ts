@@ -1,10 +1,19 @@
 /**
  * 工作台卡片 API 客户端(FR-C07/C08 界面):
- * 列表(offset 分页 + 状态筛选 + 标题检索)、版本历史、送审、停用、新建。
+ * 列表(offset 分页 + 状态筛选 + 标题检索)、单卡读取(编辑器回填)、版本历史、
+ * 送审、停用、新建、存新版本。
  * 发布动作不在此接入——审核中心(Task 10)走 POST /publish。
  */
 import { http } from './http';
-import type { CardListResp, CardStatus, CardTemplateType, VersionItem } from './types';
+import type {
+  CardListResp,
+  CardStatus,
+  CardTemplateType,
+  SaveContentPayload,
+  SourceRef,
+  VersionItem,
+  WbCardDetail
+} from './types';
 
 export interface ListCardsParams {
   /** 状态筛选;空串 = 全部 */
@@ -46,11 +55,23 @@ export interface CreateCardPayload {
   theme: string;
   templateType: CardTemplateType;
   title: string;
-  /** 首版内容对象(工作台新建用最小合法占位,后续在内容编辑器补全) */
+  /** 内容对象(新建页为编辑器组装的完整首版) */
   content: Record<string, unknown>;
+  /** 首版来源(citations 为指向本数组的 1-based 索引);省略 = 无来源 */
+  sources?: SourceRef[];
 }
 
 /** POST /api/wb/cards:建卡 + 首版(DRAFT) */
 export function createCard(payload: CreateCardPayload): Promise<{ cardId: number }> {
   return http.post('/wb/cards', payload);
+}
+
+/** GET /api/wb/cards/{id}:单卡读取(content 内嵌对象 + sources,全状态可见,归属同写路径) */
+export function getWbCard(id: number): Promise<WbCardDetail> {
+  return http.get<WbCardDetail>(`/wb/cards/${id}`);
+}
+
+/** PUT /api/wb/cards/{id}/content:内容存为新版本(版本不可变,编辑 = 追加) */
+export function saveCardContent(id: number, payload: SaveContentPayload): Promise<{ versionNo: number }> {
+  return http.put(`/wb/cards/${id}/content`, payload);
 }
