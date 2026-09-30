@@ -5,6 +5,7 @@ import com.ke.infra.entity.KeUserEntity;
 import com.ke.infra.mapper.KeUserMapper;
 import com.ke.service.common.BadRequestException;
 import com.ke.service.common.UnauthorizedException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -29,7 +30,12 @@ public class AuthService {
         u.setNickname(nickname);
         u.setRole("EXPLORER");
         u.setStatus("ACTIVE");
-        users.insert(u);
+        try {
+            users.insert(u);
+        } catch (DataIntegrityViolationException e) {
+            // check-then-insert 之间的并发竞争：uk_phone 唯一约束兜底
+            throw new BadRequestException("该手机号已注册");
+        }
         return u;
     }
 
@@ -49,6 +55,7 @@ public class AuthService {
         if (!"refresh".equals(claims.get("typ"))) throw new UnauthorizedException("无效的刷新令牌");
         Long userId = Long.valueOf(claims.getSubject());
         KeUserEntity u = users.selectById(userId);
+        if (u == null) throw new UnauthorizedException("用户不存在");
         return Map.of("accessToken", jwt.issueAccess(u.getId(), u.getRole()),
                       "refreshToken", jwt.issueRefresh(u.getId()));
     }
