@@ -24,6 +24,7 @@ jobs:
           --health-retries 10
       redis:
         image: redis:7-alpine
+        command: redis-server --requirepass redis-ci-pass
         ports:
           - 6379:6379
         options: >-
@@ -31,7 +32,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-          --requirepass "redis-ci-pass"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
