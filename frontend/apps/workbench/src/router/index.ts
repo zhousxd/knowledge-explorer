@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { TOKEN_KEY } from '../api/http';
 import LoginView from '../views/LoginView.vue';
 import WbLayout from '../layout/WbLayout.vue';
 import CardsView from '../views/CardsView.vue';
@@ -32,9 +33,9 @@ const router = createRouter({
   ]
 });
 
-// 导航守卫:无 token 且目标非 /login → 回登录页
+// 导航守卫:无 token 且目标非 /login → 回登录页(键名与 http.ts 共用 TOKEN_KEY,不再写双份字面量)
 router.beforeEach((to) => {
-  if (to.path !== '/login' && !localStorage.getItem('ke_wb_token')) {
+  if (to.path !== '/login' && !localStorage.getItem(TOKEN_KEY)) {
     return { path: '/login' };
   }
   return true;

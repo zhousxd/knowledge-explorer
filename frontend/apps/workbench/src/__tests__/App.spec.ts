@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
+import ElementPlus from 'element-plus';
 import { beforeEach, describe, expect, it } from 'vitest';
 import App from '../App.vue';
 import router from '../router';
@@ -15,7 +16,8 @@ describe('Workbench App', () => {
     setActivePinia(pinia);
     router.push('/cards');
     await router.isReady();
-    const wrapper = mount(App, { global: { plugins: [pinia, router] } });
+    // 与 main.ts 相同的组合:Element Plus 由插件全局注册(卡片管理表格/抽屉依赖)
+    const wrapper = mount(App, { global: { plugins: [pinia, ElementPlus, router] } });
     expect(wrapper.text()).toContain('卡片管理');
     expect(wrapper.text()).toContain('数据看板');
   });

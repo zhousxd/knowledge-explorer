@@ -1,11 +1,463 @@
+<script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { KeIcon } from '@ke/shared';
+import { createCard, disableCard, listCards, submitCard } from '../api/cards';
+import type { CardListItem, CardStatus, CardTemplateType } from '../api/types';
+import { STATUS_META, TEMPLATE_LABELS } from '../cardMeta';
+import { formatDateTime } from '../format';
+import CardDrawer from '../components/CardDrawer.vue';
+
+/** 与后端 offset 契约一致:size ≤ 100,默认 20 */
+const PAGE_SIZE = 20;
+
+/** 状态筛选 chips('' = 全部) */
+const STATUS_TABS = [
+  { label: '全部', value: '' },
+  { label: '草稿', value: 'DRAFT' },
+  { label: '待审核', value: 'PENDING' },
+  { label: '已发布', value: 'PUBLISHED' },
+  { label: '已停用', value: 'DISABLED' }
+] as const;
+
+const CREATE_TEMPLATES: Array<{ value: CardTemplateType; label: string }> = [
+  { value: 'TEXT', label: '图文卡' },
+  { value: 'COMPARE', label: '对比卡' },
+  { value: 'TIMELINE', label: '时间线卡' },
+  { value: 'TASK', label: '任务卡' }
+];
+
+const activeStatus = ref<'' | CardStatus>('');
+const keyword = ref('');
+const rows = ref<CardListItem[]>([]);
+const total = ref(0);
+const page = ref(1);
+const loading = ref(false);
+const errorMsg = ref('');
+
+async function load(): Promise<void> {
+  loading.value = true;
+  errorMsg.value = '';
+  try {
+    const data = await listCards({
+      status: activeStatus.value,
+      q: keyword.value.trim(),
+      page: page.value,
+      size: PAGE_SIZE
+    });
+    rows.value = data.items;
+    total.value = data.total;
+  } catch (e) {
+    errorMsg.value = e instanceof Error ? e.message : '加载失败,请稍后重试';
+  } finally {
+    loading.value = false;
+  }
+}
+
+function switchStatus(value: '' | CardStatus): void {
+  if (activeStatus.value === value) {
+    return;
+  }
+  activeStatus.value = value;
+  page.value = 1;
+  void load();
+}
+
+/** 搜索防抖 300ms,输入停顿后才检索 */
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+function onSearchInput(): void {
+  if (searchTimer !== undefined) {
+    clearTimeout(searchTimer);
+  }
+  searchTimer = setTimeout(() => {
+    searchTimer = undefined;
+    page.value = 1;
+    void load();
+  }, 300);
+}
+onBeforeUnmount(() => {
+  if (searchTimer !== undefined) {
+    clearTimeout(searchTimer);
+  }
+});
+
+function onPageChange(value: number): void {
+  page.value = value;
+  void load();
+}
+
+// ---------- 行操作 ----------
+
+const drawerOpen = ref(false);
+const current = ref<CardListItem | null>(null);
+
+function openDrawer(row: CardListItem): void {
+  current.value = row;
+  drawerOpen.value = true;
+}
+
+async function onSubmit(row: CardListItem): Promise<void> {
+  try {
+    await submitCard(row.id);
+    ElMessage.success(`已送审「${row.title}」`);
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '送审失败');
+    return;
+  }
+  await load();
+}
+
+async function onDisable(row: CardListItem): Promise<void> {
+  try {
+    await ElMessageBox.confirm(`停用后探索端将不再展示「${row.title}」,确定停用?`, '停用卡片', {
+      type: 'warning',
+      confirmButtonText: '停用',
+      cancelButtonText: '取消'
+    });
+  } catch {
+    return; // 用户取消
+  }
+  try {
+    await disableCard(row.id);
+    ElMessage.success(`已停用「${row.title}」`);
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '停用失败');
+    return;
+  }
+  await load();
+}
+
+// ---------- 新建 ----------
+
+const createOpen = ref(false);
+const creating = ref(false);
+const createTheme = ref('');
+const createTemplate = ref<CardTemplateType>('TEXT');
+const createTitle = ref('');
+
+function openCreate(): void {
+  createTheme.value = '';
+  createTemplate.value = 'TEXT';
+  createTitle.value = '';
+  createOpen.value = true;
+}
+
+/** 新建首版占位内容:各模板的最小合法形态,创作者随后在内容编辑器补全 */
+function seedContent(templateType: CardTemplateType, title: string): Record<string, unknown> {
+  switch (templateType) {
+    case 'COMPARE':
+      return { objects: ['对象甲', '对象乙'], dimensions: ['维度一'], cells: [['待补充', '待补充']] };
+    case 'TIMELINE':
+      return { events: [{ year: '待补充', title, body: '待补充。' }] };
+    case 'TASK':
+      return { goal: title, steps: [{ place: '待补充', observe: '待补充', minutes: 30 }], recordSchema: ['记录项'] };
+    default:
+      return { summary: title, sections: [{ h: '概述', body: '待补充。' }], related: [] };
+  }
+}
+
+async function submitCreate(): Promise<void> {
+  const theme = createTheme.value.trim();
+  const title = createTitle.value.trim();
+  if (!theme) {
+    ElMessage.warning('请填写专题');
+    return;
+  }
+  if (!title) {
+    ElMessage.warning('请填写标题');
+    return;
+  }
+  creating.value = true;
+  try {
+    await createCard({
+      theme,
+      templateType: createTemplate.value,
+      title,
+      content: seedContent(createTemplate.value, title)
+    });
+    ElMessage.success('已创建草稿卡,可补全内容后送审');
+    createOpen.value = false;
+    activeStatus.value = 'DRAFT';
+    page.value = 1;
+    await load();
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '创建失败');
+  } finally {
+    creating.value = false;
+  }
+}
+
+onMounted(() => {
+  void load();
+});
+</script>
+
 <template>
   <section class="page">
-    <h2 class="page-title">
-      卡片管理
-    </h2>
+    <header class="page-head">
+      <h2 class="page-title">
+        卡片管理
+      </h2>
+      <button
+        class="create-btn"
+        type="button"
+        @click="openCreate"
+      >
+        <KeIcon name="plus" />
+        <span>新建卡片</span>
+      </button>
+    </header>
+
+    <div class="toolbar">
+      <div
+        class="status-tabs"
+        role="tablist"
+        aria-label="状态筛选"
+      >
+        <button
+          v-for="tab in STATUS_TABS"
+          :key="tab.value"
+          class="status-chip"
+          :class="{ 'is-active': activeStatus === tab.value }"
+          type="button"
+          role="tab"
+          :aria-selected="activeStatus === tab.value"
+          :data-status="tab.value || 'ALL'"
+          @click="switchStatus(tab.value)"
+        >
+          <span
+            v-if="tab.value"
+            class="chip-dot"
+            :class="`dot-${STATUS_META[tab.value].tagType}`"
+            aria-hidden="true"
+          />
+          {{ tab.label }}
+        </button>
+      </div>
+      <el-input
+        v-model="keyword"
+        class="search"
+        placeholder="按标题搜索"
+        clearable
+        @input="onSearchInput"
+      >
+        <template #prefix>
+          <KeIcon name="search" />
+        </template>
+      </el-input>
+    </div>
+
+    <p
+      v-if="errorMsg"
+      class="load-error"
+      role="alert"
+    >
+      {{ errorMsg }}
+    </p>
+
+    <el-table
+      v-loading="loading"
+      class="cards-table"
+      :data="rows"
+      empty-text="暂无卡片"
+      @row-click="openDrawer"
+    >
+      <el-table-column
+        prop="title"
+        label="标题"
+        min-width="200"
+        show-overflow-tooltip
+      />
+      <el-table-column
+        label="模板"
+        width="90"
+      >
+        <template #default="{ row }">
+          <span class="tpl-chip">{{ TEMPLATE_LABELS[row.templateType] ?? row.templateType }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="状态"
+        width="92"
+      >
+        <template #default="{ row }">
+          <el-tag
+            :type="STATUS_META[row.status as CardStatus].tagType"
+            size="small"
+            disable-transitions
+          >
+            {{ STATUS_META[row.status as CardStatus].label }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="版本"
+        width="76"
+      >
+        <template #default="{ row }">
+          <span class="num">v{{ row.currentVersionNo ?? '—' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="维护人"
+        width="110"
+      >
+        <template #default="{ row }">
+          {{ row.maintainerNickname ?? '—' }}
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="更新时间"
+        width="150"
+      >
+        <template #default="{ row }">
+          <span class="num">{{ formatDateTime(row.updatedAt) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="操作"
+        width="170"
+      >
+        <template #default="{ row }">
+          <el-button
+            class="act-detail"
+            link
+            type="primary"
+            @click.stop="openDrawer(row)"
+          >
+            详情
+          </el-button>
+          <el-button
+            v-if="row.status === 'DRAFT'"
+            class="act-submit"
+            link
+            type="primary"
+            @click.stop="onSubmit(row)"
+          >
+            送审
+          </el-button>
+          <el-button
+            v-if="row.status === 'PUBLISHED'"
+            class="act-disable"
+            link
+            type="danger"
+            @click.stop="onDisable(row)"
+          >
+            停用
+          </el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <footer class="page-foot">
+      <el-pagination
+        layout="total, prev, pager, next"
+        :total="total"
+        :page-size="PAGE_SIZE"
+        :current-page="page"
+        @current-change="onPageChange"
+      />
+    </footer>
+
+    <CardDrawer
+      :card="current"
+      :open="drawerOpen"
+      @update:open="drawerOpen = $event"
+    />
+
+    <el-dialog
+      v-model="createOpen"
+      title="新建卡片"
+      width="420px"
+    >
+      <form
+        class="create-form"
+        @submit.prevent="submitCreate"
+      >
+        <label class="field">
+          <span class="field-label">专题</span>
+          <input
+            v-model="createTheme"
+            class="input"
+            type="text"
+            maxlength="50"
+            placeholder="如:湖湘文化"
+          >
+        </label>
+        <label class="field">
+          <span class="field-label">模板</span>
+          <select
+            v-model="createTemplate"
+            class="input"
+          >
+            <option
+              v-for="tpl in CREATE_TEMPLATES"
+              :key="tpl.value"
+              :value="tpl.value"
+            >
+              {{ tpl.label }}
+            </option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">标题</span>
+          <input
+            v-model="createTitle"
+            class="input"
+            type="text"
+            maxlength="120"
+            placeholder="卡片标题"
+          >
+        </label>
+        <p class="form-hint">
+          创建后生成草稿首版占位内容,可在内容编辑器中补全。
+        </p>
+      </form>
+      <template #footer>
+        <el-button @click="createOpen = false">
+          取消
+        </el-button>
+        <el-button
+          class="btn-create"
+          type="primary"
+          :disabled="creating"
+          @click="submitCreate"
+        >
+          创建
+        </el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
 <style scoped>
+.page { display: flex; flex-direction: column; gap: 14px; }
+.page-head { display: flex; align-items: center; justify-content: space-between; }
 .page-title { margin: 0; color: var(--ke-ink); font-size: 18px; }
+.create-btn { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: none; border-radius: var(--ke-radius-s); background: var(--ke-primary); color: var(--ke-white); font-size: 13px; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); }
+.create-btn:hover { background: var(--ke-primary-deep); }
+.create-btn .ke-icon { width: 16px; height: 16px; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.status-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.status-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 14px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-full); background: var(--ke-surface); color: var(--ke-sub); font-size: 12px; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease), color var(--ke-dur-fast) var(--ke-ease), border-color var(--ke-dur-fast) var(--ke-ease); }
+.status-chip:hover { border-color: var(--ke-primary); color: var(--ke-primary); }
+.status-chip.is-active { border-color: var(--ke-primary); background: var(--ke-primary); color: var(--ke-white); }
+
+/* 筛选 chip 的状态语义色点:取 Element 主题变量(theme-element.css 已映射 --ke-*,不写裸色值) */
+.chip-dot { width: 6px; height: 6px; border-radius: var(--ke-radius-full); }
+.dot-success { background: var(--el-color-success); }
+.dot-warning { background: var(--el-color-warning); }
+.dot-info { background: var(--el-color-info); }
+.dot-danger { background: var(--el-color-danger); }
+.search { width: 220px; }
+.load-error { margin: 0; padding: 8px 12px; border-radius: var(--ke-radius-s); background: var(--ke-danger-soft); color: var(--ke-danger); font-size: 13px; }
+.tpl-chip { padding: 2px 8px; border-radius: var(--ke-radius-full); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 11px; font-weight: 600; }
+.num { font-variant-numeric: tabular-nums; }
+.page-foot { display: flex; justify-content: flex-end; }
+.create-form { display: flex; flex-direction: column; gap: 12px; }
+.field { display: block; }
+.field-label { display: block; margin-bottom: 6px; color: var(--ke-ink-2); font-size: 12px; }
+.input { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-s); background: var(--ke-surface); color: var(--ke-ink); font-size: 13px; box-sizing: border-box; }
+.input:focus { outline: none; border-color: var(--ke-primary); box-shadow: var(--ke-focus); }
+.form-hint { margin: 0; color: var(--ke-sub-2); font-size: 12px; }
 </style>
