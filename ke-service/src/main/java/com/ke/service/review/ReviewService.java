@@ -152,13 +152,15 @@ public class ReviewService {
         return toItem(reviewTasks.selectById(reviewId));
     }
 
-    /** 驳回：notes 必填；PENDING→REJECTED 条件更新抢并发锁 → 对象回到来源状态（CARD → DRAFT） */
+    /** 驳回：notes 必填；自审禁绝（同 approve）；PENDING→REJECTED 条件更新抢并发锁 →
+     *  对象回到来源状态（CARD → DRAFT） */
     @Transactional
     public ReviewItem reject(long reviewId, long reviewerId, String notes) {
         if (notes == null || notes.isBlank()) {
             throw new BadRequestException("notes 不能为空");
         }
         ReviewTaskEntity task = requireTask(reviewId);
+        guardNotSelf(task, reviewerId);
         transitionPending(reviewId, ReviewStatus.REJECTED, reviewerId, notes.trim());
         dispatchReturn(task);
         return toItem(reviewTasks.selectById(reviewId));

@@ -26,6 +26,8 @@ import java.util.Map;
  * 工作台卡片写操作（FR-C07/C08）：建卡+首版、存新版本、送审、发布、下架、版本历史。
  * 写操作要求 CREATOR/EDITOR/OPERATOR（类级 @PreAuthorize）；发布仅 EDITOR/OPERATOR
  * （方法级覆盖，越权由 GlobalExceptionHandler 转 403 envelope）。
+ * 归属校验：EDITOR/OPERATOR 可操作任何卡，CREATOR 仅可操作自己维护的卡（服务层
+ * assertWritable）；直接发布另有自审禁绝（维护者本人不能直发，403）。
  * 请求形态（sources 契约）：content 为内嵌 JSON 对象，sources 为来源数组（citations[n]
  * 为指向 sources 的 1-based 索引）。
  */
@@ -59,26 +61,26 @@ public class CardAdminController {
 
     @PutMapping("/{id}/content")
     public ApiResponse<Map<String, Object>> saveContent(@PathVariable long id, @Valid @RequestBody SaveContentReq req) {
-        int versionNo = cards.saveContent(id, req.content(), req.sources(), currentUserId());
+        int versionNo = cards.saveContent(id, req.content(), req.sources(), currentUserId(), editorOrAbove());
         return ApiResponse.ok(Map.of("versionNo", versionNo));
     }
 
     @PostMapping("/{id}/submit")
     public ApiResponse<Map<String, Object>> submit(@PathVariable long id) {
-        var card = cards.submit(id);
+        var card = cards.submit(id, currentUserId(), editorOrAbove());
         return ApiResponse.ok(Map.of("cardId", card.getId(), "status", card.getStatus()));
     }
 
     @PostMapping("/{id}/publish")
     @PreAuthorize("hasAnyRole('EDITOR','OPERATOR')")
     public ApiResponse<Map<String, Object>> publish(@PathVariable long id) {
-        var card = cards.publish(id);
+        var card = cards.publish(id, currentUserId());
         return ApiResponse.ok(Map.of("cardId", card.getId(), "status", card.getStatus()));
     }
 
     @PostMapping("/{id}/disable")
     public ApiResponse<Map<String, Object>> disable(@PathVariable long id) {
-        var card = cards.disable(id);
+        var card = cards.disable(id, currentUserId(), editorOrAbove());
         return ApiResponse.ok(Map.of("cardId", card.getId(), "status", card.getStatus()));
     }
 
@@ -90,5 +92,12 @@ public class CardAdminController {
 
     private static long currentUserId() {
         return Long.parseLong(SecurityContextHolder.getContext().getAuthentication().getName());
+    }
+
+    /** 写路径归属校验的入参：EDITOR/OPERATOR 可操作任何卡，CREATOR 仅限自己的 */
+    private static boolean editorOrAbove() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream().map(Object::toString)
+                .anyMatch(a -> a.equals("ROLE_EDITOR") || a.equals("ROLE_OPERATOR"));
     }
 }

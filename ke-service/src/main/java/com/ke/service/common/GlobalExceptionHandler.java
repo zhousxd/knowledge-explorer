@@ -35,10 +35,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(401, "未认证或凭证无效"));
     }
 
-    /** MVC 层内（如方法安全 @PreAuthorize）抛出的越权 → 403 envelope；过滤器链层的走 AccessDeniedHandler */
+    /** MVC 层内（如方法安全 @PreAuthorize、服务层归属/自审校验）抛出的越权 → 403 envelope；
+     *  异常自带消息（如「不能发布自己提交的内容」）优先透出，否则用通用文案；过滤器链层走 AccessDeniedHandler */
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> forbidden(org.springframework.security.access.AccessDeniedException e) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(403, "无权执行该操作"));
+        String message = e.getMessage() == null || e.getMessage().isBlank() ? "无权执行该操作" : e.getMessage();
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(403, message));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

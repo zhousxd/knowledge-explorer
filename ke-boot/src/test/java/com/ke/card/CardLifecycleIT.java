@@ -404,4 +404,87 @@ class CardLifecycleIT {
         List<String> createdAts = JsonPath.read(res.getBody(), "$.data[*].createdAt");
         assertThat(createdAts).hasSize(3).doesNotContainNull();
     }
+
+    @Test
+    void creatorCannotEditOthersCard() {
+        String owner = newUserToken("13800001015", "卡主创作者", "CREATOR");
+        String stranger = newUserToken("13800001016", "路人创作者", "CREATOR");
+        ResponseEntity<String> created = http.postForEntity("/api/wb/cards",
+                jsonWithToken(createBody("湖湘文化", "他人的卡", textContent("归属测试摘要")), owner), String.class);
+        long cardId = ((Number) JsonPath.read(created.getBody(), "$.data.cardId")).longValue();
+
+        // 非维护者的 CREATOR：存内容 → 403
+        ResponseEntity<String> editDenied = http.exchange("/api/wb/cards/" + cardId + "/content", HttpMethod.PUT,
+                jsonWithToken("{\"content\":" + textContent("越权改写") + "}", stranger), String.class);
+        assertThat(editDenied.getStatusCode().value()).as("body=%s", editDenied.getBody()).isEqualTo(403);
+        assertThat((Integer) JsonPath.read(editDenied.getBody(), "$.code")).isEqualTo(403);
+        assertThat((String) JsonPath.read(editDenied.getBody(), "$.traceId")).isNotBlank();
+
+        ResponseEntity<String> submitDenied = post(stranger, "/api/wb/cards/" + cardId + "/submit");
+        assertThat(submitDenied.getStatusCode().value()).as("body=%s", submitDenied.getBody()).isEqualTo(403);
+        ResponseEntity<String> disableDenied = post(stranger, "/api/wb/cards/" + cardId + "/disable");
+        assertThat(disableDenied.getStatusCode().value()).as("body=%s", disableDenied.getBody()).isEqualTo(403);
+
+        // 状态与版本均未被改动
+        String status = jdbc.queryForObject("select status from card where id=?", String.class, cardId);
+        assertThat(status).isEqualTo("DRAFT");
+        Integer versions = jdbc.queryForObject("select count(*) from card_version where card_id=?", Integer.class, cardId);
+        assertThat(versions).isEqualTo(1);
+
+        // 维护者本人不受影响
+        ResponseEntity<String> ownEdit = http.exchange("/api/wb/cards/" + cardId + "/content", HttpMethod.PUT,
+                jsonWithToken("{\"content\":" + textContent("本人改写") + "}", owner), String.class);
+        assertThat(ownEdit.getStatusCode().value()).as("body=%s", ownEdit.getBody()).isEqualTo(200);
+    }
+
+    @Test
+    void editorCannotSelfPublishDirectly() {
+        String editor = newUserToken("13800001017", "自发编辑", "EDITOR");
+        ResponseEntity<String> created = http.postForEntity("/api/wb/cards",
+                jsonWithToken(createBody("湖湘文化", "自发卡", textContent("自发自审摘要")), editor), String.class);
+        long cardId = ((Number) JsonPath.read(created.getBody(), "$.data.cardId")).longValue();
+        post(editor, "/api/wb/cards/" + cardId + "/submit");
+
+        // 维护者本人直接 publish → 403（自审禁绝）
+        ResponseEntity<String> denied = post(editor, "/api/wb/cards/" + cardId + "/publish");
+        assertThat(denied.getStatusCode().value()).as("body=%s", denied.getBody()).isEqualTo(403);
+        assertThat((Integer) JsonPath.read(denied.getBody(), "$.code")).isEqualTo(403);
+        assertThat((String) JsonPath.read(denied.getBody(), "$.message")).contains("不能发布自己提交的内容");
+
+        // 卡保持 PENDING，PENDING 审核任务未被关闭
+        assertThat(jdbc.queryForObject("select status from card where id=?", String.class, cardId)).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject(
+                "select status from review_task where object_type='CARD' and object_id=?", String.class, cardId))
+                .isEqualTo("PENDING");
+    }
+
+    @Test
+    void directPublishClosesPendingTask() {
+        String creator = newUserToken("13800001018", "排队创作者", "CREATOR");
+        String editor = newUserToken("13800001019", "直发编辑", "EDITOR");
+        ResponseEntity<String> created = http.postForEntity("/api/wb/cards",
+                jsonWithToken(createBody("湖湘文化", "直发闭环卡", textContent("直发闭环摘要")), creator), String.class);
+        long cardId = ((Number) JsonPath.read(created.getBody(), "$.data.cardId")).longValue();
+        post(creator, "/api/wb/cards/" + cardId + "/submit");
+        long taskId = jdbc.queryForObject(
+                "select id from review_task where object_type='CARD' and object_id=?", Long.class, cardId);
+
+        // 非维护者的 EDITOR 直接 publish：卡发布 + PENDING 任务同事务关闭为 APPROVED
+        ResponseEntity<String> published = post(editor, "/api/wb/cards/" + cardId + "/publish");
+        assertThat(published.getStatusCode().value()).as("body=%s", published.getBody()).isEqualTo(200);
+        assertThat((String) JsonPath.read(published.getBody(), "$.data.status")).isEqualTo("PUBLISHED");
+
+        Long editorId = jdbc.queryForObject("select id from ke_user where phone=?", Long.class, "13800001019");
+        var task = jdbc.queryForMap("select status, reviewer_id, notes from review_task where id=?", taskId);
+        assertThat(task.get("status")).isEqualTo("APPROVED");
+        assertThat(((Number) task.get("reviewer_id")).longValue()).isEqualTo(editorId);
+        assertThat(task.get("notes")).isEqualTo("直接发布");
+        assertThat(jdbc.queryForObject("select status from card where id=?", String.class, cardId)).isEqualTo("PUBLISHED");
+
+        // 审发行一致：CARD_PUBLISH 审计恰一行
+        Integer audits = jdbc.queryForObject(
+                "select count(*) from audit_log where action='CARD_PUBLISH' and object_type='CARD' and object_id=?",
+                Integer.class, cardId);
+        assertThat(audits).isEqualTo(1);
+    }
 }

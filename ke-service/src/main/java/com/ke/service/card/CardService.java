@@ -2,6 +2,7 @@ package com.ke.service.card;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -32,6 +33,7 @@ import com.ke.service.common.BadRequestException;
 import com.ke.service.common.NotFoundException;
 import com.ke.service.review.AuditId;
 import com.ke.service.review.Audited;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -121,8 +123,10 @@ public class CardService {
 
     /** 只追加新版本（不改旧行），返回新版本号 */
     @Transactional
-    public int saveContent(long cardId, JsonNode content, List<SourceRef> sources, long userId) {
+    public int saveContent(long cardId, JsonNode content, List<SourceRef> sources, long userId,
+                           boolean editorOrAbove) {
         CardEntity card = requireCard(cardId);
+        assertWritable(card, userId, editorOrAbove);
         WritePayload payload = canonicalize(card.getTemplateType(), content, sources);
         int next = nextVersionNo(cardId);
         insertVersion(cardId, next, payload, userId);
@@ -134,21 +138,42 @@ public class CardService {
     /** DRAFT → PENDING，并在同事务挂入审核队列（FR-O03） */
     @Transactional
     @Audited(action = "CARD_SUBMIT", objectType = "CARD")
-    public CardEntity submit(@AuditId long cardId) {
-        CardEntity card = transition(cardId, CardStatus.PENDING);
+    public CardEntity submit(@AuditId long cardId, long userId, boolean editorOrAbove) {
+        CardEntity card = requireCard(cardId);
+        assertWritable(card, userId, editorOrAbove);
+        CardEntity transitioned = transition(cardId, CardStatus.PENDING);
         ReviewTaskEntity task = new ReviewTaskEntity();
         task.setObjectType("CARD");
-        task.setObjectId(card.getId());
+        task.setObjectId(transitioned.getId());
         task.setAction("SUBMIT");
         task.setStatus(ReviewStatus.PENDING.name());
         reviewTasks.insert(task);
-        return card;
+        return transitioned;
     }
 
-    /** PENDING → PUBLISHED，回填当前版本 summary 与 current_version_id（审核通过即委托到此） */
+    /** 审核通过路径（ReviewService 委托）：不带操作者语义，仅发布 */
     @Transactional
     @Audited(action = "CARD_PUBLISH", objectType = "CARD")
     public CardEntity publish(@AuditId Long cardId) {
+        return doPublish(cardId, null);
+    }
+
+    /**
+     * 工作台直接发布（PENDING → PUBLISHED）：自审禁绝（维护者本人不能直发自己的卡），
+     * 并在同事务把该卡 PENDING 的审核任务 CAS 关闭为 APPROVED（reviewer=当前用户，
+     * notes='直接发布'）——直发与审核队列两条路殊途同归，不会留下悬空 PENDING 任务。
+     */
+    @Transactional
+    @Audited(action = "CARD_PUBLISH", objectType = "CARD")
+    public CardEntity publish(@AuditId Long cardId, long actorId) {
+        CardEntity card = requireCard(cardId);
+        if (card.getMaintainerId() != null && card.getMaintainerId() == actorId) {
+            throw new AccessDeniedException("不能发布自己提交的内容");
+        }
+        return doPublish(cardId, actorId);
+    }
+
+    private CardEntity doPublish(Long cardId, Long actorId) {
         CardEntity card = transition(cardId, CardStatus.PUBLISHED);
         CardVersionEntity latest = versions.selectOne(new LambdaQueryWrapper<CardVersionEntity>()
                 .eq(CardVersionEntity::getCardId, cardId)
@@ -165,11 +190,29 @@ public class CardService {
         cards.updateById(card);
         // 卡→资产挂接（FR-O02）：为当前版本的带 assetId 来源建 citation 行（幂等：先清后建）
         linkCitations(latest.getId(), latest.getSources());
+        if (actorId != null) {
+            closePendingReviewTask(cardId, actorId);
+        }
         return card;
     }
 
+    /** 直发闭环：PENDING 审核任务条件更新为 APPROVED（无 PENDING 任务则 0 行，跳过） */
+    private void closePendingReviewTask(long cardId, long actorId) {
+        LambdaUpdateWrapper<ReviewTaskEntity> cas = new LambdaUpdateWrapper<ReviewTaskEntity>()
+                .eq(ReviewTaskEntity::getObjectType, "CARD")
+                .eq(ReviewTaskEntity::getObjectId, cardId)
+                .eq(ReviewTaskEntity::getStatus, ReviewStatus.PENDING.name())
+                .set(ReviewTaskEntity::getStatus, ReviewStatus.APPROVED.name())
+                .set(ReviewTaskEntity::getReviewerId, actorId)
+                .set(ReviewTaskEntity::getNotes, "直接发布")
+                .set(ReviewTaskEntity::getUpdatedAt, OffsetDateTime.now());
+        reviewTasks.update(cas);
+    }
+
     @Transactional
-    public CardEntity disable(long cardId) {
+    public CardEntity disable(long cardId, long userId, boolean editorOrAbove) {
+        CardEntity card = requireCard(cardId);
+        assertWritable(card, userId, editorOrAbove);
         return transition(cardId, CardStatus.DISABLED);
     }
 
@@ -251,6 +294,19 @@ public class CardService {
     }
 
     // ---------- 内部 ----------
+
+    /**
+     * 写路径归属校验：EDITOR/OPERATOR 可操作任何卡；CREATOR 仅可操作自己维护的卡
+     * （maintainer_id == 当前用户），否则 AccessDeniedException → 403 envelope。
+     */
+    private static void assertWritable(CardEntity card, long userId, boolean editorOrAbove) {
+        if (editorOrAbove) {
+            return;
+        }
+        if (card.getMaintainerId() == null || card.getMaintainerId() != userId) {
+            throw new AccessDeniedException("仅可操作自己维护的卡片");
+        }
+    }
 
     /** 一次写版本的规范化产物：content 与 sources 的规范 JSON（null = 无来源） */
     private record WritePayload(String contentJson, String sourcesJson) {

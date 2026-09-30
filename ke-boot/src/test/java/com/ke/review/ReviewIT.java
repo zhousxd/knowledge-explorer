@@ -225,6 +225,26 @@ class ReviewIT {
     }
 
     @Test
+    void rejectSelfForbidden() {
+        // 自审禁绝对 reject 同样生效：编辑不能驳回自己提交的内容
+        String editor = newUserToken("13800002011", "编辑己", "EDITOR");
+        long cardId = createAndSubmitCard(editor, "湖湘文化", "自驳卡", "自驳摘要");
+
+        long reviewId = pendingReviewId(editor, cardId);
+        ResponseEntity<String> res = post(editor, "/api/wb/reviews/" + reviewId + "/reject",
+                "{\"notes\":\"自己驳回自己\"}");
+        assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(403);
+        assertThat((Integer) JsonPath.read(res.getBody(), "$.code")).isEqualTo(403);
+        assertThat((String) JsonPath.read(res.getBody(), "$.message")).contains("不能审核自己提交的内容");
+
+        // 卡与任务保持 PENDING
+        assertThat(jdbc.queryForObject("select status from card where id=?", String.class, cardId)).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("select status from review_task where id=?", String.class, reviewId))
+                .isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("select notes from review_task where id=?", String.class, reviewId)).isNull();
+    }
+
+    @Test
     void doubleApproveSecondRejectedWithSingleAudit() {
         // 并发窗口回归：第二次 approve 必须被状态谓词（WHERE status='PENDING'）拦下（400），
         // 而非覆盖式成功——否则会出现双审计行与 reviewer_id 互相覆盖。
