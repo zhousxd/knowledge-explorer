@@ -40,6 +40,17 @@ sudo -u postgres createdb -O ke ke_test
 wsl -e bash -c "sudo service postgresql start && sudo service redis-server start"
 ```
 
+## 工程结构（W1 起）
+
+- 后端：Maven 多模块（ke-domain / ke-infra / ke-service / ke-boot），本地依赖 WSL 的 PostgreSQL 16 + Redis（见上文「本地环境」一节）
+- 前端：`frontend/` pnpm workspace（packages/shared + apps/explorer + apps/workbench）
+- 环境：JDK 21、Maven ≥3.6.3（用 `./mvnw`）、Node ≥20、pnpm ≥9
+- 常用命令：`./mvnw -B -ntp verify` · `pnpm --dir frontend test` · `pnpm --dir frontend lint` · `pnpm --dir frontend gen:api`（需后端在 8080 运行）
+
+## CI
+
+GitHub Actions（`.github/workflows/ci.yml`）双 job：后端 job 用 services 起 pg16/redis，集成测试直连 localhost，与本地 WSL 环境同构；前端 job 走 pnpm lint/test/build。
+
 ## 快速查看原型
 
 两个原型均为**单文件、零依赖**的 HTML，直接用浏览器打开即可（无需构建、可离线）：
