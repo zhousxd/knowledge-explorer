@@ -94,3 +94,33 @@ export interface SaveContentPayload {
   content: Record<string, unknown>;
   sources: SourceRef[];
 }
+
+/** 审核任务状态 */
+export type ReviewTaskStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+/** 审核对象类型(入口队列 Phase 6 接入) */
+export type ReviewObjectType = 'CARD' | 'ENTRY';
+
+/** 机器预检(CARD:当前版本内容可解析 + 来源非空;ENTRY 暂为 null) */
+export interface ReviewPrecheck {
+  contentValid: boolean;
+  hasSources: boolean;
+}
+
+/** GET /api/wb/reviews 行 */
+export interface ReviewItem {
+  id: number;
+  objectType: ReviewObjectType;
+  objectId: number;
+  action: string;
+  status: ReviewTaskStatus;
+  createdAt: string;
+  /** 「标题 · 模板 · 提交人」摘要;CARD 之外为 null */
+  summary: string | null;
+  precheck: ReviewPrecheck | null;
+  /** 当前版本内容大意(截 100 字);内容不可解析或非 CARD 为 null */
+  contentPreview: string | null;
+}
+
+/** GET /api/wb/reviews 响应 data */
+export type ReviewListResp = PageResp<ReviewItem>;

@@ -1,10 +1,15 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createMemoryHistory, createRouter, type RouterOptions } from 'vue-router';
 import WbLayout from '../layout/WbLayout.vue';
 import { useAuthStore } from '../stores/auth';
+import { useReviewStore } from '../stores/review';
 import type { MeResp } from '../api/types';
+
+const { listReviewsMock } = vi.hoisted(() => ({ listReviewsMock: vi.fn() }));
+
+vi.mock('../api/reviews', () => ({ listReviews: listReviewsMock }));
 
 const PLACEHOLDER = { template: '<div />' };
 
@@ -38,12 +43,15 @@ async function mountLayout(path: string, user: MeResp | null) {
   const auth = useAuthStore();
   auth.user = user;
   const wrapper = mount(HostApp, { global: { plugins: [router, pinia] } });
+  await flushPromises();
   return wrapper;
 }
 
 const EDITOR: MeResp = { id: 1, nickname: '阿编', role: 'EDITOR' };
 
 describe('WbLayout', () => {
+  listReviewsMock.mockReset().mockResolvedValue({ items: [], total: 0, page: 1, size: 1 });
+
   it('渲染 5 个菜单项及图标', async () => {
     const wrapper = await mountLayout('/cards', EDITOR);
     const items = wrapper.findAll('.nav-item');
@@ -77,5 +85,22 @@ describe('WbLayout', () => {
   it('未登录时不显示角色徽标', async () => {
     const wrapper = await mountLayout('/cards', null);
     expect(wrapper.find('.role-chip').exists()).toBe(false);
+  });
+
+  it('审核中心徽标联动待审计数:挂载即拉取,>0 显示计数并高亮', async () => {
+    listReviewsMock.mockResolvedValue({ items: [], total: 7, page: 1, size: 1 });
+    const wrapper = await mountLayout('/cards', EDITOR);
+    // 挂载即取待审计数(size=1 只为 total)
+    expect(listReviewsMock).toHaveBeenCalledWith({ status: 'PENDING', page: 1, size: 1 });
+    const badge = wrapper.findAll('.nav-item')[2]?.find('.badge');
+    expect(badge?.text()).toBe('7');
+    expect(badge?.classes()).toContain('is-active');
+
+    // store 归零 → 徽标退化为预留圆点
+    const store = useReviewStore();
+    store.total = 0;
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll('.nav-item')[2]?.find('.badge').text()).toBe('');
+    expect(wrapper.findAll('.nav-item')[2]?.find('.badge').classes()).not.toContain('is-active');
   });
 });

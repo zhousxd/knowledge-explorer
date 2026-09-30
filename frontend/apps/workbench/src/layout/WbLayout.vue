@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { KeIcon } from '@ke/shared';
 import { roleLabel, useAuthStore } from '../stores/auth';
+import { useReviewStore } from '../stores/review';
 
 const NAV_ITEMS = [
   { path: '/cards', title: '卡片管理', icon: 'layers', badge: false },
@@ -14,7 +15,15 @@ const NAV_ITEMS = [
 
 const route = useRoute();
 const auth = useAuthStore();
+const review = useReviewStore();
 const pageTitle = computed(() => route.meta.title ?? '');
+/** 待审计数徽标(>0 显示数字,99+ 封顶;=0 退化为预留圆点) */
+const badgeText = computed(() => (review.total > 99 ? '99+' : review.total > 0 ? String(review.total) : ''));
+
+onMounted(() => {
+  // 布局挂载即拉一次待审计数;403(无审核角色)由 store 静默归零,不显示计数
+  void review.refreshPendingTotal();
+});
 </script>
 
 <template>
@@ -35,8 +44,10 @@ const pageTitle = computed(() => route.meta.title ?? '');
           <span
             v-if="item.badge"
             class="badge"
+            :class="{ 'is-active': review.total > 0 }"
+            :data-total="review.total"
             aria-hidden="true"
-          />
+          >{{ badgeText }}</span>
         </RouterLink>
       </nav>
     </aside>
@@ -79,7 +90,8 @@ const pageTitle = computed(() => route.meta.title ?? '');
 .nav-item:hover { background: var(--ke-side-2); color: var(--ke-white); }
 .nav-item.router-link-active { background: var(--ke-primary); color: var(--ke-white); }
 .nav-text { flex: 1; }
-.badge { width: 8px; height: 8px; border-radius: var(--ke-radius-full); background: var(--ke-side-line); }
+.badge { min-width: 8px; height: 8px; padding: 0; border-radius: var(--ke-radius-full); background: var(--ke-side-line); color: var(--ke-white); font-size: 10px; line-height: 8px; text-align: center; }
+.badge.is-active { min-width: 16px; height: 16px; padding: 0 4px; background: var(--el-color-danger); line-height: 16px; }
 .main-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .topbar { height: 56px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; background: var(--ke-surface); border-bottom: 1px solid var(--ke-line); }
 .crumb { display: flex; align-items: center; gap: 8px; font-size: 14px; }
