@@ -1,6 +1,7 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/ke
+    # stringtype=unspecified：JSONB 列（agent_run.input_json 等）以字符串参数写入，由 PG 推断类型
+    url: jdbc:postgresql://localhost:5432/ke?stringtype=unspecified
     username: ke
     password: ke
   flyway:

@@ -6,7 +6,8 @@
 # 若配置文件再激活 test 会与 mockllm 叠加，导致两个 LlmGateway bean 同时存在。
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/ke_test
+    # stringtype=unspecified：JSONB 列（agent_run.input_json 等）以字符串参数写入，由 PG 推断类型
+    url: jdbc:postgresql://localhost:5432/ke_test?stringtype=unspecified
     username: ke
     password: ke
   flyway:

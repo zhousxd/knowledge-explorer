@@ -17,3 +17,9 @@ management:
     web:
       exposure:
         include: health,info
+
+# 智能体执行参数（dev/test 共用；test profile 不覆盖即同值）
+ke:
+  agent:
+    stale-seconds: 120
+    recycle-interval-ms: 60000
