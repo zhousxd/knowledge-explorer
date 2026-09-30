@@ -1,0 +1,17 @@
+spring:
+  profiles:
+    active: test
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ke_test
+    username: ke
+    password: ke
+  flyway:
+    enabled: false
+  ai:
+    openai:
+      api-key: ${KE_LLM_API_KEY:test-dummy-key}
