@@ -1,0 +1,15 @@
+{
+  "name": "@ke/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": { "vue": "^3.5.0" },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.1.0",
+    "@vue/test-utils": "^2.4.6",
+    "jsdom": "^25.0.0",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
+  },
+  "scripts": { "test": "vitest run" }
+}

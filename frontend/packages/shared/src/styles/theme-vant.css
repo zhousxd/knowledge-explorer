@@ -1,0 +1,18 @@
+:root{
+  --van-primary-color:var(--ke-primary);
+  --van-text-color:var(--ke-ink);
+  --van-text-color-2:var(--ke-sub);
+  --van-text-color-3:var(--ke-sub-2);
+  --van-border-color:var(--ke-line);
+  --van-background:var(--ke-bg);
+  --van-background-2:var(--ke-surface);
+  --van-border-radius-sm:var(--ke-radius-xs);
+  --van-border-radius-md:var(--ke-radius-s);
+  --van-border-radius-lg:var(--ke-radius-m);
+  --van-border-radius-max:var(--ke-radius-full);
+  --van-button-primary-background:var(--ke-primary);
+  --van-button-primary-border-color:var(--ke-primary);
+  --van-cell-group-inset-border-radius:var(--ke-radius-l);
+  --van-toast-background:var(--ke-toast);
+  --van-font-family:var(--ke-font);
+}

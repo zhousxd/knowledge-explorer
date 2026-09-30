@@ -3,6 +3,7 @@
   "private": true,
   "scripts": { "build": "vite build", "test": "vitest run" },
   "dependencies": {
+    "@ke/shared": "workspace:*",
     "element-plus": "^2.10.0",
     "vue": "^3.5.0",
     "vue-router": "^4.5.0"

@@ -1,0 +1,30 @@
+:root{
+  --el-color-primary:#3A5FCD;
+  --el-color-primary-light-3:#758FDC; --el-color-primary-light-5:#9CAFE6;
+  --el-color-primary-light-7:#C4CFF0; --el-color-primary-light-8:#D8DFF5;
+  --el-color-primary-light-9:#EBEFFA; --el-color-primary-dark-2:#2E4CA4;
+  --el-color-success:#1F7A4D;  /* light-3 #62A282 · light-8 #D2E4DB · light-9 #E9F2ED · dark-2 #19623E */
+  --el-color-warning:#8F5E12;  /* light-3 #B18E59 · light-8 #E9DFD0 · light-9 #F4EFE7 · dark-2 #724B0E */
+  --el-color-danger:#C0392B;   /* light-3 #D3746B · light-8 #F2D7D5 · light-9 #F9EBEA · dark-2 #9A2E22 */
+  --el-color-error:#C0392B;
+  --el-color-info:#6E675C;     /* light-3 #9A958D · light-8 #E2E1DE · light-9 #F0F0EF · dark-2 #58524A */
+  --el-text-color-primary:var(--ke-ink);
+  --el-text-color-regular:var(--ke-ink-2);
+  --el-text-color-secondary:var(--ke-sub);
+  --el-text-color-placeholder:var(--ke-sub-2);
+  --el-text-color-disabled:var(--ke-sub-2);
+  --el-border-color:var(--ke-line-strong);
+  --el-border-color-light:var(--ke-line);
+  --el-border-color-lighter:var(--ke-line-2);
+  --el-fill-color-light:#EFEAE0;
+  --el-fill-color-lighter:var(--ke-surface-2);
+  --el-bg-color:var(--ke-surface);
+  --el-bg-color-page:var(--ke-bg);
+  --el-border-radius-base:var(--ke-radius-s);
+  --el-border-radius-small:var(--ke-radius-xs);
+  --el-border-radius-round:var(--ke-radius-full);
+  --el-box-shadow-light:var(--ke-shadow-1);
+  --el-box-shadow:var(--ke-shadow-2);
+  --el-font-size-base:13px;
+  --el-font-family:var(--ke-font);
+}

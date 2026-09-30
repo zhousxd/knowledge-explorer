@@ -6,6 +6,6 @@
     "strict": true,
     "jsx": "preserve",
     "skipLibCheck": true,
-    "paths": { "@ke/shared": ["../packages/shared/src/index.ts"] }
+    "paths": { "@ke/shared": ["packages/shared/src/index.ts"] }
   }
 }

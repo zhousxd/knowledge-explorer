@@ -1,6 +1,6 @@
 {
   "extends": "stylelint-config-standard",
-  "ignoreFiles": ["**/tokens.css", "**/theme-*.css"],
+  "ignoreFiles": ["**/dist/**", "**/node_modules/**", "**/tokens.css", "**/theme-*.css"],
   "rules": {
     "declaration-block-single-line-max-declarations": null,
     "declaration-property-value-disallowed-list": {

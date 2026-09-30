@@ -5,7 +5,10 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [vue()],
   resolve: {
-    alias: { '@ke/shared': fileURLToPath(new URL('../../packages/shared/src/index.ts', import.meta.url)) }
+    alias: [
+      { find: '@ke/shared/src', replacement: fileURLToPath(new URL('../../packages/shared/src', import.meta.url)) },
+      { find: '@ke/shared', replacement: fileURLToPath(new URL('../../packages/shared/src/index.ts', import.meta.url)) }
+    ]
   },
   test: { environment: 'jsdom' }
 });
