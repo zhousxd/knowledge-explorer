@@ -105,6 +105,16 @@
           <artifactId>spring-boot-maven-plugin</artifactId>
           <version>${spring-boot.version}</version>
         </plugin>
+        <!-- 未继承 spring-boot-starter-parent，需自带 -parameters：Spring MVC @PathVariable/@RequestParam
+             按名解析依赖反射可见的参数名（缺失时启动正常、请求时抛 IllegalArgumentException） -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.13.0</version>
+          <configuration>
+            <parameters>true</parameters>
+          </configuration>
+        </plugin>
       </plugins>
     </pluginManagement>
   </build>

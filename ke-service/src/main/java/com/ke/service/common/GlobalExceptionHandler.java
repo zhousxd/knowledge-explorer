@@ -19,6 +19,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error(400, e.getMessage()));
     }
 
+    /** content_json 违反模板约束（FR-C03~C06 写前校验）→ 400 envelope，消息含字段路径 */
+    @ExceptionHandler(com.ke.domain.card.content.InvalidCardContentException.class)
+    public ResponseEntity<ApiResponse<Void>> invalidContent(com.ke.domain.card.content.InvalidCardContentException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error(400, e.getMessage()));
+    }
+
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> notFound(NotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(404, e.getMessage()));
+    }
+
     @ExceptionHandler({UnauthorizedException.class, org.springframework.security.core.AuthenticationException.class})
     public ResponseEntity<ApiResponse<Void>> unauthorized(Exception e) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(401, "未认证或凭证无效"));
