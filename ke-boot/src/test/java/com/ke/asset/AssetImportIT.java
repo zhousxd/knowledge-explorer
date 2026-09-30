@@ -8,7 +8,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -192,6 +194,33 @@ class AssetImportIT {
     }
 
     @Test
+    void structuralBadLineSkippedWithout500() {
+        String editor = newUserToken("13900001008", "编辑己", "EDITOR");
+        // 第 3 行引号未闭合：结构坏行只作废该行并回报行号，其余行照常导入（不得整请求 500）
+        byte[] bytes = ("kind,title,source_meta,locator,license,license_expire,content_extract\n"
+                + "book,《结构完好书》,,\"{\"\"chapter\"\":\"\"一\"\"}\",已授权,,完好行一\n"
+                + "book,《结构坏行书》,,\"未闭合的定位字段,还继续\n"
+                + "book,《结构第二书》,,\"{\"\"chapter\"\":\"\"二\"\"}\",已授权,,完好行二\n")
+                .getBytes(StandardCharsets.UTF_8);
+
+        ResponseEntity<String> res = importCsv(bytes, editor);
+        assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(200);
+        assertThat((int) JsonPath.read(res.getBody(), "$.data.imported")).isEqualTo(2);
+        assertThat((int) JsonPath.read(res.getBody(), "$.data.skipped")).isEqualTo(1);
+        assertThat((int) JsonPath.read(res.getBody(), "$.data.errors.length()")).isEqualTo(1);
+        assertThat((int) JsonPath.read(res.getBody(), "$.data.errors[0].line")).isEqualTo(3);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.errors[0].reason")).contains("引号未闭合");
+
+        Integer good = jdbc.queryForObject(
+                "select count(*) from knowledge_asset where title in (?,?)", Integer.class,
+                "《结构完好书》", "《结构第二书》");
+        assertThat(good).isEqualTo(2);
+        Integer bad = jdbc.queryForObject(
+                "select count(*) from knowledge_asset where title=?", Integer.class, "《结构坏行书》");
+        assertThat(bad).isZero();
+    }
+
+    @Test
     void expiredFlagSet() {
         String editor = newUserToken("13900001003", "编辑丙", "EDITOR");
         importCsv(csv(
@@ -278,40 +307,52 @@ class AssetImportIT {
     void listQueryPaginationAndCitationCount() {
         String editor = newUserToken("13900001007", "编辑戊", "EDITOR");
         importCsv(csv(
-                "book,《甲书》,,\"{\"\"chapter\"\":\"\"一\"\"}\",,,甲",
-                "book,《乙书》,,\"{\"\"chapter\"\":\"\"二\"\"}\",,,乙",
-                "audio,《丙音频》,,\"{\"\"t\"\":\"\"00:00:10-00:00:20\"\"}\",,,丙"), editor);
-        long cited = soleAssetId("《甲书》");
+                "book,《分页甲书》,,\"{\"\"chapter\"\":\"\"一\"\"}\",,,甲",
+                "book,《分页乙书》,,\"{\"\"chapter\"\":\"\"二\"\"}\",,,乙",
+                "audio,《分页丙音频》,,\"{\"\"t\"\":\"\"00:00:10-00:00:20\"\"}\",,,丙"), editor);
+        // 本方法自己的数据集（@ItDb 只在类开始前清一次库，断言一律限定在自己的 title 集合内）
+        List<Long> mine = jdbc.queryForList(
+                "select id from knowledge_asset where title in (?,?,?) order by id", Long.class,
+                "《分页甲书》", "《分页乙书》", "《分页丙音频》");
+        assertThat(mine).hasSize(3);
+        long cited = mine.get(0);
         http.postForEntity("/api/wb/assets/" + cited + "/citations",
                 jsonWithToken("{\"objectType\":\"card_version\",\"objectId\":7,\"quote\":\"甲的引用\"}", editor), String.class);
 
-        // kind 过滤
-        ResponseEntity<String> books = http.exchange("/api/wb/assets?kind={kind}", HttpMethod.GET,
-                bearer(editor), String.class, "book");
+        // kind 过滤 + q 前缀（“分页”仅命中本方法数据）：2 本 book
+        ResponseEntity<String> books = http.exchange("/api/wb/assets?kind={kind}&q={q}", HttpMethod.GET,
+                bearer(editor), String.class, "book", "分页");
         assertThat((int) JsonPath.read(books.getBody(), "$.data.total")).isEqualTo(2);
 
         // q 对 title ILIKE
         ResponseEntity<String> byQ = http.exchange("/api/wb/assets?q={q}", HttpMethod.GET,
                 bearer(editor), String.class, "乙书");
         assertThat((int) JsonPath.read(byQ.getBody(), "$.data.total")).isEqualTo(1);
-        assertThat((String) JsonPath.read(byQ.getBody(), "$.data.items[0].title")).isEqualTo("《乙书》");
+        assertThat((String) JsonPath.read(byQ.getBody(), "$.data.items[0].title")).isEqualTo("《分页乙书》");
 
-        // 分页 page/size（按 id 升序）
-        ResponseEntity<String> page0 = http.exchange("/api/wb/assets?page={p}&size={s}", HttpMethod.GET,
-                bearer(editor), String.class, 0, 2);
+        // 分页 page/size（q 圈定本方法数据集，按 id 升序）
+        ResponseEntity<String> page0 = http.exchange("/api/wb/assets?q={q}&page={p}&size={s}", HttpMethod.GET,
+                bearer(editor), String.class, "分页", 0, 2);
         assertThat((int) JsonPath.read(page0.getBody(), "$.data.items.length()")).isEqualTo(2);
         assertThat((int) JsonPath.read(page0.getBody(), "$.data.total")).isEqualTo(3);
-        ResponseEntity<String> page1 = http.exchange("/api/wb/assets?page={p}&size={s}", HttpMethod.GET,
-                bearer(editor), String.class, 1, 2);
+        ResponseEntity<String> page1 = http.exchange("/api/wb/assets?q={q}&page={p}&size={s}", HttpMethod.GET,
+                bearer(editor), String.class, "分页", 1, 2);
         assertThat((int) JsonPath.read(page1.getBody(), "$.data.items.length()")).isEqualTo(1);
 
-        // citationCount 批量回填：被引用的资产=1，其余=0
+        // citationCount 批量回填：全量拉取后按本方法 id 集合逐个断言（被引=1，其余=0）
         ResponseEntity<String> all = http.exchange("/api/wb/assets?size={s}", HttpMethod.GET,
                 bearer(editor), String.class, 100);
-        List<Number> citedCounts = JsonPath.read(all.getBody(), "$.data.items[?(@.id == " + cited + ")].citationCount");
-        assertThat(citedCounts).hasSize(1);
-        assertThat(citedCounts.get(0).intValue()).isEqualTo(1);
-        List<Number> zeroCounts = JsonPath.read(all.getBody(), "$.data.items[?(@.id != " + cited + ")].citationCount");
-        assertThat(zeroCounts).hasSize(2).allSatisfy(n -> assertThat(n.intValue()).isZero());
+        List<Integer> ids = JsonPath.read(all.getBody(), "$.data.items[*].id");
+        List<Number> counts = JsonPath.read(all.getBody(), "$.data.items[*].citationCount");
+        assertThat(ids).hasSize(counts.size());
+        Map<Long, Number> countById = new HashMap<>();
+        for (int i = 0; i < ids.size(); i++) {
+            countById.put(ids.get(i).longValue(), counts.get(i));
+        }
+        for (Long id : mine) {
+            long expected = id == cited ? 1L : 0L;
+            assertThat(countById).containsKey(id);
+            assertThat(countById.get(id).longValue()).as("asset %s", id).isEqualTo(expected);
+        }
     }
 }

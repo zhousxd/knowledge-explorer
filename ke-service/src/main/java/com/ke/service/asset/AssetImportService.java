@@ -27,7 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 知识资产导入与统一引用（FR-O01/O02）：
  * - CSV 批量导入：逐行校验（kind 枚举小写、title 必填、locator 必为 JSON 对象、
  *   source_meta 可空但给则须为 JSON 对象、license_expire 可空 yyyy-MM-dd），
- *   合法行入库，非法行跳过并按物理行号回报原因（部分成功语义，不做整文件回滚）；
+ *   合法行入库；非法行与结构坏行（引号未闭合等，只作废该行）均跳过并按物理行号回报原因
+ *   （部分成功语义，不做整文件回滚）；
  * - 列表查询：kind 精确过滤 + title ILIKE，分页（size ≤100 默认 20），
  *   expired = license_expire 非空且早于今日；citationCount 一条 GROUP BY 批量回填；
  * - citation：统一引用结构 = 资产 + 定位器 + 原文摘录（02 §4.2），
@@ -72,6 +73,11 @@ public class AssetImportService {
         int imported = 0;
         List<ImportError> errors = new ArrayList<>();
         for (SimpleCsvParser.Row row : rows) {
+            // 结构坏行（引号未闭合等）只作废该行，回报行号后继续，绝不让整个请求 500
+            if (row.failed()) {
+                errors.add(new ImportError(row.line(), row.error()));
+                continue;
+            }
             String reason = validate(row.fields());
             if (reason != null) {
                 errors.add(new ImportError(row.line(), reason));
