@@ -37,6 +37,7 @@ public class CardPublicController {
         body.put("title", d.title());
         body.put("versionNo", d.versionNo());
         body.put("content", d.content());
+        body.put("sources", d.sources());
         body.put("updatedAt", d.updatedAt());
         return ApiResponse.ok(body);
     }

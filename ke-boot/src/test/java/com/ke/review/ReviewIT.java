@@ -77,19 +77,15 @@ class ReviewIT {
         return JsonPath.read(login.getBody(), "$.data.accessToken");
     }
 
+    /** 无引用的 TEXT content（sources 契约下空 sources 不允许 citations） */
     private static String textContent(String summary) {
-        return "{\"summary\":\"" + summary + "\",\"sections\":[{\"h\":\"缘起\",\"body\":\"正文内容。\",\"citations\":[0]}],\"related\":[]}";
-    }
-
-    /** contentJson 是 JSON 里的字符串字段，需转义引号 */
-    private static String quote(String raw) {
-        return "\"" + raw.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+        return "{\"summary\":\"" + summary + "\",\"sections\":[{\"h\":\"缘起\",\"body\":\"正文内容。\"}],\"related\":[]}";
     }
 
     /** 建卡（TEXT）+ 送审，返回 cardId */
     private long createAndSubmitCard(String authorToken, String theme, String title, String summary) {
         String body = "{\"theme\":\"" + theme + "\",\"templateType\":\"TEXT\",\"title\":\"" + title
-                + "\",\"contentJson\":" + quote(textContent(summary)) + "}";
+                + "\",\"content\":" + textContent(summary) + "}";
         ResponseEntity<String> created = http.postForEntity("/api/wb/cards", jsonWithToken(body, authorToken), String.class);
         assertThat(created.getStatusCode().value()).as("create body=%s", created.getBody()).isEqualTo(201);
         long cardId = ((Number) JsonPath.read(created.getBody(), "$.data.cardId")).longValue();

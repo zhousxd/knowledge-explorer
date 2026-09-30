@@ -75,18 +75,26 @@ class CardLifecycleIT {
         return JsonPath.read(login.getBody(), "$.data.accessToken");
     }
 
+    /** 无引用的 TEXT content（sources 契约下空 sources 不允许 citations） */
     private static String textContent(String summary) {
-        return "{\"summary\":\"" + summary + "\",\"sections\":[{\"h\":\"缘起\",\"body\":\"正文内容。\",\"citations\":[0]}],\"related\":[]}";
+        return "{\"summary\":\"" + summary + "\",\"sections\":[{\"h\":\"缘起\",\"body\":\"正文内容。\"}],\"related\":[]}";
     }
 
-    /** contentJson 是 JSON 里的字符串字段，需转义引号 */
-    private static String quote(String raw) {
-        return "\"" + raw.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    /** 带 citations 的 TEXT content（citationsJson 形如 "[1,2]"，1-based 指向 sources） */
+    private static String textContentWithCitations(String summary, String citationsJson) {
+        return "{\"summary\":\"" + summary + "\",\"sections\":[{\"h\":\"缘起\",\"body\":\"正文内容。\",\"citations\":"
+                + citationsJson + "}],\"related\":[]}";
     }
 
+    /** content 为内嵌 JSON 对象（sources 契约），不再是 contentJson 字符串 */
     private static String createBody(String theme, String title, String contentJson) {
+        return createBody(theme, title, contentJson, null);
+    }
+
+    private static String createBody(String theme, String title, String contentJson, String sourcesJson) {
         return "{\"theme\":\"" + theme + "\",\"templateType\":\"TEXT\",\"title\":\"" + title
-                + "\",\"contentJson\":" + quote(contentJson) + "}";
+                + "\",\"content\":" + contentJson
+                + (sourcesJson == null ? "" : ",\"sources\":" + sourcesJson) + "}";
     }
 
     private ResponseEntity<String> post(String token, String path) {
@@ -172,7 +180,7 @@ class CardLifecycleIT {
 
         for (int v = 2; v <= 3; v++) {
             ResponseEntity<String> saved = http.exchange("/api/wb/cards/" + cardId + "/content", HttpMethod.PUT,
-                    jsonWithToken("{\"contentJson\":" + quote(textContent("第" + v + "版摘要")) + "}", creator), String.class);
+                    jsonWithToken("{\"content\":" + textContent("第" + v + "版摘要") + "}", creator), String.class);
             assertThat(saved.getStatusCode().value()).as("body=%s", saved.getBody()).isEqualTo(200);
             assertThat((int) JsonPath.read(saved.getBody(), "$.data.versionNo")).isEqualTo(v);
         }
@@ -241,7 +249,9 @@ class CardLifecycleIT {
         // 未落任何库表
         Integer cards = jdbc.queryForObject("select count(*) from card where title=?", Integer.class, "非法内容卡");
         assertThat(cards).isZero();
-        Integer versions = jdbc.queryForObject("select count(*) from card_version", Integer.class);
+        Integer versions = jdbc.queryForObject(
+                "select count(*) from card_version v join card c on c.id=v.card_id where c.title=?",
+                Integer.class, "非法内容卡");
         assertThat(versions).isZero();
     }
 
@@ -305,5 +315,93 @@ class CardLifecycleIT {
         assertThat(page2Ids).doesNotContainAnyElementsOf(page1Ids);
         Object page2Cursor = JsonPath.read(page2.getBody(), "$.data.nextCursor");
         assertThat(page2Cursor).isNull();
+    }
+
+    @Test
+    void sourcesContractEnforcedAndCitationsLinkedOnPublish() {
+        String creator = newUserToken("13800001012", "创作者壬", "CREATOR");
+        String editor = newUserToken("13800001013", "编辑丁", "EDITOR");
+        // 真实知识单元（直插库，供 assetId 校验与 citation 挂接）
+        jdbc.update("insert into knowledge_asset(kind,title,locator) values('book','《出处测试书》','{\"pages\":\"12-14\"}')");
+        long assetId = jdbc.queryForObject("select id from knowledge_asset where title='《出处测试书》'", Long.class);
+
+        String content = textContentWithCitations("来源契约摘要", "[2]");
+        String sources = "[{\"assetId\":" + assetId + ",\"title\":\"《出处测试书》\",\"locator\":\"第12页\",\"license\":\"已授权\"},"
+                + "{\"assetId\":null,\"title\":\"口述访谈\",\"locator\":\"录音 03:00\",\"license\":null}]";
+        ResponseEntity<String> created = http.postForEntity("/api/wb/cards",
+                jsonWithToken(createBody("湖湘文化", "来源契约卡", content, sources), creator), String.class);
+        assertThat(created.getStatusCode().value()).as("body=%s", created.getBody()).isEqualTo(201);
+        long cardId = ((Number) JsonPath.read(created.getBody(), "$.data.cardId")).longValue();
+        ResponseEntity<String> published = post(creator, "/api/wb/cards/" + cardId + "/submit");
+        assertThat(published.getStatusCode().value()).as("body=%s", published.getBody()).isEqualTo(200);
+        post(editor, "/api/wb/cards/" + cardId + "/publish");
+
+        // citation 恰 1 行（仅第 1 个 source 带 assetId）：asset、locator={"ref":…}
+        Long versionId = jdbc.queryForObject("select current_version_id from card where id=?", Long.class, cardId);
+        Integer citationRows = jdbc.queryForObject(
+                "select count(*) from citation where object_type='card_version' and object_id=?", Integer.class, versionId);
+        assertThat(citationRows).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "select asset_id from citation where object_type='card_version' and object_id=?", Long.class, versionId))
+                .isEqualTo(assetId);
+        String locator = jdbc.queryForObject(
+                "select locator::text from citation where object_type='card_version' and object_id=?", String.class, versionId);
+        assertThat(locator).contains("\"ref\"").contains("第12页");
+
+        // GET /api/cards/{id}：sources 长度 2（canonical 形态，assetId/占位来源均在）
+        ResponseEntity<String> detail = http.exchange("/api/cards/" + cardId, HttpMethod.GET, bearer(creator), String.class);
+        assertThat(detail.getStatusCode().value()).as("body=%s", detail.getBody()).isEqualTo(200);
+        assertThat((int) JsonPath.read(detail.getBody(), "$.data.sources.length()")).isEqualTo(2);
+        assertThat((int) JsonPath.read(detail.getBody(), "$.data.sources[0].assetId")).isEqualTo((int) assetId);
+        assertThat((String) JsonPath.read(detail.getBody(), "$.data.sources[1].title")).isEqualTo("口述访谈");
+
+        // citations=[2] 合法（指向第 2 个来源，1-based）→ 追加第 2 版成功
+        ResponseEntity<String> ok = http.exchange("/api/wb/cards/" + cardId + "/content", HttpMethod.PUT,
+                jsonWithToken("{\"content\":" + textContentWithCitations("第二版摘要", "[2]")
+                        + ",\"sources\":" + sources + "}", creator), String.class);
+        assertThat(ok.getStatusCode().value()).as("body=%s", ok.getBody()).isEqualTo(200);
+
+        // citations=[3] 越界（仅 2 个来源）→ 400 带消息
+        ResponseEntity<String> outOfRange = http.exchange("/api/wb/cards/" + cardId + "/content", HttpMethod.PUT,
+                jsonWithToken("{\"content\":" + textContentWithCitations("越界摘要", "[3]")
+                        + ",\"sources\":" + sources + "}", creator), String.class);
+        assertThat(outOfRange.getStatusCode().value()).as("body=%s", outOfRange.getBody()).isEqualTo(400);
+        assertThat((String) JsonPath.read(outOfRange.getBody(), "$.message")).contains("超出来源范围");
+
+        // sources 为空而 content 带 citations → 同样拒绝
+        ResponseEntity<String> noSources = http.exchange("/api/wb/cards/" + cardId + "/content", HttpMethod.PUT,
+                jsonWithToken("{\"content\":" + textContentWithCitations("无来源摘要", "[1]") + "}", creator), String.class);
+        assertThat(noSources.getStatusCode().value()).as("body=%s", noSources.getBody()).isEqualTo(400);
+
+        // assetId=9999（不存在）→ 400
+        String badSources = "[{\"assetId\":9999,\"title\":\"幽灵书\",\"locator\":\"第1页\",\"license\":null}]";
+        ResponseEntity<String> badAsset = http.postForEntity("/api/wb/cards",
+                jsonWithToken(createBody("湖湘文化", "幽灵来源卡", textContent("幽灵摘要"), badSources), creator), String.class);
+        assertThat(badAsset.getStatusCode().value()).as("body=%s", badAsset.getBody()).isEqualTo(400);
+        assertThat((String) JsonPath.read(badAsset.getBody(), "$.message")).contains("知识单元不存在");
+    }
+
+    @Test
+    void versionsListed() {
+        String creator = newUserToken("13800001014", "创作者癸", "CREATOR");
+        ResponseEntity<String> created = http.postForEntity("/api/wb/cards",
+                jsonWithToken(createBody("书院地标", "版本历史卡", textContent("第一版摘要")), creator), String.class);
+        long cardId = ((Number) JsonPath.read(created.getBody(), "$.data.cardId")).longValue();
+        for (int v = 2; v <= 3; v++) {
+            http.exchange("/api/wb/cards/" + cardId + "/content", HttpMethod.PUT,
+                    jsonWithToken("{\"content\":" + textContent("第" + v + "版摘要") + "}", creator), String.class);
+        }
+
+        ResponseEntity<String> res = http.exchange("/api/wb/cards/" + cardId + "/versions",
+                HttpMethod.GET, bearer(creator), String.class);
+        assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(200);
+        assertThat((int) JsonPath.read(res.getBody(), "$.data.length()")).isEqualTo(3);
+        // versionNo 倒序
+        List<Integer> versionNos = JsonPath.read(res.getBody(), "$.data[*].versionNo");
+        assertThat(versionNos).containsExactly(3, 2, 1);
+        List<String> nicknames = JsonPath.read(res.getBody(), "$.data[*].createdByNickname");
+        assertThat(nicknames).containsOnly("创作者癸");
+        List<String> createdAts = JsonPath.read(res.getBody(), "$.data[*].createdAt");
+        assertThat(createdAts).hasSize(3).doesNotContainNull();
     }
 }

@@ -6,8 +6,10 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.ke.domain.card.content.CardContent;
 import com.ke.domain.card.content.CardContentValidator;
+import com.ke.domain.card.content.CitationIndexValidator;
 import com.ke.domain.card.content.CompareCardContent;
 import com.ke.domain.card.content.TaskCardContent;
 import com.ke.domain.card.content.TextCardContent;
@@ -16,10 +18,16 @@ import com.ke.domain.enums.CardStatus;
 import com.ke.domain.enums.ReviewStatus;
 import com.ke.infra.entity.CardEntity;
 import com.ke.infra.entity.CardVersionEntity;
+import com.ke.infra.entity.CitationEntity;
+import com.ke.infra.entity.KeUserEntity;
 import com.ke.infra.entity.ReviewTaskEntity;
 import com.ke.infra.mapper.CardMapper;
 import com.ke.infra.mapper.CardVersionMapper;
+import com.ke.infra.mapper.CitationMapper;
+import com.ke.infra.mapper.KeUserMapper;
+import com.ke.infra.mapper.KnowledgeAssetMapper;
 import com.ke.infra.mapper.ReviewTaskMapper;
+import com.ke.service.card.dto.SourceRef;
 import com.ke.service.common.BadRequestException;
 import com.ke.service.common.NotFoundException;
 import com.ke.service.review.AuditId;
@@ -32,11 +40,18 @@ import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 卡片生命周期（FR-C07/C08）：
  * - 写路径一律先 {@link CardContentValidator#parseAndValidate}，再把校验后的 CardContent
  *   重序列化为规范 JSON 存库（丢弃未知字段，读出即 wire format）；
+ * - sources 契约：content 内 citations[n] 是 1-based 索引指向 sources 数组，写前经
+ *   {@link CitationIndexValidator#check} 对齐数量；sources 同样以规范 JSON 存 card_version.sources，
+ *   带 assetId 的来源须指向真实知识单元，发布时建 citation 行（FR-O02）；
  * - card_version 只 INSERT（版本不可变，DB 触发器兜底），version_no = max+1（事务内）；
  * - 状态流转严格走 {@link CardStatus#canComeFrom}（方向：目标.canComeFrom(来源)），
  *   非法来源 → 400；不存在/非 PUBLISHED 在公开端点 → 404（不泄露存在性）；
@@ -51,13 +66,20 @@ public class CardService {
     private final CardMapper cards;
     private final CardVersionMapper versions;
     private final ReviewTaskMapper reviewTasks;
+    private final KeUserMapper users;
+    private final KnowledgeAssetMapper assets;
+    private final CitationMapper citations;
     private final ObjectMapper objectMapper;
 
     public CardService(CardMapper cards, CardVersionMapper versions, ReviewTaskMapper reviewTasks,
+                       KeUserMapper users, KnowledgeAssetMapper assets, CitationMapper citations,
                        ObjectMapper objectMapper) {
         this.cards = cards;
         this.versions = versions;
         this.reviewTasks = reviewTasks;
+        this.users = users;
+        this.assets = assets;
+        this.citations = citations;
         this.objectMapper = objectMapper;
     }
 
@@ -71,15 +93,20 @@ public class CardService {
     }
 
     public record CardDetail(Long id, String theme, String templateType, String title, Integer versionNo,
-                             JsonNode content, OffsetDateTime updatedAt) {
+                             JsonNode content, JsonNode sources, OffsetDateTime updatedAt) {
+    }
+
+    /** 版本历史 item（工作台）：versionNo 倒序，created_by 关联昵称 */
+    public record VersionItem(Integer versionNo, String createdByNickname, OffsetDateTime createdAt) {
     }
 
     // ---------- 写路径（工作台） ----------
 
     @Transactional
-    public Long create(String theme, String templateType, String title, String contentJson, long userId) {
+    public Long create(String theme, String templateType, String title, JsonNode content,
+                       List<SourceRef> sources, long userId) {
         String type = normalizeType(templateType);
-        String canonical = canonicalJson(type, contentJson);
+        WritePayload payload = canonicalize(type, content, sources);
         CardEntity card = new CardEntity();
         card.setTheme(theme);
         card.setTemplateType(type);
@@ -88,17 +115,17 @@ public class CardService {
         card.setMaintainerId(userId);
         card.setSort(0);
         cards.insert(card);
-        insertVersion(card.getId(), 1, canonical, userId);
+        insertVersion(card.getId(), 1, payload, userId);
         return card.getId();
     }
 
     /** 只追加新版本（不改旧行），返回新版本号 */
     @Transactional
-    public int saveContent(long cardId, String contentJson, long userId) {
+    public int saveContent(long cardId, JsonNode content, List<SourceRef> sources, long userId) {
         CardEntity card = requireCard(cardId);
-        String canonical = canonicalJson(card.getTemplateType(), contentJson);
+        WritePayload payload = canonicalize(card.getTemplateType(), content, sources);
         int next = nextVersionNo(cardId);
-        insertVersion(cardId, next, canonical, userId);
+        insertVersion(cardId, next, payload, userId);
         card.setUpdatedAt(OffsetDateTime.now());
         cards.updateById(card);
         return next;
@@ -136,6 +163,8 @@ public class CardService {
         card.setSummaryText(truncate(summaryOf(content), SUMMARY_MAX));
         card.setUpdatedAt(OffsetDateTime.now());
         cards.updateById(card);
+        // 卡→资产挂接（FR-O02）：为当前版本的带 assetId 来源建 citation 行（幂等：先清后建）
+        linkCitations(latest.getId(), latest.getSources());
         return card;
     }
 
@@ -193,13 +222,69 @@ public class CardService {
         }
         try {
             return new CardDetail(card.getId(), card.getTheme(), card.getTemplateType(), card.getTitle(),
-                    version.getVersionNo(), objectMapper.readTree(version.getContentJson()), card.getUpdatedAt());
+                    version.getVersionNo(), objectMapper.readTree(version.getContentJson()),
+                    sourcesNode(version.getSources()), card.getUpdatedAt());
         } catch (JsonProcessingException e) {
             throw new BadRequestException("卡片内容损坏");
         }
     }
 
+    /** 版本历史（工作台）：versionNo 倒序，created_by 关联 ke_user.nickname */
+    @Transactional(readOnly = true)
+    public List<VersionItem> versionsOf(long cardId) {
+        requireCard(cardId);
+        List<CardVersionEntity> rows = versions.selectList(new LambdaQueryWrapper<CardVersionEntity>()
+                .eq(CardVersionEntity::getCardId, cardId)
+                .orderByDesc(CardVersionEntity::getVersionNo));
+        Set<Long> userIds = rows.stream()
+                .map(CardVersionEntity::getCreatedBy)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> nicknames = userIds.isEmpty() ? Map.of()
+                : users.selectBatchIds(userIds).stream()
+                        .collect(Collectors.toMap(KeUserEntity::getId, u ->
+                                u.getNickname() == null ? "" : u.getNickname()));
+        return rows.stream()
+                .map(v -> new VersionItem(v.getVersionNo(),
+                        v.getCreatedBy() == null ? null : nicknames.get(v.getCreatedBy()), v.getCreatedAt()))
+                .toList();
+    }
+
     // ---------- 内部 ----------
+
+    /** 一次写版本的规范化产物：content 与 sources 的规范 JSON（null = 无来源） */
+    private record WritePayload(String contentJson, String sourcesJson) {
+    }
+
+    /**
+     * 写前规范化（create/saveContent 共用）：
+     * ① content 必须是 JSON 对象；② 模板结构校验后重序列化为规范 camelCase JSON；
+     * ③ citations 索引对齐 sources 数量（1-based）；④ assetId 非空的来源须指向真实知识单元；
+     * ⑤ sources 同样产出规范 JSON（空列表存 NULL）。
+     */
+    private WritePayload canonicalize(String templateType, JsonNode content, List<SourceRef> sources) {
+        if (content == null || content.isNull() || !content.isObject()) {
+            throw new BadRequestException("content 必须是 JSON 对象");
+        }
+        List<SourceRef> safeSources = sources == null ? List.of() : sources;
+        CardContent parsed = CardContentValidator.parseAndValidate(templateType, content.toString());
+        CitationIndexValidator.check(parsed, safeSources.size());
+        checkAssetRefs(safeSources);
+        try {
+            String sourcesJson = safeSources.isEmpty() ? null : objectMapper.writeValueAsString(safeSources);
+            return new WritePayload(objectMapper.writeValueAsString(parsed), sourcesJson);
+        } catch (JsonProcessingException e) {
+            throw new BadRequestException("content_json 序列化失败");
+        }
+    }
+
+    private void checkAssetRefs(List<SourceRef> sources) {
+        for (SourceRef source : sources) {
+            if (source != null && source.assetId() != null && assets.selectById(source.assetId()) == null) {
+                throw new BadRequestException("来源引用的知识单元不存在");
+            }
+        }
+    }
 
     private CardEntity requireCard(long cardId) {
         CardEntity card = cards.selectById(cardId);
@@ -221,13 +306,65 @@ public class CardService {
         return card;
     }
 
-    private void insertVersion(long cardId, int versionNo, String contentJson, long userId) {
+    private void insertVersion(long cardId, int versionNo, WritePayload payload, long userId) {
         CardVersionEntity v = new CardVersionEntity();
         v.setCardId(cardId);
         v.setVersionNo(versionNo);
-        v.setContentJson(contentJson);
+        v.setContentJson(payload.contentJson());
+        v.setSources(payload.sourcesJson());
         v.setCreatedBy(userId);
         versions.insert(v);
+    }
+
+    /**
+     * 卡→资产挂接（FR-O02）：object_type='card_version'、object_id=版本 id。
+     * 先 DELETE 该版本的既有行再 INSERT（重复发布幂等，不产生重复挂接）；
+     * 每个带 assetId 的 source 一行，locator 记为 {"ref": <来源定位>}，quote 留空。
+     */
+    private void linkCitations(long versionId, String sourcesJson) {
+        citations.delete(new QueryWrapper<CitationEntity>()
+                .eq("object_type", "card_version")
+                .eq("object_id", versionId));
+        if (sourcesJson == null || sourcesJson.isBlank()) {
+            return;
+        }
+        JsonNode sources;
+        try {
+            sources = objectMapper.readTree(sourcesJson);
+        } catch (JsonProcessingException e) {
+            throw new BadRequestException("卡片来源数据损坏");
+        }
+        if (sources == null || !sources.isArray()) {
+            return;
+        }
+        for (JsonNode source : sources) {
+            JsonNode assetId = source.get("assetId");
+            if (assetId == null || assetId.isNull() || !assetId.canConvertToLong()) {
+                continue;
+            }
+            CitationEntity citation = new CitationEntity();
+            citation.setAssetId(assetId.longValue());
+            ObjectNode locator = objectMapper.createObjectNode();
+            locator.put("ref", source.path("locator").asText(null));
+            try {
+                citation.setLocator(objectMapper.writeValueAsString(locator));
+            } catch (JsonProcessingException e) {
+                throw new BadRequestException("来源定位序列化失败");
+            }
+            citation.setQuote(null);
+            citation.setObjectType("card_version");
+            citation.setObjectId(versionId);
+            citations.insert(citation);
+        }
+    }
+
+    /** sources 存库 JSON → 响应节点；无来源时给空数组（契约恒有 sources 字段） */
+    private JsonNode sourcesNode(String sourcesJson) throws JsonProcessingException {
+        if (sourcesJson == null || sourcesJson.isBlank()) {
+            return objectMapper.createArrayNode();
+        }
+        JsonNode node = objectMapper.readTree(sourcesJson);
+        return node.isArray() ? node : objectMapper.createArrayNode();
     }
 
     /** MVP 并发策略：事务内 max(version_no)+1；UNIQUE(card_id, version_no) 兜底 */
@@ -236,16 +373,6 @@ public class CardService {
                 .select("COALESCE(MAX(version_no), 0)").eq("card_id", cardId));
         Number value = (Number) max.get(0);
         return value.intValue() + 1;
-    }
-
-    /** 校验 + 规范化：未知字段丢弃，字段序与类型由 record 决定（存库即 wire format） */
-    private String canonicalJson(String templateType, String contentJson) {
-        CardContent content = CardContentValidator.parseAndValidate(templateType, contentJson);
-        try {
-            return objectMapper.writeValueAsString(content);
-        } catch (JsonProcessingException e) {
-            throw new BadRequestException("content_json 序列化失败");
-        }
     }
 
     private static String normalizeType(String templateType) {
