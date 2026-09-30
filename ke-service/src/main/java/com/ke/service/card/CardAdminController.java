@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -49,6 +50,18 @@ public class CardAdminController {
 
     public record SaveContentReq(@NotNull JsonNode content,
                                  @Valid List<SourceRef> sources) {
+    }
+
+    /**
+     * 工作台管理列表（FR-C07 界面）：offset 分页（page 从 1 起、size ≤100 默认 20），
+     * status 可空白名单筛选（非法 → 400），q 对标题 ILIKE，updated_at 倒序。
+     */
+    @GetMapping
+    public ApiResponse<CardService.WbCardPage> list(@RequestParam(required = false) String status,
+                                                    @RequestParam(required = false) String q,
+                                                    @RequestParam(defaultValue = "1") int page,
+                                                    @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(cards.listForWorkbench(status, q, page, size));
     }
 
     @PostMapping

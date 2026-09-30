@@ -1,6 +1,7 @@
 package com.ke.card;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 
@@ -17,6 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.PathNotFoundException;
 import com.ke.support.ItDb;
 
 /**
@@ -506,5 +508,104 @@ class CardLifecycleIT {
                 jsonWithToken(createBody("长".repeat(51), "超长专题卡", textContent("边界摘要")), creator), String.class);
         assertThat(themeTooLong.getStatusCode().value()).as("body=%s", themeTooLong.getBody()).isEqualTo(400);
         assertThat((String) JsonPath.read(themeTooLong.getBody(), "$.message")).contains("theme");
+    }
+
+    /** 工作台建卡（TEXT）辅助:返回 cardId */
+    private long createWorkbenchCard(String token, String theme, String title) {
+        ResponseEntity<String> created = http.postForEntity("/api/wb/cards",
+                jsonWithToken(createBody(theme, title, textContent(title + "摘要")), token), String.class);
+        assertThat(created.getStatusCode().value()).as("body=%s", created.getBody()).isEqualTo(201);
+        return ((Number) JsonPath.read(created.getBody(), "$.data.cardId")).longValue();
+    }
+
+    @Test
+    void workbenchListFiltersPaginatesAndValidates() {
+        String creator = newUserToken("13800001021", "列表创作者", "CREATOR");
+        String editor = newUserToken("13800001022", "列表编辑", "EDITOR");
+
+        // 三种状态各一张:DRAFT(只建)、PENDING(送审)、PUBLISHED(送审+发布)。
+        // 标题统一带「筛选卡」记号:同库其他测试方法也会造卡,用 q 记号把断言圈定在本用例数据内。
+        long draftId = createWorkbenchCard(creator, "湖湘文化", "筛选卡草稿");
+        long pendingId = createWorkbenchCard(creator, "湖湘文化", "筛选卡待审");
+        assertThat(post(creator, "/api/wb/cards/" + pendingId + "/submit").getStatusCode().value()).isEqualTo(200);
+        long publishedId = createWorkbenchCard(creator, "湖湘文化", "筛选卡已发");
+        assertThat(post(creator, "/api/wb/cards/" + publishedId + "/submit").getStatusCode().value()).isEqualTo(200);
+        assertThat(post(editor, "/api/wb/cards/" + publishedId + "/publish").getStatusCode().value()).isEqualTo(200);
+        // 固定 updated_at 为未来相对间隔（DB 时钟统一写入）:①列表按 updated_at DESC 断言不受
+        // DB default now()（库钟）与流转写入 OffsetDateTime.now()（JVM 钟）的宿主/WSL 时钟偏差影响;
+        // ②未来时间让 3 张卡稳定排在本类全部造卡之前,不被同库其他用例更晚的数据挤出首页
+        jdbc.update("update card set updated_at = now() + interval '10 minutes' where id=?", publishedId);
+        jdbc.update("update card set updated_at = now() + interval '9 minutes' where id=?", pendingId);
+        jdbc.update("update card set updated_at = now() + interval '8 minutes' where id=?", draftId);
+
+        // 无参数全集含 3 张,updated_at DESC、id DESC(发布卡最近更新,其后待审、草稿),page/size 回显默认值
+        ResponseEntity<String> all = http.exchange("/api/wb/cards", HttpMethod.GET, bearer(creator), String.class);
+        assertThat(all.getStatusCode().value()).as("body=%s", all.getBody()).isEqualTo(200);
+        assertThat(listIds(all.getBody())).containsSubsequence((int) publishedId, (int) pendingId, (int) draftId);
+        assertThat(((Number) JsonPath.read(all.getBody(), "$.data.page")).intValue()).isEqualTo(1);
+        assertThat(((Number) JsonPath.read(all.getBody(), "$.data.size")).intValue()).isEqualTo(20);
+
+        // q ILIKE title 圈定本用例 3 张:倒序与 total/page/size 契约
+        ResponseEntity<String> marked = http.exchange("/api/wb/cards?q={q}", HttpMethod.GET,
+                bearer(creator), String.class, "筛选卡");
+        assertThat(marked.getStatusCode().value()).isEqualTo(200);
+        assertThat(listIds(marked.getBody()))
+                .containsExactly((int) publishedId, (int) pendingId, (int) draftId);
+        assertThat(((Number) JsonPath.read(marked.getBody(), "$.data.total")).intValue()).isEqualTo(3);
+        assertThat(((Number) JsonPath.read(marked.getBody(), "$.data.size")).intValue()).isEqualTo(20);
+
+        // 行字段:已发卡带 currentVersionNo=1、维护者昵称、模板/主题
+        List<String> titles = JsonPath.read(marked.getBody(), "$.data.items[?(@.id == " + publishedId + ")].title");
+        assertThat(titles).containsExactly("筛选卡已发");
+        List<String> themes = JsonPath.read(marked.getBody(), "$.data.items[?(@.id == " + publishedId + ")].theme");
+        assertThat(themes).containsExactly("湖湘文化");
+        List<String> templates = JsonPath.read(marked.getBody(),
+                "$.data.items[?(@.id == " + publishedId + ")].templateType");
+        assertThat(templates).containsExactly("TEXT");
+        List<Integer> versionNos = JsonPath.read(marked.getBody(),
+                "$.data.items[?(@.id == " + publishedId + ")].currentVersionNo");
+        assertThat(versionNos).containsExactly(1);
+        List<String> nicknames = JsonPath.read(marked.getBody(),
+                "$.data.items[?(@.id == " + publishedId + ")].maintainerNickname");
+        assertThat(nicknames).containsExactly("列表创作者");
+
+        // status=PUBLISHED 只回该状态
+        ResponseEntity<String> publishedOnly = http.exchange("/api/wb/cards?status=PUBLISHED&q={q}",
+                HttpMethod.GET, bearer(creator), String.class, "筛选卡");
+        assertThat(publishedOnly.getStatusCode().value()).isEqualTo(200);
+        assertThat(listIds(publishedOnly.getBody())).containsExactly((int) publishedId);
+        assertThat((String) JsonPath.read(publishedOnly.getBody(), "$.data.items[0].status")).isEqualTo("PUBLISHED");
+
+        // PENDING 卡 current_version_id 未回填 → currentVersionNo 省略（jackson non_null）
+        assertThat(jdbc.queryForObject("select current_version_id from card where id=?", Long.class, pendingId))
+                .isNull();
+        ResponseEntity<String> pendingOnly = http.exchange("/api/wb/cards?status=PENDING&q={q}",
+                HttpMethod.GET, bearer(creator), String.class, "筛选卡");
+        assertThat(listIds(pendingOnly.getBody())).containsExactly((int) pendingId);
+        String pendingBody = pendingOnly.getBody();
+        assertThatThrownBy(() -> JsonPath.<Object>read(pendingBody, "$.data.items[0].currentVersionNo"))
+                .isInstanceOf(PathNotFoundException.class);
+
+        // 更窄的 title 子串只命中已发卡
+        ResponseEntity<String> byNarrow = http.exchange("/api/wb/cards?q={q}", HttpMethod.GET,
+                bearer(creator), String.class, "已发");
+        assertThat(listIds(byNarrow.getBody())).containsExactly((int) publishedId);
+
+        // offset 分页:size=2 首页 2 条,total 恒为全量 3;第二页剩 1 条且 page 回显
+        ResponseEntity<String> page1 = http.exchange("/api/wb/cards?size=2&q={q}", HttpMethod.GET,
+                bearer(creator), String.class, "筛选卡");
+        assertThat(listIds(page1.getBody())).hasSize(2);
+        assertThat(((Number) JsonPath.read(page1.getBody(), "$.data.total")).intValue()).isEqualTo(3);
+        ResponseEntity<String> page2 = http.exchange("/api/wb/cards?size=2&page=2&q={q}", HttpMethod.GET,
+                bearer(creator), String.class, "筛选卡");
+        assertThat(listIds(page2.getBody())).hasSize(1).doesNotContainAnyElementsOf(listIds(page1.getBody()));
+        assertThat(((Number) JsonPath.read(page2.getBody(), "$.data.page")).intValue()).isEqualTo(2);
+
+        // 非法 status → 400 envelope
+        ResponseEntity<String> badStatus = http.exchange("/api/wb/cards?status=FOO", HttpMethod.GET,
+                bearer(creator), String.class);
+        assertThat(badStatus.getStatusCode().value()).as("body=%s", badStatus.getBody()).isEqualTo(400);
+        assertThat((Integer) JsonPath.read(badStatus.getBody(), "$.code")).isEqualTo(400);
+        assertThat((String) JsonPath.read(badStatus.getBody(), "$.traceId")).isNotBlank();
     }
 }

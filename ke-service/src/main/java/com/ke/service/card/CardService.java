@@ -102,6 +102,18 @@ public class CardService {
     public record VersionItem(Integer versionNo, String createdByNickname, OffsetDateTime createdAt) {
     }
 
+    /** 工作台管理列表页（FR-C07 界面）：offset 分页契约（page 从 1 起；total 恒在） */
+    public record WbCardPage(List<WbCardListItem> items, long total, int page, int size) {
+    }
+
+    /**
+     * 列表行：currentVersionNo 取 current_version_id 对应 version_no（DRAFT/PENDING 未回填 → null，
+     * 序列化时省略）；maintainerNickname 关联 ke_user.nickname。
+     */
+    public record WbCardListItem(Long id, String theme, String templateType, String title, String status,
+                                 Integer currentVersionNo, String maintainerNickname, OffsetDateTime updatedAt) {
+    }
+
     // ---------- 写路径（工作台） ----------
 
     @Transactional
@@ -291,6 +303,73 @@ public class CardService {
                 .map(v -> new VersionItem(v.getVersionNo(),
                         v.getCreatedBy() == null ? null : nicknames.get(v.getCreatedBy()), v.getCreatedAt()))
                 .toList();
+    }
+
+    // ---------- 读路径（工作台管理列表，FR-C07 界面） ----------
+
+    /** offset 分页上限与默认值（size ≤ 100，默认 20） */
+    static final int WB_MAX_PAGE_SIZE = 100;
+    static final int WB_DEFAULT_PAGE_SIZE = 20;
+
+    /** status 筛选白名单，非法取值 → 400 */
+    private static final Set<String> WB_STATUSES = Set.of("DRAFT", "PENDING", "PUBLISHED", "DISABLED");
+
+    private static QueryWrapper<CardEntity> wbFilter(String status, String q) {
+        QueryWrapper<CardEntity> wrapper = new QueryWrapper<>();
+        if (status != null) {
+            wrapper.eq("status", status);
+        }
+        if (q != null && !q.isBlank()) {
+            wrapper.apply("title ILIKE {0}", "%" + q.trim() + "%");
+        }
+        return wrapper;
+    }
+
+    /**
+     * 工作台管理列表（FR-C07）：与探索端不同，全部状态可见（工作台要管草稿/待审/停用）；
+     * status 可空白名单筛选、q 对 title ILIKE；updated_at DESC + id DESC 倒序；
+     * offset 分页（page 从 1 起，size 夹取 [1,100]）；currentVersionNo 与维护者昵称
+     * 先页查 card 再 in 批量补齐（防 N+1）。
+     */
+    @Transactional(readOnly = true)
+    public WbCardPage listForWorkbench(String status, String q, int page, int size) {
+        String safeStatus = null;
+        if (status != null && !status.isBlank()) {
+            String normalized = status.trim().toUpperCase(Locale.ROOT);
+            if (!WB_STATUSES.contains(normalized)) {
+                throw new BadRequestException("非法状态筛选: " + status);
+            }
+            safeStatus = normalized;
+        }
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), WB_MAX_PAGE_SIZE);
+
+        long total = cards.selectCount(wbFilter(safeStatus, q));
+        QueryWrapper<CardEntity> listWrapper = wbFilter(safeStatus, q)
+                .orderByDesc("updated_at", "id")
+                .last("LIMIT " + safeSize + " OFFSET " + (long) (safePage - 1) * safeSize);
+        List<CardEntity> rows = cards.selectList(listWrapper);
+
+        Set<Long> versionIds = rows.stream().map(CardEntity::getCurrentVersionId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, Integer> versionNos = versionIds.isEmpty() ? Map.of()
+                : versions.selectBatchIds(versionIds).stream()
+                        .collect(Collectors.toMap(CardVersionEntity::getId, CardVersionEntity::getVersionNo));
+        Set<Long> maintainerIds = rows.stream().map(CardEntity::getMaintainerId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, String> nicknames = maintainerIds.isEmpty() ? Map.of()
+                : users.selectBatchIds(maintainerIds).stream()
+                        .collect(Collectors.toMap(KeUserEntity::getId,
+                                u -> u.getNickname() == null ? "" : u.getNickname()));
+
+        List<WbCardListItem> items = rows.stream()
+                .map(c -> new WbCardListItem(c.getId(), c.getTheme(), c.getTemplateType(), c.getTitle(),
+                        c.getStatus(),
+                        c.getCurrentVersionId() == null ? null : versionNos.get(c.getCurrentVersionId()),
+                        c.getMaintainerId() == null ? null : nicknames.get(c.getMaintainerId()),
+                        c.getUpdatedAt()))
+                .toList();
+        return new WbCardPage(items, total, safePage, safeSize);
     }
 
     // ---------- 内部 ----------
