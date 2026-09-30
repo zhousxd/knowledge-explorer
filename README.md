@@ -19,6 +19,27 @@ knowledge-explorer-design/
     └── styleguide.html       # 可视化 UI 规范页（与 04 文档同源，色板/组件/状态全景）
 ```
 
+## 本地环境（WSL PostgreSQL / Redis）
+
+开发与测试直接使用 WSL 中的 PostgreSQL 与 Redis，Windows 侧经 `localhost` 访问，不使用 Docker。
+
+- **PostgreSQL 16.10**：`localhost:5432`，用户 `ke` / 密码 `ke`；业务库 `ke`，测试库 `ke_test`（`ke_test` 为共享测试库，测试运行前会被重置：`DROP SCHEMA public CASCADE` 后由 Flyway 重新迁移）
+- **Redis 6.0.16**：`localhost:6379`，密码经环境变量 `KE_REDIS_PASSWORD` 注入（取自仓库根 `.env`，该文件已 gitignore，请勿把密码明文写入任何入库文件）
+
+一次性建库语句（WSL 内执行）：
+
+```bash
+sudo -u postgres psql -c "CREATE USER ke WITH PASSWORD 'ke' CREATEDB;"
+sudo -u postgres createdb -O ke ke
+sudo -u postgres createdb -O ke ke_test
+```
+
+两个服务随 WSL 自启；若未运行，执行：
+
+```bash
+wsl -e bash -c "sudo service postgresql start && sudo service redis-server start"
+```
+
 ## 快速查看原型
 
 两个原型均为**单文件、零依赖**的 HTML，直接用浏览器打开即可（无需构建、可离线）：
