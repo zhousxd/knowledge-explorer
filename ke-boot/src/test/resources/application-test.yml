@@ -1,7 +1,6 @@
-# 共享测试配置（对所有测试 profile 生效，置于无 profile 限定文档）。
-# 各测试类用 @ActiveProfiles 显式声明 profile：
-#   - "test"     → MockLlmGateway 生效（不打真实 LLM）
-#   - "mockllm"  → SpringAiLlmGateway 生效，配合 @DynamicPropertySource 注入 MockWebServer 地址
+# test profile 专属配置（@ActiveProfiles("test") 加载）。
+# 只放 test 需要覆盖/必须存在的键；主 application.yml（虚拟线程、jackson、ke.agent.*）
+# 不再被本目录同名文件遮蔽，测试与主配置共享同一基座。
 # 注意：不要在此写 spring.profiles.active——@ActiveProfiles 走 additionalProfiles，
 # 若配置文件再激活 test 会与 mockllm 叠加，导致两个 LlmGateway bean 同时存在。
 spring:

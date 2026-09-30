@@ -3,7 +3,6 @@ package com.ke.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -14,7 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
 
 import com.jayway.jsonpath.JsonPath;
-import com.ke.support.ItDbReset;
+import com.ke.support.ItDb;
 
 /**
  * 安全边界与错误处理 envelope 约定：
@@ -23,10 +22,9 @@ import com.ke.support.ItDbReset;
  * - traceId 每请求唯一（TraceIdFilter 先于安全链写入并在 finally 清理，
  *   否则 Tomcat 工作线程复用时相邻请求共享同一个 traceId）。
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "ke.test.security-error-it = true")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
-@ExtendWith(ItDbReset.class)
+@ItDb
 class SecurityErrorIT {
 
     @Autowired

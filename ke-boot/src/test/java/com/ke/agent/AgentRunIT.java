@@ -1,10 +1,9 @@
 package com.ke.agent;
 
 import com.ke.service.agent.AgentRunService;
-import com.ke.support.ItDbReset;
+import com.ke.support.ItDb;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -16,14 +15,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * agent_run 异步执行骨架往返：submit 落库 QUEUED → 虚拟线程异步执行 → DONE + latency/model。
  * 直连 WSL 的 ke_test（无 Testcontainers）；MockLlmGateway 秒回，Awaitility 5s 是异步路径的上界。
- * 本测试写数据，类开始前由 ItDbReset 清库、Flyway 重建。
- * properties 标记让本类与 AuthFlowIT 持有不同的 Spring 上下文缓存 key：
- * 清库后共享缓存上下文不会重跑 Flyway，后执行的类会找不到表（顺序相关的失败）。
+ * 本测试写数据：@ItDb 在类开始前清库重建，类结束后 @DirtiesContext 关闭上下文，
+ * 防止后续类复用 Flyway 状态已被清库作废的缓存上下文（顺序相关的失败）。
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "ke.test.agent-run-it = true")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
-@ExtendWith(ItDbReset.class)
+@ItDb
 class AgentRunIT {
 
     @Autowired

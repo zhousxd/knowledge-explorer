@@ -1,0 +1,25 @@
+# mockllm profile 专属配置（@ActiveProfiles("mockllm") 加载，供 SpringAiLlmGatewayIT 使用）。
+# 与 application-test.yml 的基座键刻意重复（约 10 行）以实现 profile 隔离：
+# MockLlmGateway 是 @Profile("test")，绝不能在 mockllm profile 下同时激活。
+# base-url 由测试的 @DynamicPropertySource 注入 MockWebServer 地址。
+spring:
+  datasource:
+    # stringtype=unspecified：JSONB 列（agent_run.input_json 等）以字符串参数写入，由 PG 推断类型
+    url: jdbc:postgresql://localhost:5432/ke_test?stringtype=unspecified
+    username: ke
+    password: ke
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  ai:
+    openai:
+      api-key: ${KE_LLM_API_KEY:test-dummy-key}
+
+ke:
+  jwt:
+    secret: test-secret-key-32-bytes!!test-only!!
+    access-ttl: 2h
+    refresh-ttl: 7d
+  llm:
+    generator-model: test-generator
+    router-model: test-router
