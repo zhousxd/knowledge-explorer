@@ -6,7 +6,17 @@
     "declaration-property-value-disallowed-list": {
       "color": ["/^#/", "/^rgb/a?\\(/", "/^hsl/a?\\(/"],
       "background-color": ["/^#/", "/^rgb/a?\\(/"],
-      "border-color": ["/^#/"]
+      "border-color": ["/^#/"],
+      "background": ["/^#/", "/^rgb/a?\\(/", "/^hsl/a?\\(/"],
+      "border": ["/^#/", "/^rgb/a?\\(/", "/^hsl/a?\\(/"],
+      "border-top-color": ["/^#/", "/^rgb/a?\\(/", "/^hsl/a?\\(/"],
+      "border-right-color": ["/^#/", "/^rgb/a?\\(/", "/^hsl/a?\\(/"],
+      "border-bottom-color": ["/^#/", "/^rgb/a?\\(/", "/^hsl/a?\\(/"],
+      "border-left-color": ["/^#/", "/^rgb/a?\\(/", "/^hsl/a?\\(/"],
+      "box-shadow": ["/^#/", "/^rgb/a?\\(/", "/^hsl/a?\\(/"],
+      "fill": ["/^#/", "/^rgb/a?\\(/", "/^hsl/a?\\(/"],
+      "stroke": ["/^#/", "/^rgb/a?\\(/", "/^hsl/a?\\(/"],
+      "outline": ["/^#/", "/^rgb/a?\\(/", "/^hsl/a?\\(/"]
     }
   },
   "overrides": [

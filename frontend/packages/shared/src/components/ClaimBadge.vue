@@ -20,7 +20,7 @@ const conf = CONF[props.type];
 
 <style scoped>
 .claim { display: inline-flex; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: var(--ke-radius-xs); border: 1px solid; }
-.c-fact { background: var(--ke-fact-soft); color: var(--ke-fact); border-color: rgb(31 122 77 / 28%); }
-.c-synth { background: var(--ke-synth-soft); color: var(--ke-synth); border-color: rgb(14 116 144 / 28%); }
-.c-gen { background: var(--ke-gen-soft); color: var(--ke-gen); border-color: rgb(168 85 16 / 28%); }
+.c-fact { background: var(--ke-fact-soft); color: var(--ke-fact); border-color: color-mix(in srgb, var(--ke-fact) 28%, transparent); }
+.c-synth { background: var(--ke-synth-soft); color: var(--ke-synth); border-color: color-mix(in srgb, var(--ke-synth) 28%, transparent); }
+.c-gen { background: var(--ke-gen-soft); color: var(--ke-gen); border-color: color-mix(in srgb, var(--ke-gen) 28%, transparent); }
 </style>
