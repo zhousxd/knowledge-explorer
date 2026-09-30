@@ -31,7 +31,7 @@ import com.ke.service.common.NotFoundException;
  * <ul>
  *   <li>队列 item：id/objectType/objectId/action/status/createdAt + summary（CARD＝
  *       标题 · 模板类型 · 提交人昵称）+ precheck（CARD＝contentValid 当前版本内容可过校验、
- *       hasSources 来源非空；ENTRY 等 Phase 1 Task 6 接入后才有意义，暂为 null）；</li>
+ *       hasSources 来源非空；ENTRY 等 Phase 6（Task 28）接入后才有意义，暂为 null）；</li>
  *   <li>approve：任务置 APPROVED 并委托对象动作（CARD → {@link CardService#publish}，
  *       其 @Audited 切面落 CARD_PUBLISH；ENTRY → 400 待 Task 6）；</li>
  *   <li>reject：notes 必填，任务置 REJECTED，CARD 经 returnToDraft 回 DRAFT；</li>
@@ -211,7 +211,7 @@ public class ReviewService {
     private void dispatch(ReviewTaskEntity task) {
         switch (task.getObjectType()) {
             case "CARD" -> cardService.publish(task.getObjectId());
-            case "ENTRY" -> throw new BadRequestException("入口审核在 Task 6 接入");
+            case "ENTRY" -> throw new BadRequestException("入口审核在 Phase 6（Task 28）接入");
             default -> throw new BadRequestException("未知审核对象类型: " + task.getObjectType());
         }
     }
@@ -219,7 +219,7 @@ public class ReviewService {
     private void dispatchReturn(ReviewTaskEntity task) {
         switch (task.getObjectType()) {
             case "CARD" -> cardService.returnToDraft(task.getObjectId());
-            case "ENTRY" -> throw new BadRequestException("入口审核在 Task 6 接入");
+            case "ENTRY" -> throw new BadRequestException("入口审核在 Phase 6（Task 28）接入");
             default -> throw new BadRequestException("未知审核对象类型: " + task.getObjectType());
         }
     }
