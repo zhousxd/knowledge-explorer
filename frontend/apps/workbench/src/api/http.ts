@@ -30,20 +30,22 @@ export const TOKEN_KEY = 'ke_wb_token';
 
 const BASE_URL = '/api';
 
-function buildHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+function buildHeaders(isForm: boolean): Record<string, string> {
+  // FormData(文件上传)不能手动设 Content-Type:由浏览器自动生成含 boundary 的 multipart 头
+  const headers: Record<string, string> = isForm ? {} : { 'Content-Type': 'application/json' };
   const token = localStorage.getItem(TOKEN_KEY);
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const isForm = body instanceof FormData;
   let resp: Response;
   try {
     resp = await fetch(`${BASE_URL}${path}`, {
       method,
-      headers: buildHeaders(),
-      body: body === undefined ? undefined : JSON.stringify(body)
+      headers: buildHeaders(isForm),
+      body: body === undefined ? undefined : isForm ? body : JSON.stringify(body)
     });
   } catch {
     throw new ApiError(-1, '网络异常');

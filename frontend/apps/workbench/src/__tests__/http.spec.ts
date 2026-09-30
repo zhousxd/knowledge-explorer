@@ -36,6 +36,21 @@ describe('http 封装', () => {
     );
   });
 
+  it('post FormData(文件上传)原样发送,headers 不含 Content-Type(交给浏览器带 boundary)', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValue(jsonResp(200, { code: 0, message: 'ok', traceId: 't3', data: { imported: 1 } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const form = new FormData();
+    form.append('file', new File(['kind,title\nbook,书'], 'assets.csv', { type: 'text/csv' }));
+    await expect(http.post('/wb/assets/import', form)).resolves.toEqual({ imported: 1 });
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.body).toBe(form);
+    const headers = init.headers as Record<string, string>;
+    expect(Object.keys(headers)).not.toContain('Content-Type');
+  });
+
   it('code != 0 抛 ApiError 并透传 traceId', async () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValue(jsonResp(200, { code: 1003, message: '参数错误', traceId: 'tr-9', data: null })));

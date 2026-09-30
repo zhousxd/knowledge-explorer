@@ -124,3 +124,49 @@ export interface ReviewItem {
 
 /** GET /api/wb/reviews 响应 data */
 export type ReviewListResp = PageResp<ReviewItem>;
+
+/** 知识单元类型(CSV kind 列,后端冻结小写枚举) */
+export type AssetKind = 'book' | 'article' | 'audio' | 'video';
+
+/** GET /api/wb/assets 行(后端 AssetItem;sourceMeta/locator 为 JSON 对象) */
+export interface AssetItem {
+  id: number;
+  kind: AssetKind;
+  title: string;
+  /** 来源元数据 JSON(author/press/journal 等),CSV 未给为 null */
+  sourceMeta: Record<string, unknown> | null;
+  /** 定位器 JSON(chapter/pages/t 等),CSV 未给为 null */
+  locator: Record<string, unknown> | null;
+  license: string | null;
+  /** 授权到期日 yyyy-MM-dd,可空(空 = 未登记到期日) */
+  licenseExpire: string | null;
+  /** 后端计算:licenseExpire 非空且早于今日 */
+  expired: boolean;
+  /** 被引用次数(卡片版本/智能体运行) */
+  citationCount: number;
+}
+
+/** GET /api/wb/assets 响应 data(后端 offset 分页 page 从 0 起) */
+export type AssetListResp = PageResp<AssetItem>;
+
+/** POST /api/wb/assets/import 的失败行(部分成功语义:按物理行号回报) */
+export interface AssetImportError {
+  line: number;
+  reason: string;
+}
+
+/** POST /api/wb/assets/import 响应 data */
+export interface AssetImportResult {
+  imported: number;
+  skipped: number;
+  errors: AssetImportError[];
+}
+
+/** GET /api/wb/assets/{id}/citations 行(统一引用 = 资产 + 定位器 + 原文摘录) */
+export interface CitationItem {
+  id: number;
+  objectType: string;
+  objectId: number;
+  quote: string | null;
+  locator: Record<string, unknown> | null;
+}
