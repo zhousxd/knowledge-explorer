@@ -1,11 +1,10 @@
+# 共享测试配置（对所有测试 profile 生效，置于无 profile 限定文档）。
+# 各测试类用 @ActiveProfiles 显式声明 profile：
+#   - "test"     → MockLlmGateway 生效（不打真实 LLM）
+#   - "mockllm"  → SpringAiLlmGateway 生效，配合 @DynamicPropertySource 注入 MockWebServer 地址
+# 注意：不要在此写 spring.profiles.active——@ActiveProfiles 走 additionalProfiles，
+# 若配置文件再激活 test 会与 mockllm 叠加，导致两个 LlmGateway bean 同时存在。
 spring:
-  profiles:
-    active: test
----
-spring:
-  config:
-    activate:
-      on-profile: test
   datasource:
     url: jdbc:postgresql://localhost:5432/ke_test
     username: ke
@@ -22,3 +21,6 @@ ke:
     secret: test-secret-key-32-bytes!!test-only!!
     access-ttl: 2h
     refresh-ttl: 7d
+  llm:
+    generator-model: test-generator
+    router-model: test-router
