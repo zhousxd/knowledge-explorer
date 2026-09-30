@@ -44,6 +44,8 @@ export interface CardListItem {
   status: CardStatus;
   /** 当前版本号;current_version_id 未回填(草稿/待审)时为 null(序列化省略) */
   currentVersionNo: number | null;
+  /** 维护者用户 id;前端按归属显隐 送审/停用(01 文档 RBAC) */
+  maintainerId: number | null;
   maintainerNickname: string | null;
   updatedAt: string;
 }

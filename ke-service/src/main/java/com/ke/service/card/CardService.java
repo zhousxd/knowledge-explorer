@@ -108,10 +108,11 @@ public class CardService {
 
     /**
      * 列表行：currentVersionNo 取 current_version_id 对应 version_no（DRAFT/PENDING 未回填 → null，
-     * 序列化时省略）；maintainerNickname 关联 ke_user.nickname。
+     * 序列化时省略）；maintainerId/maintainerNickname 关联卡维护者（前端按归属显隐操作列）。
      */
     public record WbCardListItem(Long id, String theme, String templateType, String title, String status,
-                                 Integer currentVersionNo, String maintainerNickname, OffsetDateTime updatedAt) {
+                                 Integer currentVersionNo, Long maintainerId, String maintainerNickname,
+                                 OffsetDateTime updatedAt) {
     }
 
     // ---------- 写路径（工作台） ----------
@@ -314,7 +315,7 @@ public class CardService {
     /** status 筛选白名单，非法取值 → 400 */
     private static final Set<String> WB_STATUSES = Set.of("DRAFT", "PENDING", "PUBLISHED", "DISABLED");
 
-    private static QueryWrapper<CardEntity> wbFilter(String status, String q) {
+    private static QueryWrapper<CardEntity> wbFilter(String status, String q, Long maintainerId) {
         QueryWrapper<CardEntity> wrapper = new QueryWrapper<>();
         if (status != null) {
             wrapper.eq("status", status);
@@ -322,17 +323,23 @@ public class CardService {
         if (q != null && !q.isBlank()) {
             wrapper.apply("title ILIKE {0}", "%" + q.trim() + "%");
         }
+        if (maintainerId != null) {
+            wrapper.eq("maintainer_id", maintainerId);
+        }
         return wrapper;
     }
 
     /**
      * 工作台管理列表（FR-C07）：与探索端不同，全部状态可见（工作台要管草稿/待审/停用）；
      * status 可空白名单筛选、q 对 title ILIKE；updated_at DESC + id DESC 倒序；
-     * offset 分页（page 从 1 起，size 夹取 [1,100]）；currentVersionNo 与维护者昵称
-     * 先页查 card 再 in 批量补齐（防 N+1）。
+     * offset 分页（page 从 1 起，size 夹取 [1,100]）。
+     * 归属规则（01 文档 RBAC：创作者「管理自己名下内容」）：仅 CREATOR（无 EDITOR/OPERATOR
+     * 角色）时强制 maintainer_id = 当前用户；EDITOR/OPERATOR 保持全量视图。
+     * currentVersionNo 与维护者信息先页查 card 再 in 批量补齐（防 N+1）。
      */
     @Transactional(readOnly = true)
-    public WbCardPage listForWorkbench(String status, String q, int page, int size) {
+    public WbCardPage listForWorkbench(String status, String q, int page, int size,
+                                       long userId, boolean editorOrAbove) {
         String safeStatus = null;
         if (status != null && !status.isBlank()) {
             String normalized = status.trim().toUpperCase(Locale.ROOT);
@@ -343,9 +350,10 @@ public class CardService {
         }
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(size, 1), WB_MAX_PAGE_SIZE);
+        Long maintainerScope = editorOrAbove ? null : userId;
 
-        long total = cards.selectCount(wbFilter(safeStatus, q));
-        QueryWrapper<CardEntity> listWrapper = wbFilter(safeStatus, q)
+        long total = cards.selectCount(wbFilter(safeStatus, q, maintainerScope));
+        QueryWrapper<CardEntity> listWrapper = wbFilter(safeStatus, q, maintainerScope)
                 .orderByDesc("updated_at", "id")
                 .last("LIMIT " + safeSize + " OFFSET " + (long) (safePage - 1) * safeSize);
         List<CardEntity> rows = cards.selectList(listWrapper);
@@ -366,6 +374,7 @@ public class CardService {
                 .map(c -> new WbCardListItem(c.getId(), c.getTheme(), c.getTemplateType(), c.getTitle(),
                         c.getStatus(),
                         c.getCurrentVersionId() == null ? null : versionNos.get(c.getCurrentVersionId()),
+                        c.getMaintainerId(),
                         c.getMaintainerId() == null ? null : nicknames.get(c.getMaintainerId()),
                         c.getUpdatedAt()))
                 .toList();

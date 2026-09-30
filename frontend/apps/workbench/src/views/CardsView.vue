@@ -6,10 +6,28 @@ import { createCard, disableCard, listCards, submitCard } from '../api/cards';
 import type { CardListItem, CardStatus, CardTemplateType } from '../api/types';
 import { STATUS_META, TEMPLATE_LABELS } from '../cardMeta';
 import { formatDateTime } from '../format';
+import { useAuthStore } from '../stores/auth';
 import CardDrawer from '../components/CardDrawer.vue';
+
+const auth = useAuthStore();
 
 /** 与后端 offset 契约一致:size ≤ 100,默认 20 */
 const PAGE_SIZE = 20;
+
+/**
+ * 是否可操作该行(送审/停用),与后端归属过滤同则(01 文档 RBAC):
+ * EDITOR/OPERATOR 全量;CREATOR 仅自己名下(maintainerId 匹配);未登录不显示。
+ */
+function canManage(row: CardListItem): boolean {
+  const user = auth.user;
+  if (!user) {
+    return false;
+  }
+  if (user.role === 'EDITOR' || user.role === 'OPERATOR') {
+    return true;
+  }
+  return row.maintainerId != null && user.id === row.maintainerId;
+}
 
 /** 状态筛选 chips('' = 全部) */
 const STATUS_TABS = [
@@ -328,7 +346,7 @@ onMounted(() => {
             详情
           </el-button>
           <el-button
-            v-if="row.status === 'DRAFT'"
+            v-if="row.status === 'DRAFT' && canManage(row)"
             class="act-submit"
             link
             type="primary"
@@ -337,7 +355,7 @@ onMounted(() => {
             送审
           </el-button>
           <el-button
-            v-if="row.status === 'PUBLISHED'"
+            v-if="row.status === 'PUBLISHED' && canManage(row)"
             class="act-disable"
             link
             type="danger"

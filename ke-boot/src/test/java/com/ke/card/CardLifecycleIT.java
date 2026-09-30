@@ -608,4 +608,44 @@ class CardLifecycleIT {
         assertThat((Integer) JsonPath.read(badStatus.getBody(), "$.code")).isEqualTo(400);
         assertThat((String) JsonPath.read(badStatus.getBody(), "$.traceId")).isNotBlank();
     }
+
+    @Test
+    void workbenchListScopedByCreatorOwnership() {
+        String creatorA = newUserToken("13800001023", "归属甲", "CREATOR");
+        String creatorB = newUserToken("13800001024", "归属乙", "CREATOR");
+        String editor = newUserToken("13800001025", "归属编辑", "EDITOR");
+
+        long mine = createWorkbenchCard(creatorA, "湖湘文化", "归属卡甲");
+        long others = createWorkbenchCard(creatorB, "湖湘文化", "归属卡乙");
+        long editors = createWorkbenchCard(editor, "湖湘文化", "归属卡编");
+        post(creatorB, "/api/wb/cards/" + others + "/submit");
+
+        // 01 文档 RBAC「创作者管理自己名下内容」:CREATOR 列表强制 maintainer_id=自己,status/q 叠加生效
+        ResponseEntity<String> asA = http.exchange("/api/wb/cards?status=PENDING&q={q}",
+                HttpMethod.GET, bearer(creatorA), String.class, "归属卡");
+        assertThat(asA.getStatusCode().value()).as("body=%s", asA.getBody()).isEqualTo(200);
+        assertThat(listIds(asA.getBody())).isEmpty();
+        assertThat(((Number) JsonPath.read(asA.getBody(), "$.data.total")).intValue()).isZero();
+
+        ResponseEntity<String> asAAll = http.exchange("/api/wb/cards?q={q}",
+                HttpMethod.GET, bearer(creatorA), String.class, "归属卡");
+        assertThat(listIds(asAAll.getBody())).containsExactly((int) mine);
+        // 行契约带 maintainerId
+        Long aId = jdbc.queryForObject("select id from ke_user where phone=?", Long.class, "13800001023");
+        int maintainerId = ((Number) JsonPath.read(asAAll.getBody(), "$.data.items[0].maintainerId")).intValue();
+        assertThat(maintainerId).isEqualTo(aId.intValue());
+
+        // CREATOR B 同样只见自己的(含自己送审的 PENDING)
+        ResponseEntity<String> asB = http.exchange("/api/wb/cards?status=PENDING&q={q}",
+                HttpMethod.GET, bearer(creatorB), String.class, "归属卡");
+        assertThat(listIds(asB.getBody())).containsExactly((int) others);
+
+        // EDITOR 全量视图:三个人的卡都在
+        ResponseEntity<String> asEditor = http.exchange("/api/wb/cards?q={q}",
+                HttpMethod.GET, bearer(editor), String.class, "归属卡");
+        assertThat(asEditor.getStatusCode().value()).isEqualTo(200);
+        assertThat(listIds(asEditor.getBody()))
+                .containsExactlyInAnyOrder((int) mine, (int) others, (int) editors);
+        assertThat(((Number) JsonPath.read(asEditor.getBody(), "$.data.total")).intValue()).isEqualTo(3);
+    }
 }

@@ -55,13 +55,14 @@ public class CardAdminController {
     /**
      * 工作台管理列表（FR-C07 界面）：offset 分页（page 从 1 起、size ≤100 默认 20），
      * status 可空白名单筛选（非法 → 400），q 对标题 ILIKE，updated_at 倒序。
+     * 归属过滤：仅 CREATOR 强制 maintainer_id=当前用户（01 文档 RBAC），EDITOR/OPERATOR 全量。
      */
     @GetMapping
     public ApiResponse<CardService.WbCardPage> list(@RequestParam(required = false) String status,
                                                     @RequestParam(required = false) String q,
                                                     @RequestParam(defaultValue = "1") int page,
                                                     @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(cards.listForWorkbench(status, q, page, size));
+        return ApiResponse.ok(cards.listForWorkbench(status, q, page, size, currentUserId(), editorOrAbove()));
     }
 
     @PostMapping

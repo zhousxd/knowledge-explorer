@@ -2,15 +2,18 @@ import { flushPromises, mount } from '@vue/test-utils';
 import ElementPlus, { ElMessageBox } from 'element-plus';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CardsView from '../views/CardsView.vue';
-import type { CardListItem } from '../api/types';
+import type { CardListItem, MeResp } from '../api/types';
 
-const { listCardsMock, getVersionsMock, submitCardMock, disableCardMock, createCardMock } = vi.hoisted(() => ({
-  listCardsMock: vi.fn(),
-  getVersionsMock: vi.fn(),
-  submitCardMock: vi.fn(),
-  disableCardMock: vi.fn(),
-  createCardMock: vi.fn()
-}));
+const { listCardsMock, getVersionsMock, submitCardMock, disableCardMock, createCardMock, authStateMock } = vi.hoisted(
+  () => ({
+    listCardsMock: vi.fn(),
+    getVersionsMock: vi.fn(),
+    submitCardMock: vi.fn(),
+    disableCardMock: vi.fn(),
+    createCardMock: vi.fn(),
+    authStateMock: { user: null as MeResp | null }
+  })
+);
 
 vi.mock('../api/cards', () => ({
   listCards: listCardsMock,
@@ -20,6 +23,8 @@ vi.mock('../api/cards', () => ({
   createCard: createCardMock
 }));
 
+vi.mock('../stores/auth', () => ({ useAuthStore: () => authStateMock }));
+
 const ROWS: CardListItem[] = [
   {
     id: 1,
@@ -28,6 +33,7 @@ const ROWS: CardListItem[] = [
     title: '岳麓书院',
     status: 'PUBLISHED',
     currentVersionNo: 2,
+    maintainerId: 1,
     maintainerNickname: '阿创',
     updatedAt: '2026-09-30T10:00:00+08:00'
   },
@@ -38,6 +44,7 @@ const ROWS: CardListItem[] = [
     title: '书院对比',
     status: 'PENDING',
     currentVersionNo: 1,
+    maintainerId: 2,
     maintainerNickname: '阿编',
     updatedAt: '2026-09-29T10:00:00+08:00'
   },
@@ -48,6 +55,7 @@ const ROWS: CardListItem[] = [
     title: '书院年表',
     status: 'DRAFT',
     currentVersionNo: null,
+    maintainerId: 3,
     maintainerNickname: null,
     updatedAt: '2026-09-28T10:00:00+08:00'
   }
@@ -71,6 +79,8 @@ describe('CardsView', () => {
     disableCardMock.mockReset().mockResolvedValue({ cardId: 1, status: 'DISABLED' });
     createCardMock.mockReset().mockResolvedValue({ cardId: 99 });
     vi.spyOn(ElMessageBox, 'confirm').mockReset();
+    // 默认 EDITOR:全量可管(送审/停用按钮出现)
+    authStateMock.user = { id: 1, nickname: '阿编', role: 'EDITOR' };
     mockList();
   });
 
@@ -162,6 +172,29 @@ describe('CardsView', () => {
     await wrapper.findAll('.el-table__row')[0]?.find('.act-disable').trigger('click');
     await flushPromises();
     expect(disableCardMock).not.toHaveBeenCalled();
+  });
+
+  it('CREATOR 仅能操作自己名下的行:他人行只有「详情」', async () => {
+    authStateMock.user = { id: 1, nickname: '阿创', role: 'CREATOR' };
+    const wrapper = await mountView();
+    const rows = wrapper.findAll('.el-table__row');
+    // 自己名下(row1,maintainerId=1,已发布):停用可见
+    expect(rows[0]?.find('.act-disable').exists()).toBe(true);
+    expect(rows[0]?.find('.act-detail').exists()).toBe(true);
+    // 他人草稿(row3,maintainerId=3):无送审,仅详情
+    expect(rows[2]?.find('.act-submit').exists()).toBe(false);
+    expect(rows[2]?.find('.act-detail').exists()).toBe(true);
+    // 全表:仅 1 个停用(自己的已发布行),无任何送审按钮(他人草稿 + 自己无草稿)
+    expect(wrapper.findAll('.act-submit')).toHaveLength(0);
+    expect(wrapper.findAll('.act-disable')).toHaveLength(1);
+  });
+
+  it('未登录/无用户态时不显示行操作按钮', async () => {
+    authStateMock.user = null;
+    const wrapper = await mountView();
+    expect(wrapper.findAll('.act-submit')).toHaveLength(0);
+    expect(wrapper.findAll('.act-disable')).toHaveLength(0);
+    expect(wrapper.findAll('.act-detail')).toHaveLength(3);
   });
 
   it('新建卡片:必填校验 + 提交后带默认内容创建并刷新', async () => {
