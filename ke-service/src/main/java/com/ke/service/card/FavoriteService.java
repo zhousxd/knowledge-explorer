@@ -7,6 +7,7 @@ import com.ke.infra.entity.FavoriteEntity;
 import com.ke.infra.mapper.CardMapper;
 import com.ke.infra.mapper.FavoriteMapper;
 import com.ke.service.common.NotFoundException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,7 +48,11 @@ public class FavoriteService {
     public record FavoritePage(List<FavoriteItem> items, long total, int page, int size) {
     }
 
-    /** 收藏：卡不存在或非 PUBLISHED → 404；重复收藏幂等（不出错）。恒返回 true */
+    /**
+     * 收藏：卡不存在或非 PUBLISHED → 404；重复收藏幂等（不出错）。恒返回 true。
+     * 并发兜底（照 AuthService.autoRegister 模式）：check-then-insert 之间的竞争由
+     * UNIQUE(user_id, card_id) 唯一约束兜底，插入冲突回落为「已有收藏」，幂等契约成立（不再 500）。
+     */
     @Transactional
     public boolean favorite(long cardId, long userId) {
         requirePublished(cardId);
@@ -58,7 +63,11 @@ public class FavoriteService {
             FavoriteEntity row = new FavoriteEntity();
             row.setUserId(userId);
             row.setCardId(cardId);
-            favorites.insert(row);
+            try {
+                favorites.insert(row);
+            } catch (DataIntegrityViolationException e) {
+                // 并发重复收藏：唯一约束兜底，回落返回已有收藏（幂等）
+            }
         }
         return true;
     }
