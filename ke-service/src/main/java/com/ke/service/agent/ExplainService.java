@@ -17,8 +17,11 @@ import com.ke.infra.mapper.CardMapper;
 import com.ke.infra.mapper.CardVersionMapper;
 import com.ke.infra.mapper.CitationMapper;
 import com.ke.infra.mapper.PathNodeMapper;
+import com.ke.service.agent.dto.CompareOutput;
+import com.ke.service.agent.dto.CompareResult;
 import com.ke.service.agent.dto.ExplainOutput;
 import com.ke.service.agent.dto.ExplainResult;
+import com.ke.service.agent.post.AgentLabels;
 import com.ke.service.agent.post.ClaimLabelAppender;
 import com.ke.service.agent.post.RunMetrics;
 import com.ke.service.agent.post.SensitiveWordFilter;
@@ -44,6 +47,7 @@ import org.springframework.stereotype.Service;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -63,18 +67,29 @@ import java.util.concurrent.TimeoutException;
  * 任何异常置 FAILED(error=消息)。提交前置配额（FR-S04，{@link QuotaService#tryConsume}，
  * 超限 RateLimitException → 429 envelope）。
  *
+ * <p>比较通道（FR-S06 一期 / Task 23）：input_json.serviceType=COMPARE 时 system 提示词整体切换
+ * （compare-prompts），输出绑定 {@link CompareOutput} + 落库前结构校验（cells 矩阵形状，非法重试
+ * 1 次仍非法 → FAILED），产出 artifact(type=COMPARE_CARD, content_json={type,data,sources,
+ * disclaimer,audit})；citations=assetId 过 {@link CitationSanitizer} 同规则。
+ *
  * 线程模型：submit 前置校验（会话属主/卡已发布/配额）在 controller 线程（userId 在 submit 时
  * 捕获进 input_json，虚拟线程不再依赖 SecurityContext）；执行走 agentExecutor 虚拟线程（自代理
  * 调 @Async，同类 this 调用会退化为同步）。LLM 调用再包一层虚拟线程 future.get 超时（Task 20 手写
  * 等价实现，见 completeWithinTimeout 注释）；心跳循环维持 recycleStale 兜底。
  */
 @Service
-@PropertySource(value = "classpath:explain-prompts.properties", encoding = "UTF-8")
+@PropertySource(value = {"classpath:explain-prompts.properties", "classpath:compare-prompts.properties"},
+        encoding = "UTF-8")
 public class ExplainService {
 
     private static final Logger log = LoggerFactory.getLogger(ExplainService.class);
 
     static final String SERVICE_TYPE = "EXPLAIN";
+    /** 比较服务（FR-S06 一期 / Task 23）：同一提交端点与执行流水线，提示词与输出形状切换 */
+    static final String SERVICE_COMPARE = "COMPARE";
+    private static final Set<String> SERVICE_TYPES = Set.of(SERVICE_TYPE, SERVICE_COMPARE);
+    /** COMPARE 产出的 artifact 类型（artifact.type 列与 content_json.type 同值，前端 DONE 分流依据） */
+    static final String COMPARE_ARTIFACT_TYPE = "COMPARE_CARD";
     private static final Set<String> LEVELS = Set.of("SIMPLE", "DEEP", "CHILD");
     /** 卡片内容进入提示词的截断上限（检索文本预算在 RetrievalService） */
     private static final int CARD_CONTENT_LIMIT = 2000;
@@ -115,6 +130,9 @@ public class ExplainService {
     private String childPrompt;
     @Value("${explain.prompt.no-material}")
     private String noMaterialPrompt;
+    /** serviceType=COMPARE 时 system 整体切换为该段（Task 23，档位段不参与比较） */
+    @Value("${compare.prompt.system}")
+    private String comparePrompt;
 
     public ExplainService(AgentRunMapper runs, CardMapper cards, CardVersionMapper cardVersions,
                           PathNodeMapper pathNodes, SessionService sessions, RetrievalService retrieval,
@@ -140,20 +158,27 @@ public class ExplainService {
      * agent_run.input_json 形状（userId 冗余进 JSON：GET 属主判定与 Task 21 归一都从这里取）。
      * parentRunId=追问链（FR-E08，Task 22）：追问=新 run，agent_run 无 parent 列，记 JSON 即可
      * （Phase 4 parentNodeId 先例）；null=首次讲解。
+     * serviceType（Task 23）：EXPLAIN/COMPARE（缺省 EXPLAIN，兼容旧行反序列化为 null → 讲解分支）。
      */
-    public record ExplainInput(Long userId, Long sessionId, Long nodeId,
-                               Long cardVersionId, String question, String level, Long parentRunId) {
+    public record ExplainInput(Long userId, Long sessionId, Long nodeId, Long cardVersionId,
+                               String question, String level, Long parentRunId, String serviceType) {
     }
 
     // ---------- 提交（controller 线程，同步前置校验） ----------
 
     /**
-     * 提交讲解运行：校验（question/level、会话属主 404/403、节点归属、追问 parent 存在且属主 400、
-     * 卡已发布 400、每日配额超限 429）→ 落库 QUEUED（input_json={userId,sessionId,nodeId,
-     * cardVersionId,question,level,parentRunId}）→ 异步执行，立即返回 runId（POST → 202）。
+     * 提交讲解/比较运行：校验（serviceType 白名单、question/level、会话属主 404/403、节点归属、
+     * 追问 parent 存在且属主 400、卡已发布 400、每日配额超限 429）→ 落库 QUEUED
+     * （input_json={userId,sessionId,nodeId,cardVersionId,question,level,parentRunId,serviceType}）→
+     * 异步执行，立即返回 runId（POST → 202）。
      */
     public Long explain(long userId, Long cardVersionId, String question, String level,
-                        Long sessionId, Long nodeId, Long parentRunId) {
+                        Long sessionId, Long nodeId, Long parentRunId, String serviceType) {
+        // Task 23：serviceType 白名单（缺省 EXPLAIN）；比较与讲解共用同一前置校验与配额
+        String type = serviceType == null || serviceType.isBlank() ? SERVICE_TYPE : serviceType.trim();
+        if (!SERVICE_TYPES.contains(type)) {
+            throw new BadRequestException("serviceType 仅支持 EXPLAIN/COMPARE");
+        }
         if (cardVersionId == null) {
             throw new BadRequestException("cardVersionId 不能为空");
         }
@@ -195,11 +220,12 @@ public class ExplainService {
             throw new RateLimitException("今日 " + quota.dailyLimit() + " 次智能服务已用完,明早 8 点恢复");
         }
 
-        ExplainInput input = new ExplainInput(userId, sessionId, nodeId, cardVersionId, question, level, parentRunId);
+        ExplainInput input = new ExplainInput(userId, sessionId, nodeId, cardVersionId, question, level,
+                parentRunId, type);
         AgentRunEntity run = new AgentRunEntity();
         run.setSessionId(sessionId);
         run.setNodeId(nodeId);
-        run.setServiceType(SERVICE_TYPE);
+        run.setServiceType(type);
         run.setInputJson(json(input));
         run.setStatus(AgentRunStatus.QUEUED.name());
         runs.insert(run);
@@ -258,34 +284,75 @@ public class ExplainService {
             // 卡死兜底维持 recycleStale（stale-seconds）定时回收
             runs.touch(runId);
 
+            // Task 23：serviceType=COMPARE 走比较分支——提示词整体切换（档位段不参与），输出绑定
+            // CompareOutput 并做落库前结构校验；缺省/旧数据 null → EXPLAIN（input_json 旧行兼容）
+            boolean compare = SERVICE_COMPARE.equals(input.serviceType());
             Map<Long, String> materials = retrieval.retrieve(input.cardVersionId());
             String context = input.sessionId() == null ? "" : sessions.contextSummary(input.sessionId());
-            String system = systemPrompt(input.level(), materials.isEmpty());
+            String system = compare ? comparePrompt : systemPrompt(input.level(), materials.isEmpty());
             String user = userPrompt(input, materials, context);
 
             ExplainOutput output = null;
+            CompareOutput compareOutput = null;
             Exception last = null;
-            for (int attempt = 0; attempt < MAX_LLM_ATTEMPTS && output == null; attempt++) {
+            for (int attempt = 0; attempt < MAX_LLM_ATTEMPTS && output == null && compareOutput == null; attempt++) {
                 try {
                     String raw = completeWithinTimeout(new ChatCommand(system, user, ModelTier.GENERATOR));
-                    output = objectMapper.readValue(stripFences(raw), ExplainOutput.class);
+                    if (compare) {
+                        compareOutput = readCompareOutput(raw);
+                    } else {
+                        output = objectMapper.readValue(stripFences(raw), ExplainOutput.class);
+                    }
                 } catch (LlmTimeoutException e) {
                     // 超时不重试：LLM 已耗满时间预算，重试只会把等待翻倍；置 TIMEOUT 终态（用户可重新提交新 run）
                     timeout(runId);
                     return;
                 } catch (Exception e) {
-                    last = e; // Jackson 绑定失败 → 重试 = 再调一次 LLM（共 2 次）
+                    last = e; // Jackson 绑定/结构校验失败 → 重试 = 再调一次 LLM（共 2 次）
                 }
             }
-            if (output == null) {
-                throw new IllegalStateException("讲解输出解析失败（已重试 1 次）: "
-                        + (last == null ? "未知原因" : last.getMessage()));
+            if (output == null && compareOutput == null) {
+                throw new IllegalStateException(
+                        (compare ? "比较输出" : "讲解输出") + "解析失败（已重试 1 次）: "
+                                + (last == null ? "未知原因" : last.getMessage()));
             }
-            finish(runId, start, input, output, materials);
+            if (compare) {
+                finishCompare(runId, start, input, compareOutput, materials);
+            } else {
+                finish(runId, start, input, output, materials);
+            }
         } catch (Exception e) {
             log.warn("explain run {} failed: {}", runId, e.getMessage());
             fail(runId, e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
         }
+    }
+
+    /**
+     * 比较输出绑定 + 落库前结构校验（Task 23 决策：手写形状断言，不复用
+     * {@code CardContentValidator}——那是卡片写入向（citations 为 sources 1-based 序号 Integer、
+     * 独立 Jackson 配置），此处 citations 为 assetId（Long，与 EXPLAIN 同语义）。
+     * 结构非法抛 IllegalArgumentException，与 JSON 绑定失败同路：重试 1 次，仍非法 → FAILED。
+     */
+    private CompareOutput readCompareOutput(String raw) throws JsonProcessingException {
+        CompareOutput output = objectMapper.readValue(stripFences(raw), CompareOutput.class);
+        int rows = output.dimensions() == null ? 0 : output.dimensions().size();
+        int cols = output.objects() == null ? 0 : output.objects().size();
+        boolean shapeBad = output.objects() == null || output.objects().isEmpty()
+                || output.dimensions() == null || output.dimensions().isEmpty()
+                || output.cells() == null || output.cells().size() != rows;
+        if (!shapeBad) {
+            for (List<String> row : output.cells()) {
+                if (row == null || row.size() != cols) {
+                    shapeBad = true;
+                    break;
+                }
+            }
+        }
+        if (shapeBad) {
+            throw new IllegalArgumentException("比较输出结构非法:cells 行数必须等于维度数(" + rows
+                    + ")、行宽必须等于对象数(" + cols + ")");
+        }
+        return output;
     }
 
     /** 终态回写：artifact(EXPLAIN, content_json={output,sources,disclaimer,audit}) + citation 落表 + DONE/artifact_ids */
@@ -339,6 +406,58 @@ public class ExplainService {
         if (!report.strippedCitations().isEmpty()) {
             // 旁路留痕（不置 FAILED，Task 19 起的既有行为，IT 依赖）：完整审计数据在 artifact.audit
             done.setError("引用校验:剥离 " + report.strippedCitations().size() + " 个越界引用");
+        }
+        runs.updateById(done);
+    }
+
+    /**
+     * 比较终态回写（Task 23）：artifact(COMPARE_CARD, content_json={type,data,sources,disclaimer,audit})
+     * + citation(object_type=agent_run) + DONE/artifact_ids。citations=assetId 沿用讲解的
+     * {@link CitationSanitizer} 同规则（allowed=materials.keySet()，越界剔除旁路留痕）；
+     * 比较矩阵无段落档位与敏感词段落链，audit.filtered 恒 0（矩阵过滤随二期扩展）。
+     */
+    private void finishCompare(long runId, long start, ExplainInput input,
+                               CompareOutput output, Map<Long, String> materials) {
+        List<Long> kept = new ArrayList<>();
+        Set<Long> stripped = new LinkedHashSet<>();
+        if (output.citations() != null) {
+            for (Long assetId : output.citations()) {
+                if (assetId == null) {
+                    continue; // 畸形 null id：静默丢弃（与 CitationSanitizer 同则）
+                }
+                if (materials.containsKey(assetId)) {
+                    if (!kept.contains(assetId)) {
+                        kept.add(assetId);
+                    }
+                } else {
+                    stripped.add(assetId);
+                }
+            }
+        }
+        CompareResult result = new CompareResult(COMPARE_ARTIFACT_TYPE,
+                new CompareOutput(output.objects(), output.dimensions(), output.cells(), kept),
+                materials, AgentLabels.DISCLAIMER, new RunMetrics.Audit(stripped.size(), 0));
+
+        Long artifactId = null;
+        if (input.sessionId() != null) {
+            // artifact.session_id 非空（V1 约束）：无会话的比较 run 不落 artifact，仅回状态
+            ArtifactEntity artifact = new ArtifactEntity();
+            artifact.setSessionId(input.sessionId());
+            artifact.setType(COMPARE_ARTIFACT_TYPE);
+            artifact.setContentJson(json(result));
+            artifact.setStatus("DRAFT");
+            artifacts.insert(artifact);
+            artifactId = artifact.getId();
+            insertCitations(runId, kept);
+        }
+        AgentRunEntity done = runs.selectById(runId);
+        done.setStatus(AgentRunStatus.DONE.name());
+        done.setLatencyMs((int) Math.min(Integer.MAX_VALUE, System.currentTimeMillis() - start));
+        done.setModel(generatorModel);
+        done.setArtifactIds(artifactId == null ? json(List.of()) : json(List.of(artifactId)));
+        if (!stripped.isEmpty()) {
+            // 旁路留痕（不置 FAILED，与讲解同则）：完整审计数据在 artifact.audit
+            done.setError("引用校验:剥离 " + stripped.size() + " 个越界引用");
         }
         runs.updateById(done);
     }
@@ -420,16 +539,24 @@ public class ExplainService {
             if (section == null || section.citations() == null) {
                 continue;
             }
-            for (Long assetId : section.citations()) {
-                if (assetId == null || !linked.add(assetId)) {
-                    continue;
-                }
-                CitationEntity citation = new CitationEntity();
-                citation.setAssetId(assetId);
-                citation.setObjectType("agent_run");
-                citation.setObjectId(runId);
-                citations.insert(citation);
+            linked.addAll(section.citations());
+            linked.remove(null);
+        }
+        insertCitations(runId, linked);
+    }
+
+    /** 引用行落表（object_type=agent_run）：入参应为 sanitize 后的允许集合，逐 run 去重（讲解/比较共用） */
+    private void insertCitations(long runId, Iterable<Long> assetIds) {
+        Set<Long> linked = new HashSet<>();
+        for (Long assetId : assetIds) {
+            if (assetId == null || !linked.add(assetId)) {
+                continue;
             }
+            CitationEntity citation = new CitationEntity();
+            citation.setAssetId(assetId);
+            citation.setObjectType("agent_run");
+            citation.setObjectId(runId);
+            citations.insert(citation);
         }
     }
 

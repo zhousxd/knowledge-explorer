@@ -53,13 +53,16 @@ public class RunController {
         this.explain = explain;
     }
 
-    /** parentRunId 可选：追问链（FR-E08，Task 22）——追问=新 run，链记 input_json（校验在 ExplainService） */
+    /**
+     * serviceType 可选（Task 23）：缺省 EXPLAIN；COMPARE 走比较分支（提示词/输出形状切换，
+     * 产出 COMPARE_CARD artifact）。白名单校验在 ExplainService.explain。
+     */
     public record RunRequest(Long cardVersionId, Long sessionId, Long nodeId, Long parentRunId,
-                             String question, String level) {
+                             String question, String level, String serviceType) {
     }
 
-    /** artifact 仅 DONE 且有 artifact 时出现（content_json 对象，non_null 序列化下 null 字段省略） */
-    public record RunView(long runId, String status, String model, Integer latencyMs,
+    /** serviceType 随响应带出（Task 23：前端 DONE 态按 EXPLAIN/COMPARE 分流结果渲染） */
+    public record RunView(long runId, String status, String serviceType, String model, Integer latencyMs,
                           String error, JsonNode artifact) {
     }
 
@@ -67,12 +70,12 @@ public class RunController {
     public record RunSummary(long runId, String status) {
     }
 
-    /** 提交讲解运行 → 202 {runId}；前置校验在 ExplainService.explain（会话属主/卡已发布） */
+    /** 提交讲解/比较运行 → 202 {runId}；前置校验在 ExplainService.explain（serviceType 白名单/会话属主/卡已发布） */
     @PostMapping("/api/agent/runs")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public ApiResponse<Map<String, Object>> submit(@RequestBody RunRequest req) {
         Long runId = explain.explain(currentUserId(), req.cardVersionId(), req.question(),
-                req.level(), req.sessionId(), req.nodeId(), req.parentRunId());
+                req.level(), req.sessionId(), req.nodeId(), req.parentRunId(), req.serviceType());
         return ApiResponse.ok(Map.of("runId", runId));
     }
 
@@ -84,7 +87,7 @@ public class RunController {
             throw new NotFoundException("运行不存在");
         }
         requireRunOwner(currentUserId(), run);
-        return ApiResponse.ok(new RunView(run.getId(), run.getStatus(), run.getModel(),
+        return ApiResponse.ok(new RunView(run.getId(), run.getStatus(), run.getServiceType(), run.getModel(),
                 run.getLatencyMs(), run.getError(), artifactOf(run)));
     }
 
