@@ -3,6 +3,7 @@ package com.ke.domain.trust;
 import com.ke.domain.enums.ClaimType;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -26,8 +27,9 @@ public final class CitationSanitizer {
     /**
      * @param sections        讲解段落（可为 null，视为无段落）；允许含 null 元素（原位保留，索引不漂移）
      * @param allowedAssetIds 允许引用的 assetId 集合（本次检索 map.keySet()；null 视为空集）
-     * @return 报告：sections 与入参同序同长；strippedCitations 全报告级去重（出现序）；
-     * downgradedSectionIndexes 为降级段的入参原索引
+     * @return 报告：sections 与入参同序同长（不可变视图，**保留 null 元素**——List.copyOf 会拒 null，
+     * 故用 unmodifiableList 兑现原位保留契约）；strippedCitations 全报告级去重（出现序）；
+     * downgradedSectionIndexes 为降级段的入参原索引；段内 citations 为不可变新列表
      */
     public static SanitizeReport sanitize(List<SanitizedSection> sections, Set<Long> allowedAssetIds) {
         if (sections == null || sections.isEmpty()) {
@@ -61,8 +63,9 @@ public final class CitationSanitizer {
                 claimType = ClaimType.SYNTHESIS;
                 downgraded.add(i);
             }
-            sanitized.add(new SanitizedSection(section.body(), claimType, kept));
+            sanitized.add(new SanitizedSection(section.body(), claimType, List.copyOf(kept)));
         }
-        return new SanitizeReport(List.copyOf(sanitized), List.copyOf(stripped), List.copyOf(downgraded));
+        return new SanitizeReport(Collections.unmodifiableList(sanitized),
+                List.copyOf(stripped), List.copyOf(downgraded));
     }
 }

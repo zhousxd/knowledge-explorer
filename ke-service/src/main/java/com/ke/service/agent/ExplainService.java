@@ -240,7 +240,7 @@ public class ExplainService {
         runs.updateById(done);
     }
 
-    /** 讲解段 → 校验器入参（同形映射：ke-domain 不依赖 service DTO） */
+    /** 讲解段 → 校验器入参（同形映射：ke-domain 不依赖 service DTO）；null 段原位传给校验器（索引不漂移），由 withSections 落库前过滤 */
     private static List<SanitizedSection> toSanitizedSections(List<ExplainOutput.Section> sections) {
         if (sections == null) {
             return List.of();
@@ -253,12 +253,13 @@ public class ExplainService {
         return mapped;
     }
 
-    /** 校验后的段落回填讲解输出（summary/openQuestions/evidenceGaps 原样） */
+    /** 校验后的段落回填讲解输出（summary/openQuestions/evidenceGaps 原样）；null 段在此过滤——展示层职责，落 artifact 不含 null */
     private static ExplainOutput withSections(ExplainOutput output, List<SanitizedSection> sections) {
         List<ExplainOutput.Section> mapped = new ArrayList<>(sections.size());
         for (SanitizedSection section : sections) {
-            mapped.add(section == null ? null
-                    : new ExplainOutput.Section(section.body(), section.claimType(), section.citations()));
+            if (section != null) {
+                mapped.add(new ExplainOutput.Section(section.body(), section.claimType(), section.citations()));
+            }
         }
         return new ExplainOutput(output.summary(), mapped, output.openQuestions(), output.evidenceGaps());
     }

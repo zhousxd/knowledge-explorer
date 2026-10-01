@@ -324,4 +324,26 @@ class ExplainPipelineIT {
                 Integer.class, runId);
         assertThat(rows).isZero();
     }
+
+    @Test
+    void nullSectionToleratedInPipeline() {
+        // Task 19 回归：LLM 输出 sections 含 null 段 → 校验器原位保留不 NPE，run 仍 DONE；
+        // 展示层（落 artifact 前）过滤 null：artifact.sections 不含 null
+        long versionId = insertPublishedCard("空段卡", null);
+        String token = newUserToken("13811100013", "寅", "EXPLORER");
+        long[] ids = newSessionWithNode(token, versionId);
+
+        StubLlmGateway.reset("{\"summary\":\"空段讲解\",\"sections\":[null,"
+                + "{\"body\":\"谨慎作答\",\"claimType\":\"GEN\",\"citations\":[]}"
+                + "],\"openQuestions\":[],\"evidenceGaps\":[]}");
+        long runId = submitRun(token, versionId, ids[0], ids[1], "空段怎么算？", "SIMPLE");
+
+        ResponseEntity<String> res = awaitTerminal(token, runId);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.status")).isEqualTo("DONE");
+        // artifact.sections 过滤掉 null 后只剩 1 段（GEN）
+        assertThat((Integer) JsonPath.read(res.getBody(), "$.data.artifact.output.sections.length()")).isEqualTo(1);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.artifact.output.sections[0].claimType")).isEqualTo("GEN");
+        // 无越界引用 → 无旁路留痕（error 字段 non_null 序列化下整个省略）
+        assertThat(res.getBody()).doesNotContain("\"error\"");
+    }
 }

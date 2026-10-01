@@ -10,6 +10,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 引用校验降级器穷举（FR-S05 / R2，Task 19）：越界引用剔除、FACT 空引用降级 SYNTHESIS、
@@ -155,10 +156,9 @@ class CitationSanitizerTest {
         assertThat(original.claimType()).isEqualTo(ClaimType.FACT);
         assertThat(original.citations()).containsExactly(1L, 99L);
         assertThat(citations).containsExactly(1L, 99L);
-        // 输出是新对象：改输出不影响入参，反之亦然
+        // 输出是新对象、新列表（与入参互不影响）
         assertThat(report.sections().get(0)).isNotSameAs(original);
-        report.sections().get(0).citations().clear();
-        assertThat(citations).containsExactly(1L, 99L);
+        assertThat(report.sections().get(0).citations()).isNotSameAs(citations).containsExactly(1L);
     }
 
     // ---------- 10. GEN 段越界剥离后仍 GEN ----------
@@ -172,5 +172,46 @@ class CitationSanitizerTest {
         assertThat(report.sections().get(0).citations()).isEmpty();
         assertThat(report.strippedCitations()).containsExactly(99L);
         assertThat(report.downgradedSectionIndexes()).isEmpty();
+    }
+
+    // ---------- 11. null 段原位保留（索引不漂移，后续段正常处理） ----------
+
+    @Test
+    void nullSectionPreservedInPlace() {
+        // 注意：List.of 拒绝 null 元素，须用 Arrays.asList 构造含 null 段的入参
+        SanitizeReport report = CitationSanitizer.sanitize(
+                Arrays.asList(section(ClaimType.FACT, 99L), null, section(ClaimType.FACT, 1L)), ALLOWED);
+
+        // null 段原位保留：报告同长同位，不 NPE
+        assertThat(report.sections()).hasSize(3);
+        assertThat(report.sections().get(1)).isNull();
+        // 索引不漂移：降级记录指向入参原索引 0（而非 null 段挪动后的位置）
+        assertThat(report.downgradedSectionIndexes()).containsExactly(0);
+        assertThat(report.sections().get(0).claimType()).isEqualTo(ClaimType.SYNTHESIS);
+        // null 段之后的段落照常校验
+        assertThat(report.sections().get(2).claimType()).isEqualTo(ClaimType.FACT);
+        assertThat(report.sections().get(2).citations()).containsExactly(1L);
+        assertThat(report.strippedCitations()).containsExactly(99L);
+    }
+
+    // ---------- 12. citations 内 null 元素静默丢弃（不进 kept 也不进 stripped） ----------
+
+    @Test
+    void nullCitationElementDroppedSilently() {
+        SanitizeReport report = CitationSanitizer.sanitize(
+                List.of(new SanitizedSection("正文", ClaimType.FACT,
+                        new ArrayList<>(Arrays.asList(null, 1L, 99L)))),
+                ALLOWED);
+
+        assertThatNoException().isThrownBy(() -> CitationSanitizer.sanitize(
+                List.of(section(ClaimType.GEN, (Long) null)), ALLOWED));
+        // null id 静默丢弃：仍有有效引用 1 → 保持 FACT；null 不计入 stripped
+        assertThat(report.sections().get(0).claimType()).isEqualTo(ClaimType.FACT);
+        assertThat(report.sections().get(0).citations()).containsExactly(1L);
+        assertThat(report.strippedCitations()).containsExactly(99L);
+        assertThat(report.downgradedSectionIndexes()).isEmpty();
+        // 输出 citations 不可变（防御性拷贝兑现）
+        assertThatThrownBy(() -> report.sections().get(0).citations().add(2L))
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 }
