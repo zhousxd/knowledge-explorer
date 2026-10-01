@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import type { Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { KeIcon } from '@ke/shared';
+import { KeIcon, THEMES } from '@ke/shared';
 import { createCard, getWbCard, saveCardContent } from '../api/cards';
 import type { CardStatus, CardTemplateType, SourceRef } from '../api/types';
 import { STATUS_META, TEMPLATE_LABELS } from '../cardMeta';
@@ -55,7 +55,9 @@ const EDITORS: Record<CardTemplateType, Component> = {
   TASK: TaskEditor
 };
 
-const theme = ref('');
+/** 专题取 @ke/shared THEMES 权威字典(3 键);新建默认选第一键(academy)。
+ * 编辑态回填的是后端自由字符串(向前兼容历史数据),只读展示原样。 */
+const theme = ref<string>(THEMES[0].key);
 const title = ref('');
 const templateType = ref<CardTemplateType>('TEXT');
 const content = ref<Record<string, unknown>>(seedContent('TEXT'));
@@ -205,13 +207,19 @@ async function onSave(): Promise<void> {
       >
         <label class="field">
           <span class="field-label">专题</span>
-          <input
+          <select
             v-model="theme"
             class="input head-theme"
-            type="text"
-            maxlength="50"
-            placeholder="如:湖湘文化"
+            aria-label="专题"
           >
+            <option
+              v-for="t in THEMES"
+              :key="t.key"
+              :value="t.key"
+            >
+              {{ t.label }}
+            </option>
+          </select>
         </label>
         <label class="field">
           <span class="field-label">模板</span>

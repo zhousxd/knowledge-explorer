@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { showToast } from 'vant';
-import { KeIcon, SourceList } from '@ke/shared';
+import { KeIcon, SourceList, themeLabel } from '@ke/shared';
 import { ApiError } from '../api/http';
 import { fetchCardEntries, getCard } from '../api/cards';
 import type { CardDetail, CardEntryItem, CardEntryGroup, TextContent } from '../api/cards';
@@ -10,7 +10,6 @@ import { favorite, unfavorite } from '../api/favorites';
 import CitationPopover from '../components/CitationPopover.vue';
 import { CARD_TYPE_LABELS, CardRenderer } from '../components/CardRenderer';
 import ServiceBar from '../components/ServiceBar.vue';
-import { THEME_NAMES } from '../mock/home';
 import { useAuthStore } from '../stores/auth';
 
 // 卡片页(04 §7.2 KCard):chips 行 → 宋体标题 → 摘要(虚线分隔)→ 插图占位 →
@@ -112,7 +111,7 @@ watch(
 const typeLabel = computed(() => CARD_TYPE_LABELS[card.value?.templateType ?? ''] ?? '卡片');
 const themeName = computed(() => {
   const theme = card.value?.theme;
-  return theme ? THEME_NAMES[theme] ?? theme : '';
+  return theme ? themeLabel(theme) : '';
 });
 
 /** 仅图文卡有摘要段(其他卡型的说明由各自渲染器承载) */

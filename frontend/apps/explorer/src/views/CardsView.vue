@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { KeIcon } from '@ke/shared';
+import { KeIcon, themeLabel } from '@ke/shared';
 import { listPublicCards } from '../api/cards';
 import type { PublicCardListItem } from '../api/cards';
 import { CARD_TYPE_LABELS } from '../components/CardRenderer';
-import { HOME_THEMES, THEME_NAMES } from '../mock/home';
+import { HOME_THEMES } from '../mock/home';
 
 // 卡片列表页(/cards):搜索框回填 q + 专题 tab + 卡片行(标题宋体 + 模板 chip + 摘要 2 行截断)
 // keyset 分页用「加载更多」按钮(移动端免滚动模拟),无 nextCursor 显示「没有更多了」尾标
@@ -185,7 +185,7 @@ function typeLabel(type: string): string {
             {{ typeLabel(row.templateType) }}
           </span>
           <span class="theme-tag">
-            {{ THEME_NAMES[row.theme] ?? row.theme }}
+            {{ themeLabel(row.theme) }}
           </span>
         </span>
         <b class="row-title">
