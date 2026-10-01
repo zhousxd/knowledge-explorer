@@ -5,6 +5,7 @@ import HomeView from '../views/HomeView.vue';
 import CardsView from '../views/CardsView.vue';
 import CardView from '../views/CardView.vue';
 import PathView from '../views/PathView.vue';
+import RunView from '../views/RunView.vue';
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -26,6 +27,8 @@ const router = createRouter({
     { path: '/cards/:id(\\d+)', component: CardView, meta: { title: '卡片详情', public: true } },
     // 我的路径(路径树/断点续探/解释档位,FR-E03/E04/E05):个性化页,受保护(非 public)
     { path: '/path', component: PathView, meta: { title: '我的路径' } },
+    // 执行态页(2s 轮询 FR-S04):个性化页,受保护;question/重试 payload 经 history state 携带
+    { path: '/runs/:id(\\d+)', component: RunView, meta: { title: '智能服务' } },
     { path: '/', redirect: '/home' },
     // catch-all:未知路径回首页(避免白屏)
     { path: '/:pathMatch(.*)*', redirect: '/home' }

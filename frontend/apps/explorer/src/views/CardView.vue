@@ -7,16 +7,21 @@ import { ApiError } from '../api/http';
 import { fetchCardEntries, getCard } from '../api/cards';
 import type { CardDetail, CardEntryItem, CardEntryGroup, TextContent } from '../api/cards';
 import { favorite, unfavorite } from '../api/favorites';
+import { submitRun } from '../api/runs';
+import type { RunSubmitPayload } from '../api/runs';
+import { addNode } from '../api/sessions';
 import CitationPopover from '../components/CitationPopover.vue';
 import { CARD_TYPE_LABELS, CardRenderer } from '../components/CardRenderer';
 import ServiceBar from '../components/ServiceBar.vue';
 import { useAuthStore } from '../stores/auth';
+import { useSessionStore } from '../stores/sessionStore';
 
 // 卡片页(04 §7.2 KCard):chips 行 → 宋体标题 → 摘要(虚线分隔)→ 插图占位 →
 // 正文(CardRenderer 按 templateType 分发)→ SourceList → 探索入口;底部 ServiceBar 常驻
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const sessionStore = useSessionStore();
 
 const card = ref<CardDetail | null>(null);
 const entries = ref<CardEntryGroup | null>(null);
@@ -200,8 +205,51 @@ function onEntry(e: CardEntryItem): void {
   console.info(`入口「${e.name}」由 Phase 5 服务接线`);
 }
 
-function onService(name: string): void {
-  console.info(`服务「${name}」由 Phase 5 接线`);
+// —— 服务栏接线(P5-21):三键均提交讲解 run(比较/整理的专属模板由 Task 23/25 接管)。
+// 链路:匿名先引导登录 → ensureForCard(无会话建、有则复用)→ addNode 挂根节点(纯 MVP,
+// 完整挂接后续接)→ submitRun(带 nodeId/sessionId,后端 P5-18 冻结约束)→ 跳执行态页,
+// question/重试 payload 经路由 state(keRun)随行。429 留在卡页 toast envelope 文案。
+
+type ServiceKind = 'explain' | 'compare' | 'organize';
+
+/** 冻结问法文案:键 + 卡题合成 */
+const SERVICE_QUESTIONS: Record<ServiceKind, (title: string) => string> = {
+  explain: (t) => `讲清楚:${t}`,
+  compare: (t) => `比较:${t}`,
+  organize: (t) => `整理关于 ${t} 的发现`
+};
+
+const svcBusy = ref(false);
+
+async function onService(kind: ServiceKind): Promise<void> {
+  if (svcBusy.value || !card.value) return;
+  if (!auth.token) {
+    void router.push({ path: '/login', query: { redirect: route.fullPath } });
+    return;
+  }
+  svcBusy.value = true;
+  try {
+    const sessionId = await sessionStore.ensureForCard(card.value);
+    const question = SERVICE_QUESTIONS[kind](card.value.title);
+    // 挂根(parentNodeId 缺省):MVP 授权决策,后续任务接完整路径挂接
+    const node = await addNode(sessionId, {
+      cardVersionId: card.value.cardVersionId,
+      questionText: question
+    });
+    const payload: RunSubmitPayload = {
+      cardVersionId: card.value.cardVersionId,
+      sessionId,
+      nodeId: node.nodeId,
+      question,
+      level: 'SIMPLE'
+    };
+    const { runId } = await submitRun(payload);
+    await router.push({ path: `/runs/${runId}`, state: { keRun: JSON.stringify(payload) } });
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : '操作失败,请稍后重试');
+  } finally {
+    svcBusy.value = false;
+  }
 }
 
 /** 入口类型 → 图标(与首页 SVG 线性图标语言一致) */
@@ -444,9 +492,10 @@ function entrySub(e: CardEntryItem): string {
 
     <ServiceBar
       v-if="card"
-      @explain="onService('讲清楚')"
-      @compare="onService('帮我比较')"
-      @organize="onService('整理发现')"
+      :busy="svcBusy"
+      @explain="onService('explain')"
+      @compare="onService('compare')"
+      @organize="onService('organize')"
     />
   </div>
 </template>

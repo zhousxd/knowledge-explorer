@@ -79,6 +79,10 @@ export interface CardDetail {
   theme: string;
   templateType: string;
   title: string;
+  /** 当前展示版本的 card_version 表 PK —— 智能服务挂节点/提交 run(P5-21)的必需入参;
+   *  注:后端公开详情响应暂未带出该键,契约补齐前运行时为 undefined(addNode 容忍纯追问节点,
+   *  run 提交由后端 400 校验兜底),不阻塞渲染与其余链路。 */
+  cardVersionId: number;
   versionNo: number;
   updatedAt: string;
   favorited: boolean;

@@ -82,8 +82,8 @@ export interface AddNodePayload {
   questionText?: string;
 }
 
-/** 创建会话(theme 收 shared THEMES 的 key:academy/cuisine/sound) */
-export function createSession(theme: string, goal: string): Promise<CreatedSession> {
+/** 创建会话(theme 收 shared THEMES 的 key:academy/cuisine/sound;goal 可空=P5-21 授权简化) */
+export function createSession(theme: string, goal: string | null): Promise<CreatedSession> {
   return http.post<CreatedSession>('/sessions', { theme, goal });
 }
 

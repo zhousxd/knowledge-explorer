@@ -2,9 +2,14 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryHistory, createRouter } from 'vue-router';
+import { showToast } from 'vant';
 import { getCard, fetchCardEntries } from '../api/cards';
 import type { CardDetail, CardEntryGroup } from '../api/cards';
 import { favorite, unfavorite } from '../api/favorites';
+import { ApiError } from '../api/http';
+import { addNode, createSession } from '../api/sessions';
+import type { PathNode } from '../api/sessions';
+import { submitRun } from '../api/runs';
 import CompareCard from '../components/CardRenderer/CompareCard.vue';
 import TextCard from '../components/CardRenderer/TextCard.vue';
 import { useAuthStore } from '../stores/auth';
@@ -20,17 +25,37 @@ vi.mock('../api/favorites', () => ({
   unfavorite: vi.fn(),
   listFavorites: vi.fn()
 }));
+vi.mock('../api/sessions', () => ({
+  createSession: vi.fn(),
+  addNode: vi.fn(),
+  fetchLatestSession: vi.fn(),
+  fetchMySessions: vi.fn(),
+  fetchSessionTree: vi.fn(),
+  updateExplainLevel: vi.fn()
+}));
+vi.mock('../api/runs', () => ({ submitRun: vi.fn(), fetchRun: vi.fn(), isTerminal: vi.fn() }));
 vi.mock('vant', () => ({ showToast: vi.fn() }));
 const mockedGet = vi.mocked(getCard);
 const mockedEntries = vi.mocked(fetchCardEntries);
 const mockedFavorite = vi.mocked(favorite);
 const mockedUnfavorite = vi.mocked(unfavorite);
+const mockedCreateSession = vi.mocked(createSession);
+const mockedAddNode = vi.mocked(addNode);
+const mockedSubmitRun = vi.mocked(submitRun);
+
+/** addNode 响应样本(P5-21 服务键挂根新节点) */
+const NEW_NODE: PathNode = {
+  nodeId: 6, parentNodeId: null, cardVersionId: null, entryId: null,
+  questionText: '讲清楚:岳麓书院', isNewKnowledge: false,
+  visitedAt: '2026-09-30T10:00:00Z', cardTitle: null
+};
 
 const TEXT_CARD: CardDetail = {
   id: 1,
   theme: 'academy',
   templateType: 'TEXT',
   title: '岳麓书院',
+  cardVersionId: 11,
   versionNo: 3,
   updatedAt: '2026-09-30T10:00:00Z',
   favorited: false,
@@ -81,7 +106,8 @@ async function mountCard(id = '1', opts: { authed?: boolean } = {}) {
       { path: '/cards/:id', component: CardView },
       { path: '/cards', component: { render: () => null } },
       { path: '/home', component: { render: () => null } },
-      { path: '/login', component: { render: () => null } }
+      { path: '/login', component: { render: () => null } },
+      { path: '/runs/:id(\\d+)', component: { render: () => null } }
     ]
   });
   await local.push(`/cards/${id}`);
@@ -281,5 +307,101 @@ describe('CardView(卡片页,04 §7.2 KCard)', () => {
     const { wrapper } = await mountCard('1', { authed: true });
     expect(wrapper.find('.fav-btn').classes()).toContain('faved');
     expect(mockedFavorite).not.toHaveBeenCalled();
+  });
+});
+
+// —— 服务栏接线(P5-21):三键 → 建会话/复用 → 挂节点 → 提交 run → 跳执行态页 ——
+
+describe('CardView 服务栏接线(P5-21)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mockedGet.mockResolvedValue(TEXT_CARD);
+    mockedEntries.mockResolvedValue(ENTRIES);
+    mockedCreateSession.mockResolvedValue({ sessionId: 3 });
+    mockedAddNode.mockResolvedValue(NEW_NODE);
+    mockedSubmitRun.mockResolvedValue({ runId: 42 });
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('点「讲清楚」:ensureForCard 建会话 → addNode(挂根)→ submitRun → 跳 /runs/42(state 带 question)', async () => {
+    const { wrapper, local } = await mountCard('1', { authed: true });
+    await wrapper.findAll('.svc')[0]!.trigger('click');
+    await flushPromises();
+
+    expect(mockedCreateSession).toHaveBeenCalledTimes(1);
+    expect(mockedCreateSession).toHaveBeenCalledWith('academy', null);
+    expect(mockedAddNode).toHaveBeenCalledWith(3, {
+      cardVersionId: 11, questionText: '讲清楚:岳麓书院'
+    });
+    expect(mockedSubmitRun).toHaveBeenCalledWith({
+      cardVersionId: 11, sessionId: 3, nodeId: 6,
+      question: '讲清楚:岳麓书院', level: 'SIMPLE'
+    });
+    expect(local.currentRoute.value.path).toBe('/runs/42');
+    // 路由 state 带上提交上下文(RunView 重试/问题展示依赖)
+    expect((local.options.history.state as Record<string, unknown>).keRun).toBeTruthy();
+  });
+
+  it('另两键同走讲解通道:比较/整理的 question 按冻结文案合成', async () => {
+    const { wrapper } = await mountCard('1', { authed: true });
+    await wrapper.findAll('.svc')[1]!.trigger('click');
+    await flushPromises();
+    expect(mockedSubmitRun.mock.calls[0]?.[0].question).toBe('比较:岳麓书院');
+
+    await wrapper.findAll('.svc')[2]!.trigger('click');
+    await flushPromises();
+    expect(mockedSubmitRun.mock.calls[1]?.[0].question).toBe('整理关于 岳麓书院 的发现');
+  });
+
+  it('二次点击复用已建会话,不再 createSession', async () => {
+    const { wrapper } = await mountCard('1', { authed: true });
+    await wrapper.findAll('.svc')[0]!.trigger('click');
+    await flushPromises();
+    await wrapper.findAll('.svc')[0]!.trigger('click');
+    await flushPromises();
+    expect(mockedCreateSession).toHaveBeenCalledTimes(1);
+    expect(mockedAddNode).toHaveBeenCalledTimes(2);
+    expect(mockedSubmitRun).toHaveBeenCalledTimes(2);
+  });
+
+  it('提交中三键置 busy 防双击,完成后恢复', async () => {
+    let resolveNode!: (v: PathNode) => void;
+    mockedAddNode.mockImplementation(
+      () => new Promise<PathNode>((resolve) => { resolveNode = resolve; }));
+    const { wrapper } = await mountCard('1', { authed: true });
+    await wrapper.findAll('.svc')[0]!.trigger('click');
+    await flushPromises(); // createSession 已过,addNode 挂起
+    expect(wrapper.find('.svc').attributes('disabled')).toBeDefined();
+    // 挂起期间再点不重复提交
+    await wrapper.findAll('.svc')[0]!.trigger('click');
+    await flushPromises();
+    expect(mockedAddNode).toHaveBeenCalledTimes(1);
+
+    resolveNode(NEW_NODE);
+    await flushPromises();
+    expect(wrapper.find('.svc').attributes('disabled')).toBeUndefined();
+    expect(mockedSubmitRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('429 配额超限:toast 显示 envelope 文案,留在卡页不跳转', async () => {
+    mockedSubmitRun.mockRejectedValue(new ApiError(429, '今日 30 次智能服务已用完,明早 8 点恢复'));
+    const { wrapper, local } = await mountCard('1', { authed: true });
+    await wrapper.findAll('.svc')[0]!.trigger('click');
+    await flushPromises();
+    expect(showToast).toHaveBeenCalledWith('今日 30 次智能服务已用完,明早 8 点恢复');
+    expect(local.currentRoute.value.path).toBe('/cards/1');
+    // 按钮复位可再点(不卡死在 busy)
+    expect(wrapper.find('.svc').attributes('disabled')).toBeUndefined();
+  });
+
+  it('匿名点服务键:引导登录(带 redirect),不建会话不提交', async () => {
+    const { wrapper, local } = await mountCard();
+    await wrapper.findAll('.svc')[0]!.trigger('click');
+    await flushPromises();
+    expect(mockedCreateSession).not.toHaveBeenCalled();
+    expect(mockedSubmitRun).not.toHaveBeenCalled();
+    expect(local.currentRoute.value.path).toBe('/login');
+    expect(local.currentRoute.value.query.redirect).toBe('/cards/1');
   });
 });

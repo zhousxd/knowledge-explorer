@@ -2,7 +2,9 @@
 import { KeIcon } from '@ke/shared';
 
 // 服务栏(04 §7.2 ServiceBar):卡片页底部常驻三键,语义全站固定不得增删换序(FR-S01);
-// Phase 3 仅透出事件,服务执行由 Phase 5 接线
+// 三键均由 P5-21 接线为讲解 run 提交(比较/整理的专属模板由 Task 23/25 接管),
+// busy=提交链路进行中:三键整体置灰防双击(提交期间不重复建节点/提交 run)
+withDefaults(defineProps<{ busy?: boolean }>(), { busy: false });
 const emit = defineEmits<{ explain: []; compare: []; organize: [] }>();
 </script>
 
@@ -14,6 +16,7 @@ const emit = defineEmits<{ explain: []; compare: []; organize: [] }>();
     <button
       type="button"
       class="svc pri"
+      :disabled="busy"
       @click="emit('explain')"
     >
       <KeIcon
@@ -25,6 +28,7 @@ const emit = defineEmits<{ explain: []; compare: []; organize: [] }>();
     <button
       type="button"
       class="svc alt"
+      :disabled="busy"
       @click="emit('compare')"
     >
       <KeIcon
@@ -36,6 +40,7 @@ const emit = defineEmits<{ explain: []; compare: []; organize: [] }>();
     <button
       type="button"
       class="svc alt"
+      :disabled="busy"
       @click="emit('organize')"
     >
       <KeIcon
@@ -53,5 +58,6 @@ const emit = defineEmits<{ explain: []; compare: []; organize: [] }>();
 .svc:active { transform: scale(0.97); }
 .svc.pri { background: var(--ke-primary-soft); color: var(--ke-primary); }
 .svc.alt { background: var(--ke-surface); border: 1px solid var(--ke-line); color: var(--ke-ink); }
+.svc:disabled { opacity: 0.45; cursor: default; transform: none; }
 .svc-ic { width: 15px; height: 15px; }
 </style>
