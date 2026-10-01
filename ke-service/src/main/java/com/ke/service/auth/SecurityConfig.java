@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ke.service.common.ApiResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -36,6 +37,10 @@ public class SecurityConfig {
             .authorizeHttpRequests(a -> a
                 .requestMatchers("/api/auth/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
                                  "/actuator/health").permitAll()
+                // 探索端匿名浏览（01 文档：浏览无登录要求）：仅公开只读的卡片列表/详情两个 GET；
+                // 入口列表（含 viewer 过滤）与全部写路径仍走 anyRequest().authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/cards").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/cards/{id:\\d+}").permitAll()
                 .anyRequest().authenticated())
             .exceptionHandling(e -> e.authenticationEntryPoint(authenticationEntryPoint())
                                        .accessDeniedHandler(accessDeniedHandler()))
