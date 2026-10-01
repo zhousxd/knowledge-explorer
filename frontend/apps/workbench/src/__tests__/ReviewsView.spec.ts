@@ -43,6 +43,19 @@ const ITEM_BAD_CONTENT: ReviewItem = {
   contentPreview: '岳麓书院 vs 石鼓书院 · 始建年代'
 };
 
+/** 入口队列 item(Task 28):precheck/contentPreview 恒 null,摘要「入口名 · 所属卡题 · 提交人」 */
+const ITEM_ENTRY: ReviewItem = {
+  id: 103,
+  objectType: 'ENTRY',
+  objectId: 201,
+  action: 'SUBMIT',
+  status: 'PENDING',
+  createdAt: '2026-09-30T11:00:00+08:00',
+  summary: '讲讲岳麓书院 · 岳麓书院卡 · 探索者甲',
+  precheck: null,
+  contentPreview: null
+};
+
 /** 队列(size=20)返回 2 条;徽标查询(size=1)只取 total */
 function mockQueue(total = 2) {
   listReviewsMock.mockImplementation((params: { size?: number }) => {
@@ -100,16 +113,58 @@ describe('ReviewsView', () => {
     expect(secondTags[1]?.text()).toBe('来源齐备');
   });
 
-  it('两队列 tabs:入口 tab 禁用并注明后续版本开放,点击不切换', async () => {
+  it('两队列 tabs:入口 tab 已开放,切换拉 ENTRY 队列并渲染入口卡', async () => {
     const wrapper = await mountView();
     listReviewsMock.mockClear();
+    listReviewsMock.mockImplementation((params: { size?: number; objectType?: string }) => {
+      if (params.size === 1) {
+        return Promise.resolve({ items: [], total: 3, page: 1, size: 1 });
+      }
+      return Promise.resolve({ items: [ITEM_ENTRY], total: 1, page: 1, size: 20 });
+    });
     const entryTab = wrapper.find('[data-queue="ENTRY"]');
-    expect(entryTab.classes()).toContain('is-disabled');
-    expect(wrapper.find('.entry-hint').text()).toContain('入口审核将于后续版本开放');
+    expect(entryTab.classes()).not.toContain('is-disabled');
     await entryTab.trigger('click');
     await flushPromises();
-    expect(listReviewsMock).not.toHaveBeenCalled();
-    expect(wrapper.find('[data-queue="CARD"]').classes()).toContain('is-active');
+    // 切换后按 objectType=ENTRY 拉队列
+    expect(listReviewsMock).toHaveBeenCalledWith({ status: 'PENDING', objectType: 'ENTRY', page: 1, size: 20 });
+    expect(wrapper.find('[data-queue="ENTRY"]').classes()).toContain('is-active');
+
+    // 入口审核卡:对象 chip/标题,无机器预检块(precheck null 容错)、无内容预览,带所属卡片
+    const card = wrapper.find('.review-card');
+    expect(card.find('.obj-chip').text()).toBe('入口');
+    expect(card.find('.obj-name').text()).toBe('讲讲岳麓书院');
+    expect(card.find('.precheck').exists()).toBe(false);
+    expect(card.find('.preview').exists()).toBe(false);
+    expect(card.find('.kv').text()).toContain('所属卡片:岳麓书院卡');
+    expect(card.find('.kv').text()).toContain('探索者甲');
+    // 入口通过按钮文案不带「发布」
+    expect(card.find('.act-approve').text()).toBe('通过');
+  });
+
+  it('入口裁决:通过调 approve 维持生效文案,驳回 toast 带下架语义', async () => {
+    listReviewsMock.mockImplementation((params: { size?: number; objectType?: string }) => {
+      if (params.size === 1) {
+        return Promise.resolve({ items: [], total: 1, page: 1, size: 1 });
+      }
+      return Promise.resolve({ items: [ITEM_ENTRY], total: 1, page: 1, size: 20 });
+    });
+    const wrapper = await mountView();
+    await wrapper.find('[data-queue="ENTRY"]').trigger('click');
+    await flushPromises();
+    listReviewsMock.mockClear();
+
+    const card = wrapper.findAll('.review-card')[0];
+    await card!.find('.act-approve').trigger('click');
+    await flushPromises();
+    expect(approveMock).toHaveBeenCalledWith(103);
+
+    // 驳回:意见必填三步
+    await card!.find('.act-reject').trigger('click');
+    await card!.find('.reject-box textarea').setValue('出处不实');
+    await card!.find('.confirm-reject').trigger('click');
+    await flushPromises();
+    expect(rejectMock).toHaveBeenCalledWith(103, '出处不实');
   });
 
   it('通过一击完成:调 approve 后刷新队列并联动待审徽标', async () => {

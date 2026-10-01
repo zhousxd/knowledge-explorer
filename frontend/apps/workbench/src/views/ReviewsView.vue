@@ -10,9 +10,11 @@ import { useReviewStore } from '../stores/review';
 import WbDenied from '../components/WbDenied.vue';
 
 /**
- * 审核中心(FR-O03):卡片/入口两队列,每项一张审核卡(对象 + 机器预检标签 + 内容预览 +
- * 提交人/时间),通过一击、驳回三步(点开 + 填意见 + 确认,意见必填)。
+ * 审核中心(FR-O03):卡片/入口两队列,每项一张审核卡(对象 + 机器预检标签(仅卡片) +
+ * 内容预览(仅卡片) + 提交人/时间),通过一击、驳回三步(点开 + 填意见 + 确认,意见必填)。
  * 裁决成功后重拉队列并联动侧栏待审计数徽标(reviewStore)。
+ * 入口队列(Task 28):公共入口送审进同一队列——ENTRY 无卡片内容语义,precheck/contentPreview
+ * 恒 null(渲染需容错),摘要「入口名 · 所属卡题 · 提交人」;通过=维持生效,驳回=下架。
  */
 const reviewStore = useReviewStore();
 
@@ -58,9 +60,9 @@ async function load(): Promise<void> {
   }
 }
 
-/** 队列 tab 切换;入口队列本期未接入(禁用态,Phase 6 开放) */
+/** 队列 tab 切换(卡片/入口两队列均开放;入口队列 Task 28 解禁) */
 function switchQueue(queue: ReviewObjectType): void {
-  if (queue === 'ENTRY' || activeQueue.value === queue) {
+  if (activeQueue.value === queue) {
     return;
   }
   activeQueue.value = queue;
@@ -96,7 +98,9 @@ async function onApprove(item: ReviewItem): Promise<void> {
   try {
     try {
       await approveReview(item.id);
-      ElMessage.success(`已通过并发布「${parseSummary(item).title}」`);
+      // 卡片通过即发布;入口通过=维持生效(Task 28:公共入口创建即 ACTIVE,审核维持)
+      const verb = item.objectType === 'ENTRY' ? '已通过' : '已通过并发布';
+      ElMessage.success(`${verb}「${parseSummary(item).title}」`);
     } catch (e) {
       ElMessage.error(e instanceof Error ? e.message : '操作失败');
       return;
@@ -131,7 +135,8 @@ async function onConfirmReject(item: ReviewItem): Promise<void> {
   try {
     try {
       await rejectReview(item.id, notes.value.trim());
-      ElMessage.success(`已驳回「${parseSummary(item).title}」,退回草稿`);
+      const tail = item.objectType === 'ENTRY' ? ',已下架' : ',退回草稿';
+      ElMessage.success(`已驳回「${parseSummary(item).title}」${tail}`);
     } catch (e) {
       ElMessage.error(e instanceof Error ? e.message : '操作失败');
       return;
@@ -185,21 +190,16 @@ onMounted(() => {
         </button>
         <button
           class="queue-tab"
-          :class="{ 'is-disabled': true }"
+          :class="{ 'is-active': activeQueue === 'ENTRY' }"
           type="button"
           role="tab"
-          aria-selected="false"
-          :aria-disabled="true"
+          :aria-selected="activeQueue === 'ENTRY'"
           data-queue="ENTRY"
-          title="入口审核将于后续版本开放"
           @click="switchQueue('ENTRY')"
         >
           入口审核
         </button>
       </div>
-      <span class="entry-hint">
-        入口审核将于后续版本开放
-      </span>
     </div>
 
     <WbDenied v-if="denied">
@@ -230,12 +230,16 @@ onMounted(() => {
               {{ parseSummary(item).title || '未命名对象' }}
             </h3>
             <span
-              v-if="parseSummary(item).template"
+              v-if="item.objectType === 'CARD' && parseSummary(item).template"
               class="tpl-chip"
             >{{ templateLabel(item) }}</span>
           </header>
 
-          <div class="precheck">
+          <!-- 机器预检仅卡片有(ENTRY 无卡片内容语义,precheck 恒 null——渲染容错) -->
+          <div
+            v-if="item.objectType === 'CARD'"
+            class="precheck"
+          >
             <el-tag
               :type="item.precheck?.contentValid ? 'success' : 'info'"
               size="small"
@@ -259,12 +263,16 @@ onMounted(() => {
             </el-tag>
           </div>
 
-          <p class="preview">
+          <p
+            v-if="item.objectType === 'CARD'"
+            class="preview"
+          >
             {{ item.contentPreview ?? '内容暂不可预览' }}
           </p>
 
           <div class="kv">
             <span>提交人:{{ parseSummary(item).submitter || '—' }}</span>
+            <span v-if="item.objectType === 'ENTRY'">所属卡片:{{ parseSummary(item).template || '—' }}</span>
             <span>提交时间:{{ formatDateTime(item.createdAt) }}</span>
           </div>
 
@@ -275,7 +283,7 @@ onMounted(() => {
               :disabled="busyId !== null"
               @click="onApprove(item)"
             >
-              通过并发布
+              {{ item.objectType === 'ENTRY' ? '通过' : '通过并发布' }}
             </el-button>
             <el-button
               class="act-reject"
@@ -348,9 +356,6 @@ onMounted(() => {
 .queue-tab { height: 28px; padding: 0 14px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-full); background: var(--ke-surface); color: var(--ke-sub); font-size: 12px; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease), color var(--ke-dur-fast) var(--ke-ease), border-color var(--ke-dur-fast) var(--ke-ease); }
 .queue-tab:hover { border-color: var(--ke-primary); color: var(--ke-primary); }
 .queue-tab.is-active { border-color: var(--ke-primary); background: var(--ke-primary); color: var(--ke-white); }
-.queue-tab.is-disabled { color: var(--ke-sub); background: var(--ke-bg); cursor: not-allowed; opacity: 0.6; }
-.queue-tab.is-disabled:hover { border-color: var(--ke-line-strong); color: var(--ke-sub); }
-.entry-hint { color: var(--ke-sub); font-size: 12px; }
 
 .load-error { margin: 0; padding: 8px 12px; border-radius: var(--ke-radius-s); background: var(--ke-danger-soft); color: var(--ke-danger); font-size: 13px; }
 .card-list { display: flex; flex-direction: column; gap: 12px; min-height: 120px; }

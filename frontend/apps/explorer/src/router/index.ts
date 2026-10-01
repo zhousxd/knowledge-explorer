@@ -7,6 +7,7 @@ import CardView from '../views/CardView.vue';
 import PathView from '../views/PathView.vue';
 import RunView from '../views/RunView.vue';
 import SummaryView from '../views/SummaryView.vue';
+import EntryCreateView from '../views/EntryCreateView.vue';
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -33,6 +34,8 @@ const router = createRouter({
     // 成果整理页(FR-E07/E09):个性化页,受保护;query.sessionId 必带(缺失回 /path),
     // ?runId 存在即报告态;重试 payload 经 history state(keSummary)携带
     { path: '/summary', component: SummaryView, meta: { title: '整理发现' } },
+    // 用一句话新增入口四步流(FR-N01–N05,Task 28):个性化页,受保护;卡 id 必为数字
+    { path: '/cards/:id(\\d+)/entry/new', component: EntryCreateView, meta: { title: '新增入口' } },
     { path: '/', redirect: '/home' },
     // catch-all:未知路径回首页(避免白屏)
     { path: '/:pathMatch(.*)*', redirect: '/home' }

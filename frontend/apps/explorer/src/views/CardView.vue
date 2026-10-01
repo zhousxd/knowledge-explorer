@@ -196,6 +196,16 @@ function openCard(cardId: number): void {
   void router.push(`/cards/${cardId}`);
 }
 
+/** 用一句话新增入口(Task 28 四步流,FR-N01):匿名先引导登录,已登录进创建流 */
+function goEntryCreate(): void {
+  if (!card.value) return;
+  if (!auth.token) {
+    void router.push({ path: '/login', query: { redirect: route.fullPath } });
+    return;
+  }
+  void router.push(`/cards/${card.value.id}/entry/new`);
+}
+
 // —— 服务栏/探索入口接线(P5-21 + A1③ 数据面):讲解/整理提交讲解 run(EXPLAIN),
 // 「帮我比较」走 COMPARE 通道(Task 23:payload.serviceType='COMPARE',结果页渲染对比卡;
 // 整理的专属模板由 Task 25 接管)。链路:匿名先引导登录 → ensureForCard(无会话建、有则复用)→
@@ -496,6 +506,10 @@ function entrySub(e: CardEntryItem): string {
               <span class="et">
                 <span class="en">
                   {{ e.name }}
+                  <span
+                    v-if="e.mine && e.scope === 'PRIVATE'"
+                    class="pchip"
+                  >私人入口</span>
                 </span>
                 <span class="er">
                   {{ entrySub(e) }}
@@ -527,6 +541,8 @@ function entrySub(e: CardEntryItem): string {
         <button
           type="button"
           class="addentry"
+          data-test="add-entry"
+          @click="goEntryCreate"
         >
           <KeIcon
             class="add-ic"
@@ -577,6 +593,9 @@ function entrySub(e: CardEntryItem): string {
 .ei { display: flex; width: 36px; height: 36px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: var(--ke-radius-s); background: var(--ke-primary-soft); color: var(--ke-primary); }
 .et { flex: 1; min-width: 0; }
 .en { display: block; font-size: 14px; font-weight: 600; line-height: 1.5; color: var(--ke-ink); }
+
+/* 私人入口 chip(FR-N04):仅作者可见的私人入口缀在名称后,用 --ke-private 紫色系 */
+.pchip { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: var(--ke-radius-full); background: var(--ke-private-soft); color: var(--ke-private); font-size: 10px; font-weight: 600; vertical-align: 1px; }
 .er { display: block; margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--ke-sub); }
 .ea { flex-shrink: 0; color: var(--ke-sub-2); }
 .fold, .retry-entry { display: block; width: 100%; margin: 8px 0 0; padding: 10px; border: none; border-radius: var(--ke-radius-l); background: transparent; font-size: 12px; font-weight: 600; font-family: var(--ke-font); color: var(--ke-sub); text-align: center; cursor: pointer; box-sizing: border-box; }
