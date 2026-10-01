@@ -81,8 +81,10 @@ const question = computed(() => launch.value?.question ?? '智能服务执行中
 /**
  * 刷新丢路由 state 后的提交上下文重建(review P5-FIX):用 GET /runs/{id} 的 submitContext
  * 投影(属主可见)拼回 launch——question/cardVersionId/sessionId/nodeId 缺一不可,level 回落
- * 会话档位记忆(投影不含 level)。重建后追问/重试与路由 state 带入同语义;submitContext 也
- * null(非属主不可达/旧行异常)→ launch 维持 null,AskBar/重试按禁用文案展示。
+ * 会话档位记忆(投影不含 level);serviceType 仅 COMPARE 显式带上(Phase 5 终审 rider:FAILED
+ * 比较运行刷新后重试保留比较通道,缺键=EXPLAIN 缺省故讲解/追问无需映射,追问仍恒走讲解)。
+ * 重建后追问/重试与路由 state 带入同语义;submitContext 也 null(非属主不可达/旧行异常)
+ * → launch 维持 null,AskBar/重试按禁用文案展示。
  */
 function rebuildLaunch(state: RunState): void {
   const ctx = state.submitContext;
@@ -94,7 +96,8 @@ function rebuildLaunch(state: RunState): void {
     sessionId: ctx.sessionId,
     nodeId: ctx.nodeId,
     question: ctx.question,
-    level: sessionStore.explainLevel
+    level: sessionStore.explainLevel,
+    ...(ctx.serviceType === 'COMPARE' ? { serviceType: 'COMPARE' as const } : {})
   };
 }
 

@@ -305,6 +305,28 @@ describe('RunView(执行态页,04 §7.2 RunProgress)', () => {
     });
   });
 
+  it('FAILED 比较运行刷新丢 state:重建 launch 保留 COMPARE 通道,重试不静默降级讲解', async () => {
+    mockedFetchRun.mockResolvedValue(runState({
+      status: 'FAILED', serviceType: 'COMPARE', error: '上游服务异常',
+      submitContext: {
+        cardVersionId: 11, sessionId: 3, nodeId: 6,
+        serviceType: 'COMPARE', question: '对比两座书院'
+      }
+    }));
+    const { wrapper, local } = await mountRun('7');
+    const err = wrapper.find('.err-card');
+    expect(err.exists()).toBe(true);
+
+    await wrapper.find('.err-retry').trigger('click');
+    await flushPromises();
+    // 重建的 payload 带 serviceType=COMPARE → 重试仍走比较通道(Phase 5 终审 rider)
+    expect(mockedSubmit).toHaveBeenCalledWith({
+      cardVersionId: 11, sessionId: 3, nodeId: 6,
+      question: '对比两座书院', level: 'SIMPLE', serviceType: 'COMPARE'
+    });
+    expect(local.currentRoute.value.path).toBe('/runs/42');
+  });
+
   it('submitContext 不完整(缺 sessionId/nodeId):不足以重建提交,追问维持禁用', async () => {
     mockedFetchRun.mockResolvedValue(runState({
       status: 'DONE',
