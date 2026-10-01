@@ -117,6 +117,9 @@ class AnonymousCardIT {
         assertThat((Integer) JsonPath.read(detail.getBody(), "$.code")).isZero();
         assertThat((String) JsonPath.read(detail.getBody(), "$.data.title")).isEqualTo("匿名浏览的岳麓书院");
         assertThat((String) JsonPath.read(detail.getBody(), "$.data.content.summary")).isEqualTo("匿名可见摘要");
+        // P5-22 契约补齐:详情带 cardVersionId(当前版本 PK,探索端智能服务挂节点/提交 run 的必需入参)
+        Integer cardVersionId = JsonPath.read(detail.getBody(), "$.data.cardVersionId");
+        assertThat(cardVersionId).as("detail body=%s", detail.getBody()).isNotNull().isPositive();
 
         // 无 token 入口列表 → 401 envelope（viewer 过滤的接口不放行）
         ResponseEntity<String> entries = http.exchange("/api/cards/" + cardId + "/entries",

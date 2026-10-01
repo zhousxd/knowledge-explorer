@@ -95,7 +95,7 @@ public class CardService {
     }
 
     public record CardDetail(Long id, String theme, String templateType, String title, Integer versionNo,
-                             JsonNode content, JsonNode sources, OffsetDateTime updatedAt) {
+                             Long cardVersionId, JsonNode content, JsonNode sources, OffsetDateTime updatedAt) {
     }
 
     /** 版本历史 item（工作台）：versionNo 倒序，created_by 关联昵称 */
@@ -286,7 +286,7 @@ public class CardService {
         }
         try {
             return new CardDetail(card.getId(), card.getTheme(), card.getTemplateType(), card.getTitle(),
-                    version.getVersionNo(), objectMapper.readTree(version.getContentJson()),
+                    version.getVersionNo(), version.getId(), objectMapper.readTree(version.getContentJson()),
                     sourcesNode(version.getSources()), card.getUpdatedAt());
         } catch (JsonProcessingException e) {
             throw new BadRequestException("卡片内容损坏");

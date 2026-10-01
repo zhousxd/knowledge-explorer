@@ -23,6 +23,7 @@ import com.ke.service.agent.post.ClaimLabelAppender;
 import com.ke.service.agent.post.RunMetrics;
 import com.ke.service.agent.post.SensitiveWordFilter;
 import com.ke.service.common.BadRequestException;
+import com.ke.service.common.NotFoundException;
 import com.ke.service.common.RateLimitException;
 import com.ke.service.explore.SessionService;
 import com.ke.service.llm.ChatCommand;
@@ -37,6 +38,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import java.io.UncheckedIOException;
@@ -134,20 +136,24 @@ public class ExplainService {
         this.self = self;
     }
 
-    /** agent_run.input_json 形状（userId 冗余进 JSON：GET 属主判定与 Task 21 归一都从这里取） */
+    /**
+     * agent_run.input_json 形状（userId 冗余进 JSON：GET 属主判定与 Task 21 归一都从这里取）。
+     * parentRunId=追问链（FR-E08，Task 22）：追问=新 run，agent_run 无 parent 列，记 JSON 即可
+     * （Phase 4 parentNodeId 先例）；null=首次讲解。
+     */
     public record ExplainInput(Long userId, Long sessionId, Long nodeId,
-                               Long cardVersionId, String question, String level) {
+                               Long cardVersionId, String question, String level, Long parentRunId) {
     }
 
     // ---------- 提交（controller 线程，同步前置校验） ----------
 
     /**
-     * 提交讲解运行：校验（question/level、会话属主 404/403、节点归属、卡已发布 400、每日配额
-     * 超限 429）→ 落库 QUEUED（input_json={userId,sessionId,nodeId,cardVersionId,question,level}）→
-     * 异步执行，立即返回 runId（POST → 202）。
+     * 提交讲解运行：校验（question/level、会话属主 404/403、节点归属、追问 parent 存在且属主 400、
+     * 卡已发布 400、每日配额超限 429）→ 落库 QUEUED（input_json={userId,sessionId,nodeId,
+     * cardVersionId,question,level,parentRunId}）→ 异步执行，立即返回 runId（POST → 202）。
      */
     public Long explain(long userId, Long cardVersionId, String question, String level,
-                        Long sessionId, Long nodeId) {
+                        Long sessionId, Long nodeId, Long parentRunId) {
         if (cardVersionId == null) {
             throw new BadRequestException("cardVersionId 不能为空");
         }
@@ -172,6 +178,9 @@ public class ExplainService {
                 }
             }
         }
+        if (parentRunId != null) {
+            requireParentOwned(userId, parentRunId);
+        }
         CardVersionEntity version = cardVersions.selectById(cardVersionId);
         if (version == null) {
             throw new BadRequestException("卡片版本不存在");
@@ -186,7 +195,7 @@ public class ExplainService {
             throw new RateLimitException("今日 " + quota.dailyLimit() + " 次智能服务已用完,明早 8 点恢复");
         }
 
-        ExplainInput input = new ExplainInput(userId, sessionId, nodeId, cardVersionId, question, level);
+        ExplainInput input = new ExplainInput(userId, sessionId, nodeId, cardVersionId, question, level, parentRunId);
         AgentRunEntity run = new AgentRunEntity();
         run.setSessionId(sessionId);
         run.setNodeId(nodeId);
@@ -196,6 +205,41 @@ public class ExplainService {
         runs.insert(run);
         self.executeExplain(run.getId(), input);
         return run.getId();
+    }
+
+    /**
+     * 追问链校验（Task 22 决策）：parent run 必须存在且属主——否则一律 400「无效的追问来源」，
+     * 不区分存在性泄露（404 会暴露他人 run 的存在）。属主判定与 RunController.requireRunOwner
+     * 同规则：有会话走会话属主，无会话 legacy run 解析 input_json.userId。
+     */
+    private void requireParentOwned(long userId, long parentRunId) {
+        AgentRunEntity parent = runs.selectById(parentRunId);
+        if (parent != null && parent.getSessionId() != null) {
+            try {
+                sessions.ownedSession(userId, parent.getSessionId());
+                return;
+            } catch (NotFoundException | AccessDeniedException e) {
+                // 他人会话/会话已删 → 与不存在同响应
+            }
+        } else if (parent != null) {
+            Long owner = legacyOwnerOf(parent.getInputJson());
+            if (owner != null && owner == userId) {
+                return;
+            }
+        }
+        throw new BadRequestException("无效的追问来源");
+    }
+
+    /** 无会话 legacy run 的属主解析（input_json.userId），损坏视同无属主 */
+    private Long legacyOwnerOf(String inputJson) {
+        if (inputJson == null || inputJson.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(inputJson, ExplainInput.class).userId();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // ---------- 执行（agentExecutor 虚拟线程） ----------

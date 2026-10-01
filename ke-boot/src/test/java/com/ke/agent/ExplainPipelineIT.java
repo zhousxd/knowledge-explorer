@@ -351,4 +351,58 @@ class ExplainPipelineIT {
         // 无越界引用 → 无旁路留痕（error 字段 non_null 序列化下整个省略）
         assertThat(res.getBody()).doesNotContain("\"error\"");
     }
+
+    // ---------- Task 22 追问链（parentRunId，FR-E08） ----------
+
+    @Test
+    void followUpWithOwnedParentRunAccepted() {
+        // 追问=新 run：同属主提交带 parentRunId 指向前次 run → 202 正常执行；
+        // agent_run 无 parent 列，追问链记 input_json.parentRunId（Phase 4 先例）
+        long versionId = insertPublishedCard("追问卡", null);
+        String token = newUserToken("13811100014", "卯", "EXPLORER");
+        long[] ids = newSessionWithNode(token, versionId);
+
+        StubLlmGateway.reset(StubLlmGateway.validOutput(0));
+        long parentId = submitRun(token, versionId, ids[0], ids[1], "岳麓书院的历史？", "SIMPLE");
+        awaitTerminal(token, parentId);
+
+        ResponseEntity<String> res = http.postForEntity("/api/agent/runs",
+                json("{\"cardVersionId\":" + versionId + ",\"sessionId\":" + ids[0]
+                        + ",\"nodeId\":" + ids[1] + ",\"parentRunId\":" + parentId
+                        + ",\"question\":\"那书院经费从哪来？\",\"level\":\"SIMPLE\"}", token), String.class);
+        assertThat(res.getStatusCode().value()).as("follow-up body=%s", res.getBody()).isEqualTo(202);
+        long followId = ((Number) JsonPath.read(res.getBody(), "$.data.runId")).longValue();
+        assertThat(followId).isNotEqualTo(parentId);
+        assertThat((String) JsonPath.read(awaitTerminal(token, followId).getBody(), "$.data.status"))
+                .isEqualTo("DONE");
+
+        // input_json 是缩进美化 JSON：用 JsonPath 取键断言，不锚定序列化排版
+        String inputJson = jdbc.queryForObject("select input_json::text from agent_run where id=?", String.class, followId);
+        assertThat((Integer) JsonPath.read(inputJson, "$.parentRunId")).isEqualTo((int) parentId);
+    }
+
+    @Test
+    void foreignOrMissingParentRunIdRejected() {
+        // Task 22 决策：parent 非属主/不存在一律 400「无效的追问来源」——404 会泄露他人 run 存在性
+        long versionId = insertPublishedCard("追问越权卡", null);
+        String ownerToken = newUserToken("13811100015", "辰", "EXPLORER");
+        long[] ids = newSessionWithNode(ownerToken, versionId);
+
+        StubLlmGateway.reset(StubLlmGateway.validOutput(0));
+        long parentId = submitRun(ownerToken, versionId, ids[0], ids[1], "第一个问题？", "SIMPLE");
+
+        String strangerToken = newUserToken("13811100016", "巳", "EXPLORER");
+        ResponseEntity<String> foreign = http.postForEntity("/api/agent/runs",
+                json("{\"cardVersionId\":" + versionId + ",\"parentRunId\":" + parentId
+                        + ",\"question\":\"？\",\"level\":\"SIMPLE\"}", strangerToken), String.class);
+        assertThat(foreign.getStatusCode().value()).as("foreign body=%s", foreign.getBody()).isEqualTo(400);
+        assertThat((String) JsonPath.read(foreign.getBody(), "$.message")).contains("无效的追问来源");
+
+        // 不存在的 parentRunId 同一响应，不区分泄露
+        ResponseEntity<String> missing = http.postForEntity("/api/agent/runs",
+                json("{\"cardVersionId\":" + versionId + ",\"parentRunId\":999999"
+                        + ",\"question\":\"？\",\"level\":\"SIMPLE\"}", ownerToken), String.class);
+        assertThat(missing.getStatusCode().value()).as("missing body=%s", missing.getBody()).isEqualTo(400);
+        assertThat((String) JsonPath.read(missing.getBody(), "$.message")).contains("无效的追问来源");
+    }
 }

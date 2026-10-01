@@ -44,6 +44,8 @@ public class CardPublicController {
         body.put("templateType", d.templateType());
         body.put("title", d.title());
         body.put("versionNo", d.versionNo());
+        // 当前展示版本的 card_version PK：探索端智能服务挂节点/提交 run 的必需入参（Task 22 契约补齐）
+        body.put("cardVersionId", d.cardVersionId());
         body.put("content", d.content());
         body.put("sources", d.sources());
         body.put("updatedAt", d.updatedAt());

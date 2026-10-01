@@ -53,7 +53,8 @@ public class RunController {
         this.explain = explain;
     }
 
-    public record RunRequest(Long cardVersionId, Long sessionId, Long nodeId,
+    /** parentRunId 可选：追问链（FR-E08，Task 22）——追问=新 run，链记 input_json（校验在 ExplainService） */
+    public record RunRequest(Long cardVersionId, Long sessionId, Long nodeId, Long parentRunId,
                              String question, String level) {
     }
 
@@ -71,7 +72,7 @@ public class RunController {
     @ResponseStatus(HttpStatus.ACCEPTED)
     public ApiResponse<Map<String, Object>> submit(@RequestBody RunRequest req) {
         Long runId = explain.explain(currentUserId(), req.cardVersionId(), req.question(),
-                req.level(), req.sessionId(), req.nodeId());
+                req.level(), req.sessionId(), req.nodeId(), req.parentRunId());
         return ApiResponse.ok(Map.of("runId", runId));
     }
 
