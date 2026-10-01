@@ -3,16 +3,40 @@ import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import App from '../App.vue';
+import { fetchLatestSession } from '../api/sessions';
+import type { ResumeSession } from '../api/sessions';
 import ResumeCard from '../components/ResumeCard.vue';
 import router from '../router';
 import { useAuthStore } from '../stores/auth';
 import CardsView from '../views/CardsView.vue';
 import HomeView from '../views/HomeView.vue';
 
-// /cards 已是接真数据的列表页(Task 14):App 宿主测试里 mock 掉列表接口,只验证导航联通
+// /cards 已是接真数据的列表页(Task 14):App 宿主测试里 mock 掉列表接口,只验证导航联通;
+// 会话端点 P4-16 已交付,HomeView 挂载时会拉 latest(P4-17 断点续探接线)——一并 mock
 vi.mock('../api/cards', () => ({
   listPublicCards: vi.fn(async () => ({ items: [], nextCursor: null }))
 }));
+vi.mock('../api/sessions', () => ({
+  fetchLatestSession: vi.fn(),
+  fetchSessionTree: vi.fn(),
+  addNode: vi.fn(),
+  updateExplainLevel: vi.fn(),
+  fetchMySessions: vi.fn(),
+  createSession: vi.fn()
+}));
+const mockedLatest = vi.mocked(fetchLatestSession);
+
+/** P4-16 冻结 ResumeSession 形状样本(时间取动态「昨天」,防跨机时区漂移) */
+function resumeFixture(): ResumeSession {
+  return {
+    sessionId: 7,
+    title: '岳麓书院：从选址到人物',
+    lastVisitedAt: new Date(Date.now() - 86400000).toISOString(),
+    nodeCount: 5,
+    branchCount: 1,
+    openQuestionCount: 0
+  };
+}
 
 /** 直挂 HomeView 用的独立 memory 路由:绕开全局守卫,便于覆盖登录态分支 */
 async function mountHome(options: { loggedIn?: boolean } = {}) {
@@ -24,6 +48,7 @@ async function mountHome(options: { loggedIn?: boolean } = {}) {
     routes: [
       { path: '/home', component: HomeView },
       { path: '/cards', component: CardsView },
+      { path: '/path', component: { render: () => null } },
       { path: '/login', component: { render: () => null } }
     ]
   });
@@ -34,14 +59,12 @@ async function mountHome(options: { loggedIn?: boolean } = {}) {
   return { wrapper, local };
 }
 
-describe('ResumeCard(继续探索卡)', () => {
-  it('渲染眉标/宋体标题/进度摘要,点击按钮 emit continue', async () => {
-    const wrapper = mount(ResumeCard, {
-      props: { title: '岳麓书院：从选址到人物', progress: '昨天暂存', nodes: 5, branches: 1 }
-    });
-    expect(wrapper.text()).toContain('继续探索 · 昨天暂存');
+describe('ResumeCard(继续探索卡,P4-17 新形状)', () => {
+  it('渲染眉标(相对时间+探索)/宋体标题/进度摘要,点击按钮 emit continue', async () => {
+    const wrapper = mount(ResumeCard, { props: { session: resumeFixture() } });
+    expect(wrapper.text()).toContain('继续探索 · 昨天探索');
     expect(wrapper.find('h2').text()).toBe('岳麓书院：从选址到人物');
-    expect(wrapper.text()).toContain('已探索 5 个节点 · 1 个分支');
+    expect(wrapper.text()).toContain('5 个节点 · 1 个分支');
     await wrapper.find('button').trigger('click');
     expect(wrapper.emitted('continue')).toHaveLength(1);
   });
@@ -50,10 +73,13 @@ describe('ResumeCard(继续探索卡)', () => {
 describe('HomeView(直挂,登录态分支)', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.clearAllMocks();
+    mockedLatest.mockResolvedValue(null);
   });
 
-  it('未登录:顶部渲染登录引导细条,点击跳 /login', async () => {
+  it('未登录:登录引导细条渲染且不拉会话,点击跳 /login', async () => {
     const { wrapper, local } = await mountHome();
+    expect(mockedLatest).not.toHaveBeenCalled();
     const hint = wrapper.find('.login-hint');
     expect(hint.exists()).toBe(true);
     expect(hint.text()).toBe('登录后记录你的探索路径');
@@ -62,10 +88,33 @@ describe('HomeView(直挂,登录态分支)', () => {
     expect(local.currentRoute.value.path).toBe('/login');
   });
 
-  it('已登录:登录细条隐藏,继续探索卡因无会话数据整卡隐藏', async () => {
+  it('已登录+有会话:ResumeCard 渲染新形状,continue 跳 /path?sessionId=;标题下有「我的路径」入口', async () => {
+    mockedLatest.mockResolvedValue(resumeFixture());
+    const { wrapper, local } = await mountHome({ loggedIn: true });
+
+    expect(mockedLatest).toHaveBeenCalledTimes(1);
+    const card = wrapper.findComponent(ResumeCard);
+    expect(card.exists()).toBe(true);
+    expect(card.props('session').sessionId).toBe(7);
+    expect(wrapper.text()).toContain('5 个节点 · 1 个分支');
+    // 「我的路径」入口(登录后常驻,替代原型的底导)
+    const myPath = wrapper.find('.mypath');
+    expect(myPath.exists()).toBe(true);
+    await myPath.trigger('click');
+    await flushPromises();
+    expect(local.currentRoute.value.path).toBe('/path');
+
+    // continue:带 sessionId query 进路径页定位恢复点
+    await card.find('button').trigger('click');
+    await flushPromises();
+    expect(local.currentRoute.value.path).toBe('/path');
+    expect(local.currentRoute.value.query.sessionId).toBe('7');
+  });
+
+  it('已登录+无会话(404→null):继续探索卡隐藏,「我的路径」入口仍在', async () => {
     const { wrapper } = await mountHome({ loggedIn: true });
-    expect(wrapper.find('.login-hint').exists()).toBe(false);
     expect(wrapper.findComponent(ResumeCard).exists()).toBe(false);
+    expect(wrapper.find('.mypath').exists()).toBe(true);
   });
 });
 

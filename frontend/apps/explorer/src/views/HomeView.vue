@@ -1,22 +1,39 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { KeIcon } from '@ke/shared';
+import { fetchLatestSession } from '../api/sessions';
 import type { ResumeSession } from '../api/sessions';
 import ResumeCard from '../components/ResumeCard.vue';
 import ThemeGrid from '../components/ThemeGrid.vue';
 import { useAuthStore } from '../stores/auth';
-import { HOME_ENTRIES, HOME_RESUME } from '../mock/home';
+import { HOME_ENTRIES } from '../mock/home';
 
 const router = useRouter();
 const auth = useAuthStore();
 const keyword = ref('');
-// 继续探索卡数据:端点 GET /api/sessions/latest 由 Phase 4 Task 16 交付,当前恒为 undefined(整卡隐藏);
-// 接线时改为 ref(null) 并在 onMounted 调 fetchLatestSession() 填充
-const resume = computed<ResumeSession | undefined>(() => (auth.token ? HOME_RESUME : undefined));
+// 断点续探入口(FR-E01):已登录挂载时拉最近会话,404(无会话)→ null 整卡隐藏(P4-16 契约)
+const resume = ref<ResumeSession | null>(null);
+
+onMounted(() => {
+  if (!auth.token) return;
+  void fetchLatestSession().then((latest) => {
+    resume.value = latest;
+  });
+});
 
 function goLogin() {
   void router.push('/login');
+}
+
+function goMyPath() {
+  void router.push('/path');
+}
+
+/** 继续上次探索:带 sessionId 进路径页,定位到最近访问节点 */
+function onResume() {
+  if (!resume.value) return;
+  void router.push({ path: '/path', query: { sessionId: String(resume.value.sessionId) } });
 }
 
 function search() {
@@ -33,9 +50,6 @@ function openTheme(theme: string) {
 function openEntry() {
   void router.push('/cards');
 }
-
-// TODO(Phase 4 Task 16): 会话端点交付后跳转最近会话恢复点
-function onResume() {}
 </script>
 
 <template>
@@ -54,9 +68,21 @@ function onResume() {}
     <p class="sub">
       从一张卡片出发，逐层深入，随时回望
     </p>
+    <button
+      v-if="auth.token"
+      type="button"
+      class="mypath"
+      @click="goMyPath"
+    >
+      <KeIcon
+        class="mp-ic"
+        name="path"
+      />
+      我的路径
+    </button>
     <ResumeCard
       v-if="resume"
-      v-bind="resume"
+      :session="resume"
       @continue="onResume"
     />
     <form
@@ -114,6 +140,9 @@ function onResume() {}
 .login-hint { display: flex; width: 100%; align-items: center; margin: 0 0 14px; padding: 9px 12px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-m); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 12px; text-align: left; cursor: pointer; box-sizing: border-box; }
 .title { margin: 0; font-family: var(--ke-font-display); font-size: 20px; font-weight: 900; line-height: 1.3; color: var(--ke-ink); }
 .sub { margin: 4px 0 14px; font-size: 12px; color: var(--ke-sub); }
+.mypath { display: inline-flex; align-items: center; gap: 5px; margin: -6px 0 12px; padding: 6px 12px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-full); background: var(--ke-surface); color: var(--ke-ink); font-size: 12px; font-weight: 600; font-family: var(--ke-font); cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); }
+.mypath:active { background: var(--ke-primary-soft); }
+.mp-ic { width: 14px; height: 14px; color: var(--ke-primary); }
 .search { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-l); background: var(--ke-surface); transition: border-color var(--ke-dur-fast) var(--ke-ease), box-shadow var(--ke-dur-fast) var(--ke-ease); }
 .search:focus-within { border-color: var(--ke-primary); box-shadow: var(--ke-focus); }
 .s-icon { width: 18px; height: 18px; color: var(--ke-sub-2); }

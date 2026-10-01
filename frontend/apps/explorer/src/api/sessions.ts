@@ -1,29 +1,117 @@
 /**
- * 探索会话 API 客户端。
- * 端点 GET /api/sessions/latest 由 Phase 4 Task 16 交付:当前调用必然 404,
- * 客户端把 404/无数据归一为 null,调用方据以隐藏「继续探索卡」(FR-E01 断点续探入口)。
+ * 探索会话 API 客户端 —— Phase 4 Task 16 冻结契约(以 SessionController/SessionService 为准)。
+ * 全部端点恒需认证(匿名 401 由 http 层统一登出);latest 404(无会话)归一为 null(P3-13 冻结契约),
+ * 调用方据以隐藏继续探索卡/显示路径空态。字段命名与后端 record 逐字对齐:
+ * 树节点为 nodeId/parentNodeId(NodeView),时间戳均为 ISO-8601 串,由前端格式化。
  */
 import { ApiError, http } from './http';
 
-/** 最近一次探索会话摘要(字段以 Phase 4 冻结契约为准,届时由 openapi 生成类型替换)
- * 形状 Phase 4 Task 16 冻结;progress 展示文案拟改 lastVisitedAt 时间戳由前端格式化 */
+/** FR-E10 讲解度白名单(后端 SIMPLE/DEEP/CHILD,非法 400) */
+export type ExplainLevel = 'SIMPLE' | 'DEEP' | 'CHILD';
+
+/** GET /api/sessions/latest → ResumeSession(Phase 4 冻结形状;openQuestionCount 恒 0,Phase 5 接) */
 export interface ResumeSession {
-  /** 会话标题(最近节点所属卡片/主题) */
+  sessionId: number;
+  /** 会话标题(最新节点所访卡题 → goal → 「新探索」) */
   title: string;
-  /** 暂存说明,如「昨天暂存」 */
-  progress: string;
-  /** 已探索节点数 */
-  nodes: number;
-  /** 分支数 */
-  branches: number;
+  /** 最近访问时间(ISO),展示层格式化为「今天/昨天/N月N日探索」 */
+  lastVisitedAt: string;
+  nodeCount: number;
+  branchCount: number;
+  /** 未决疑问数(Phase 5 接,当前恒 0) */
+  openQuestionCount: number;
 }
 
-/** 拉取当前用户最近一次探索会话;404(端点未交付/无会话)归一为 null */
+/** GET /api/sessions 列表行(我的路径,updated_at DESC) */
+export interface SessionSummaryItem {
+  sessionId: number;
+  theme: string;
+  title: string;
+  goal: string;
+  nodeCount: number;
+  branchCount: number;
+  lastVisitedAt: string;
+  status: string;
+}
+
+/** offset 分页信封(page 从 1 起、total 恒在),与收藏/工作台列表同形 */
+export interface SessionPage {
+  items: SessionSummaryItem[];
+  total: number;
+  page: number;
+  size: number;
+}
+
+/** 路径树节点(后端 NodeView;cardTitle 由后端批量 join 带出,纯追问节点为 null) */
+export interface PathNode {
+  nodeId: number;
+  /** 父节点 id;根为 null(树由 parent_node_id 自然成) */
+  parentNodeId: number | null;
+  cardVersionId: number | null;
+  entryId: number | null;
+  questionText: string | null;
+  /** 同会话内该卡版本首次出现=新知识(01 A1 语义) */
+  isNewKnowledge: boolean;
+  visitedAt: string;
+  cardTitle: string | null;
+}
+
+/** GET /api/sessions/{id} → 会话元数据 + 完整树(visited_at 升序;403 非属主/404 不存在/401 匿名) */
+export interface SessionTree {
+  sessionId: number;
+  theme: string;
+  goal: string;
+  explainLevel: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  nodes: PathNode[];
+}
+
+/** POST /api/sessions → 201 {sessionId} */
+export interface CreatedSession {
+  sessionId: number;
+}
+
+/** POST /api/sessions/{id}/nodes 请求体(均可选;分支=指定历史 parentNodeId) */
+export interface AddNodePayload {
+  cardVersionId?: number;
+  entryId?: number;
+  parentNodeId?: number;
+  questionText?: string;
+}
+
+/** 创建会话(theme 收 shared THEMES 的 key:academy/cuisine/sound) */
+export function createSession(theme: string, goal: string): Promise<CreatedSession> {
+  return http.post<CreatedSession>('/sessions', { theme, goal });
+}
+
+/** 我的路径列表(offset 分页,page 从 1 起、size ≤ 50 默认 20) */
+export function fetchMySessions(page = 1, size = 20): Promise<SessionPage> {
+  return http.get<SessionPage>(`/sessions?page=${page}&size=${size}`);
+}
+
+/** 断点续探摘要;404(无会话)归一为 null,其余错误原样抛出 */
 export async function fetchLatestSession(): Promise<ResumeSession | null> {
   try {
-    return await http.get<ResumeSession | null>('/sessions/latest');
+    return await http.get<ResumeSession>('/sessions/latest');
   } catch (e) {
     if (e instanceof ApiError && e.code === 404) return null;
     throw e;
   }
+}
+
+/** 会话 + 完整树(visited_at 升序);403/404 语义由调用方按 ApiError.code 处理 */
+export function fetchSessionTree(id: number): Promise<SessionTree> {
+  return http.get<SessionTree>(`/sessions/${id}`);
+}
+
+/** 追加节点(parentNodeId 缺省=挂根;isNewKnowledge 由后端判定) */
+export function addNode(sessionId: number, payload: AddNodePayload): Promise<PathNode> {
+  return http.post<PathNode>(`/sessions/${sessionId}/nodes`, payload);
+}
+
+/** FR-E10 讲解度(SIMPLE/DEEP/CHILD):成功响应回填 {explainLevel} */
+export function updateExplainLevel(sessionId: number, level: ExplainLevel): Promise<{ explainLevel: string }> {
+  return http.put<{ explainLevel: string }>(`/sessions/${sessionId}/explain-level`, { level });
 }

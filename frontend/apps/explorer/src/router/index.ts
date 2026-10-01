@@ -4,6 +4,7 @@ import LoginView from '../views/LoginView.vue';
 import HomeView from '../views/HomeView.vue';
 import CardsView from '../views/CardsView.vue';
 import CardView from '../views/CardView.vue';
+import PathView from '../views/PathView.vue';
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -23,6 +24,8 @@ const router = createRouter({
     { path: '/cards', component: CardsView, meta: { title: '卡片', public: true } },
     // 卡片详情页(CardRenderer 按 templateType 分发);匿名可浏览,非 PUBLISHED 由 404 空态承载
     { path: '/cards/:id(\\d+)', component: CardView, meta: { title: '卡片详情', public: true } },
+    // 我的路径(路径树/断点续探/解释档位,FR-E03/E04/E05):个性化页,受保护(非 public)
+    { path: '/path', component: PathView, meta: { title: '我的路径' } },
     { path: '/', redirect: '/home' },
     // catch-all:未知路径回首页(避免白屏)
     { path: '/:pathMatch(.*)*', redirect: '/home' }

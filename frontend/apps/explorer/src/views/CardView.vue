@@ -182,6 +182,11 @@ function goBack(): void {
   }
 }
 
+/** 路径入口(P3 全站二级页必现):进我的路径(无参=回落最近会话) */
+function goPath(): void {
+  void router.push('/path');
+}
+
 function openCard(cardId: number): void {
   void router.push(`/cards/${cardId}`);
 }
@@ -250,6 +255,7 @@ function entrySub(e: CardEntryItem): string {
         type="button"
         class="ic"
         aria-label="我的路径"
+        @click="goPath"
       >
         <KeIcon name="compass" />
       </button>

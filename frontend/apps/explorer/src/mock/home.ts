@@ -1,9 +1,9 @@
 /**
  * 首页静态演示数据 —— Phase 4/5 接真数据:
- * 专题计数 → GET /cards 按专题聚合;推荐入口 → 推荐服务;继续探索卡 → GET /api/sessions/latest(Phase 4 Task 16)。
+ * 专题计数 → GET /cards 按专题聚合;推荐入口 → 推荐服务;
+ * 继续探索卡已接真数据(P4-17,GET /api/sessions/latest),数据位不复存在。
  */
 import { THEMES } from '@ke/shared';
-import type { ResumeSession } from '../api/sessions';
 
 /** 主题专题格(key 即 @ke/shared THEMES 权威取值,亦为 /cards?theme= 的过滤值) */
 export interface HomeTheme {
@@ -36,9 +36,3 @@ export const HOME_ENTRIES: HomeEntry[] = [
   { icon: 'mountain', name: '为什么建在这里', sub: '深入了解 · 历史 × 地理' },
   { icon: 'scale', name: '剁椒鱼头为什么是“辣”的', sub: '相比较 · 饮食 × 科学跨主题' }
 ];
-
-/**
- * 继续探索卡数据位:端点 Phase 4 Task 16 交付前恒为 undefined(整卡隐藏,不伪造会话数据);
- * 届时由 HomeView 调 fetchLatestSession() 填充。
- */
-export const HOME_RESUME: ResumeSession | undefined = undefined;

@@ -1,22 +1,29 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { ResumeSession } from '../api/sessions';
+import { formatRelativeDay } from '../format';
 
-// 继续探索卡(04 §7.2 Resume):深靛实底无渐变、宋体标题、进度摘要、「继续上次探索 →」描边按钮(FR-E01)
-defineProps<ResumeSession>();
-
+/**
+ * 继续探索卡(04 §7.2 Resume):深靛实底无渐变、宋体标题、进度摘要、「继续上次探索 →」
+ * 描边按钮(FR-E01)。P4-17 起直用 P4-16 冻结契约 ResumeSession,
+ * lastVisitedAt 由前端格式化为「今天/昨天/N月N日探索」。
+ */
+const props = defineProps<{ session: ResumeSession }>();
 const emit = defineEmits<{ continue: [] }>();
+
+const when = computed(() => `${formatRelativeDay(props.session.lastVisitedAt)}探索`);
 </script>
 
 <template>
   <section class="resume">
     <p class="eyebrow">
-      继续探索 · {{ progress }}
+      继续探索 · {{ when }}
     </p>
     <h2 class="r-title">
-      {{ title }}
+      {{ session.title }}
     </h2>
     <p class="r-progress">
-      已探索 {{ nodes }} 个节点 · {{ branches }} 个分支
+      {{ session.nodeCount }} 个节点 · {{ session.branchCount }} 个分支
     </p>
     <button
       class="resume-btn"
