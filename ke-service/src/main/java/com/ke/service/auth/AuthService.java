@@ -45,9 +45,37 @@ public class AuthService {
         if (u == null || !encoder.matches(password, u.getPasswordHash())) {
             throw new UnauthorizedException("手机号或密码错误");
         }
-        return Map.of(
-            "accessToken", jwt.issueAccess(u.getId(), u.getRole()),
-            "refreshToken", jwt.issueRefresh(u.getId()));
+        return issueTokens(u);
+    }
+
+    /** 短信验证码登录（FR-U01）：用户不存在则自动注册 EXPLORER，昵称=探索者+手机尾号 4 位 */
+    public Map<String, String> smsLogin(String phone) {
+        KeUserEntity u = users.selectOne(new LambdaQueryWrapper<KeUserEntity>()
+            .eq(KeUserEntity::getPhone, phone));
+        if (u == null) u = autoRegister(phone);
+        return issueTokens(u);
+    }
+
+    private KeUserEntity autoRegister(String phone) {
+        KeUserEntity u = new KeUserEntity();
+        u.setPhone(phone);
+        // 短信注册用户无密码：随机串占位 hash，使密码登录自然失败
+        u.setPasswordHash(encoder.encode(java.util.UUID.randomUUID().toString()));
+        u.setNickname("探索者" + phone.substring(phone.length() - 4));
+        u.setRole("EXPLORER");
+        u.setStatus("ACTIVE");
+        try {
+            users.insert(u);
+        } catch (DataIntegrityViolationException e) {
+            // check-then-insert 之间的并发竞争：uk_phone 唯一约束兜底，回落为读取既有用户
+            u = users.selectOne(new LambdaQueryWrapper<KeUserEntity>().eq(KeUserEntity::getPhone, phone));
+        }
+        return u;
+    }
+
+    private Map<String, String> issueTokens(KeUserEntity u) {
+        return Map.of("accessToken", jwt.issueAccess(u.getId(), u.getRole()),
+                      "refreshToken", jwt.issueRefresh(u.getId()));
     }
 
     public Map<String, String> refresh(String refreshToken) {

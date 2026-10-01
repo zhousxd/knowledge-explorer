@@ -12,6 +12,13 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ${KE_REDIS_PASSWORD:}
+      # 与业务库 database 0 隔离：Redis 相关 IT 用独立库，类前由 RedisFlush flushdb
+      database: 15
   ai:
     openai:
       api-key: ${KE_LLM_API_KEY:test-dummy-key}
@@ -24,3 +31,6 @@ ke:
   llm:
     generator-model: test-generator
     router-model: test-router
+  sms:
+    gateway-url: ${KE_SMS_GATEWAY_URL:}
+    api-key: ${KE_SMS_API_KEY:}
