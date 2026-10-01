@@ -134,16 +134,22 @@ class AssetImportIT {
 
         ResponseEntity<String> res = importCsv(seedCsv(), editor);
         assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(200);
-        assertThat((int) JsonPath.read(res.getBody(), "$.data.imported")).isEqualTo(5);
+        // Task 37 种子增补后 seed/assets-book.csv 为 10 行（书院专题 5 行 + 扩充书目 5 行）
+        assertThat((int) JsonPath.read(res.getBody(), "$.data.imported")).isEqualTo(10);
         assertThat((int) JsonPath.read(res.getBody(), "$.data.skipped")).isZero();
         assertThat((int) JsonPath.read(res.getBody(), "$.data.errors.length()")).isZero();
 
+        // 断言一律限定在本次种子 title 集合内（@ItDb 只在类开始前清一次库,同类其他方法会累积行）
         Integer rows = jdbc.queryForObject(
-                "select count(*) from knowledge_asset where title in (?,?,?,?,?)", Integer.class,
-                "《岳麓书院史略》", "《爱晚亭诗文集》", "《岳麓书院学规探析》", "《千年学府讲坛·书院篇》", "《岳麓书院纪录片》");
-        assertThat(rows).isEqualTo(5);
-        // kind 一律小写，且都在允许枚举内
-        var kinds = jdbc.queryForList("select distinct kind from knowledge_asset", String.class);
+                "select count(*) from knowledge_asset where title in (?,?,?,?,?,?,?,?,?,?)", Integer.class,
+                "《岳麓书院史略》", "《爱晚亭诗文集》", "《岳麓书院学规探析》", "《千年学府讲坛·书院篇》", "《岳麓书院纪录片》",
+                "《宋元学案·南轩学案》", "《湖湘学派史论》", "《麓山人文导览》", "《长沙府志》", "《张栻集》");
+        assertThat(rows).isEqualTo(10);
+        // kind 一律小写，且都在允许枚举内（同样限定种子集合）
+        var kinds = jdbc.queryForList(
+                "select distinct kind from knowledge_asset where title in (?,?,?,?,?,?,?,?,?,?)", String.class,
+                "《岳麓书院史略》", "《爱晚亭诗文集》", "《岳麓书院学规探析》", "《千年学府讲坛·书院篇》", "《岳麓书院纪录片》",
+                "《宋元学案·南轩学案》", "《湖湘学派史论》", "《麓山人文导览》", "《长沙府志》", "《张栻集》");
         assertThat(kinds).containsExactlyInAnyOrder("book", "article", "audio", "video");
 
         // locator / source_meta 为合法 jsonb（列值可直接取 ->> 运算）
@@ -156,6 +162,10 @@ class AssetImportIT {
         String author = jdbc.queryForObject(
                 "select source_meta->>'author' from knowledge_asset where title=?", String.class, "《岳麓书院史略》");
         assertThat(author).isEqualTo("杨慎初");
+        // Task 37 增补行的 jsonb 同样可解析（《张栻集》为扩充书目之一）
+        String nanxuan = jdbc.queryForObject(
+                "select locator->>'chapter' from knowledge_asset where title=?", String.class, "《张栻集》");
+        assertThat(nanxuan).isEqualTo("南轩集卷十一 城南杂咏");
         LocalDate expire = jdbc.queryForObject(
                 "select license_expire from knowledge_asset where title=?", LocalDate.class, "《岳麓书院史略》");
         assertThat(expire).isEqualTo(LocalDate.of(2024, 6, 30));
