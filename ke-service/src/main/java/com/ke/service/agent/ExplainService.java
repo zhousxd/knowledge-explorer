@@ -2,6 +2,9 @@ package com.ke.service.agent;
 
 import com.ke.domain.enums.AgentRunStatus;
 import com.ke.domain.enums.CardStatus;
+import com.ke.domain.trust.CitationSanitizer;
+import com.ke.domain.trust.SanitizeReport;
+import com.ke.domain.trust.SanitizedSection;
 import com.ke.infra.entity.AgentRunEntity;
 import com.ke.infra.entity.ArtifactEntity;
 import com.ke.infra.entity.CardEntity;
@@ -32,6 +35,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -39,8 +43,9 @@ import java.util.Set;
 
 /**
  * 讲解服务流水线（FR-S02 / 02 §5.2）：受限检索 → 提示词组装 → LLM → Jackson 绑定
- * {@link ExplainOutput}（失败自动重试 1 次）→ artifact(EXPLAIN) + citation(object_type=agent_run)
- * 落库 → 回写 agent_run(DONE, artifact_ids)。任何异常置 FAILED(error=消息)。
+ * {@link ExplainOutput}（失败自动重试 1 次）→ 引用校验（FR-S05，{@link CitationSanitizer}：
+ * 越界引用剔除 + FACT 空引用降级，剥离留痕 agent_run.error 不置 FAILED）→ artifact(EXPLAIN) +
+ * citation(object_type=agent_run) 落库 → 回写 agent_run(DONE, artifact_ids)。任何异常置 FAILED(error=消息)。
  *
  * 线程模型：submit 前置校验在 controller 线程（会话属主/卡已发布，钉子①——userId 在 submit 时
  * 捕获进 input_json，虚拟线程不再依赖 SecurityContext）；执行走 agentExecutor 虚拟线程（自代理
@@ -205,31 +210,65 @@ public class ExplainService {
     /** 终态回写：artifact(EXPLAIN, content_json={output,sources}) + citation 落表 + DONE/artifact_ids */
     private void finish(long runId, long start, ExplainInput input,
                         ExplainOutput output, Map<Long, String> materials) {
+        // FR-S05/R2 引用校验（Task 19）：LLM 绑定成功后、落 artifact/citation 之前——
+        // 越界引用剔除（只剩本次检索资料内的 id），FACT 空引用降级 SYNTHESIS（段落档位自表达，不加顶层标志）
+        SanitizeReport report = CitationSanitizer.sanitize(
+                toSanitizedSections(output.sections()), materials.keySet());
+        ExplainOutput sanitized = withSections(output, report.sections());
+
         Long artifactId = null;
         if (input.sessionId() != null) {
             // artifact.session_id 非空（V1 约束）：无会话的讲解 run 不落 artifact，仅回状态
             ArtifactEntity artifact = new ArtifactEntity();
             artifact.setSessionId(input.sessionId());
             artifact.setType(SERVICE_TYPE);
-            artifact.setContentJson(json(new ExplainResult(output, materials)));
+            artifact.setContentJson(json(new ExplainResult(sanitized, materials)));
             artifact.setStatus("DRAFT");
             artifacts.insert(artifact);
             artifactId = artifact.getId();
-            linkCitations(runId, output, materials.keySet());
+            linkCitations(runId, sanitized);
         }
         AgentRunEntity done = runs.selectById(runId);
         done.setStatus(AgentRunStatus.DONE.name());
         done.setLatencyMs((int) Math.min(Integer.MAX_VALUE, System.currentTimeMillis() - start));
         done.setModel(generatorModel);
         done.setArtifactIds(artifactId == null ? json(List.of()) : json(List.of(artifactId)));
+        if (!report.strippedCitations().isEmpty()) {
+            // 旁路留痕（不置 FAILED）：LLM 幻觉引用被拦截的事实挂在 error 字段
+            done.setError("引用校验:剥离 " + report.strippedCitations().size() + " 个越界引用");
+        }
         runs.updateById(done);
     }
 
+    /** 讲解段 → 校验器入参（同形映射：ke-domain 不依赖 service DTO） */
+    private static List<SanitizedSection> toSanitizedSections(List<ExplainOutput.Section> sections) {
+        if (sections == null) {
+            return List.of();
+        }
+        List<SanitizedSection> mapped = new ArrayList<>(sections.size());
+        for (ExplainOutput.Section section : sections) {
+            mapped.add(section == null ? null
+                    : new SanitizedSection(section.body(), section.claimType(), section.citations()));
+        }
+        return mapped;
+    }
+
+    /** 校验后的段落回填讲解输出（summary/openQuestions/evidenceGaps 原样） */
+    private static ExplainOutput withSections(ExplainOutput output, List<SanitizedSection> sections) {
+        List<ExplainOutput.Section> mapped = new ArrayList<>(sections.size());
+        for (SanitizedSection section : sections) {
+            mapped.add(section == null ? null
+                    : new ExplainOutput.Section(section.body(), section.claimType(), section.citations()));
+        }
+        return new ExplainOutput(output.summary(), mapped, output.openQuestions(), output.evidenceGaps());
+    }
+
     /**
-     * 服务输出的 citation 行落 citation 表（object_type=agent_run，溯源用；Task 19 校验器管内存集合）。
-     * 仅落检索允许集合内的 assetId（LLM 幻觉引用不落库），逐 run 去重。
+     * 服务输出的 citation 行落 citation 表（object_type=agent_run，溯源用）。
+     * 入参 sections 已过 {@link CitationSanitizer}（只剩检索允许集合内的 assetId，LLM 幻觉引用被剥离），
+     * 按 sanitized sections 的并集逐 run 去重落表。
      */
-    private void linkCitations(long runId, ExplainOutput output, Set<Long> allowed) {
+    private void linkCitations(long runId, ExplainOutput output) {
         if (output.sections() == null) {
             return;
         }
@@ -239,7 +278,7 @@ public class ExplainService {
                 continue;
             }
             for (Long assetId : section.citations()) {
-                if (assetId == null || !allowed.contains(assetId) || !linked.add(assetId)) {
+                if (assetId == null || !linked.add(assetId)) {
                     continue;
                 }
                 CitationEntity citation = new CitationEntity();

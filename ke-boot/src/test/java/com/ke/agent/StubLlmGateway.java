@@ -41,6 +41,19 @@ public class StubLlmGateway implements LlmGateway {
                 + assetId + "]}],\"openQuestions\":[\"开放问题一\"],\"evidenceGaps\":[]}";
     }
 
+    /** 合法 ExplainOutput JSON：FACT 段引用给定 assetId 列表（可含越界 id，Task 19 校验场景用） */
+    public static String factOutput(long... assetIds) {
+        StringBuilder ids = new StringBuilder();
+        for (int i = 0; i < assetIds.length; i++) {
+            if (i > 0) {
+                ids.append(',');
+            }
+            ids.append(assetIds[i]);
+        }
+        return "{\"summary\":\"讲解摘要\",\"sections\":[{\"body\":\"依据资料的正文\",\"claimType\":\"FACT\",\"citations\":["
+                + ids + "]}],\"openQuestions\":[],\"evidenceGaps\":[]}";
+    }
+
     @Override
     public String complete(ChatCommand command) {
         CALLS.incrementAndGet();

@@ -265,4 +265,63 @@ class ExplainPipelineIT {
         List<Integer> runIds = JsonPath.read(list.getBody(), "$.data[*].runId");
         assertThat(runIds).contains((int) runId);
     }
+
+    @Test
+    void outOfBoundCitationStrippedKeepsFact() {
+        // Task 19 引用校验：混合引用 [真实资料, 越界 99999] → 剥离越界、保留真实 → 仍 FACT；
+        // 剥离留痕 run.error（不置 FAILED），citation 落表只有真实资料
+        long assetId = insertAsset("《混合引用资料》", "书院建于唐代的书证摘录。", null);
+        long versionId = insertPublishedCard("混合引用卡",
+                "[{\"assetId\":" + assetId + ",\"title\":\"《混合引用资料》\",\"locator\":\"第1页\",\"license\":null}]");
+        String token = newUserToken("13811100011", "子", "EXPLORER");
+        long[] ids = newSessionWithNode(token, versionId);
+
+        StubLlmGateway.reset(StubLlmGateway.factOutput(assetId, 99999L));
+        long runId = submitRun(token, versionId, ids[0], ids[1], "书院建于何时？", "SIMPLE");
+
+        ResponseEntity<String> res = awaitTerminal(token, runId);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.status")).isEqualTo("DONE");
+        // artifact 中该段 citations 不含 99999，且还有有效引用 → 保持 FACT
+        List<Number> citations = JsonPath.read(res.getBody(), "$.data.artifact.output.sections[0].citations[*]");
+        assertThat(citations).hasSize(1);
+        assertThat(citations.get(0).longValue()).isEqualTo(assetId);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.artifact.output.sections[0].claimType")).isEqualTo("FACT");
+        // 旁路留痕
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.error")).contains("剥离");
+        // citation 落表：只落真实资料，越界 id 不落
+        Integer realRows = jdbc.queryForObject(
+                "select count(*) from citation where object_type='agent_run' and object_id=? and asset_id=?",
+                Integer.class, runId, assetId);
+        Integer phantomRows = jdbc.queryForObject(
+                "select count(*) from citation where object_type='agent_run' and object_id=? and asset_id=99999",
+                Integer.class, runId);
+        assertThat(realRows).isEqualTo(1);
+        assertThat(phantomRows).isZero();
+    }
+
+    @Test
+    void allOutOfBoundsFactDowngraded() {
+        // Task 19 降级：FACT 段引用全部越界（99999）→ 剥离后无有效引用 → 降级 SYNTHESIS，citations 空
+        long assetId = insertAsset("《全越界资料》", "真实存在但未被引用的资料。", null);
+        long versionId = insertPublishedCard("全越界降级卡",
+                "[{\"assetId\":" + assetId + ",\"title\":\"《全越界资料》\",\"locator\":\"第2页\",\"license\":null}]");
+        String token = newUserToken("13811100012", "丑", "EXPLORER");
+        long[] ids = newSessionWithNode(token, versionId);
+
+        StubLlmGateway.reset(StubLlmGateway.factOutput(99999L));
+        long runId = submitRun(token, versionId, ids[0], ids[1], "谁建的书院？", "DEEP");
+
+        ResponseEntity<String> res = awaitTerminal(token, runId);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.status")).isEqualTo("DONE");
+        // 降级 SYNTHESIS（段落档位自表达），citations 空数组
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.artifact.output.sections[0].claimType")).isEqualTo("SYNTHESIS");
+        List<Number> citations = JsonPath.read(res.getBody(), "$.data.artifact.output.sections[0].citations[*]");
+        assertThat(citations).isEmpty();
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.error")).contains("剥离");
+        // 越界 id 不落 citation 表
+        Integer rows = jdbc.queryForObject(
+                "select count(*) from citation where object_type='agent_run' and object_id=?",
+                Integer.class, runId);
+        assertThat(rows).isZero();
+    }
 }
