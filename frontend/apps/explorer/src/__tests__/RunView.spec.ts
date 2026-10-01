@@ -62,7 +62,7 @@ const COMPARE_ARTIFACT: RunArtifact = {
 function runState(patch: Partial<RunState>): RunState {
   return {
     runId: 7, status: 'RUNNING', serviceType: null, model: null, latencyMs: null, error: null,
-    artifact: null, ...patch
+    artifact: null, submitContext: null, ...patch
   };
 }
 
@@ -276,6 +276,45 @@ describe('RunView(执行态页,04 §7.2 RunProgress)', () => {
     await wrapper.find('.ask-send').trigger('click');
     await flushPromises();
     expect(mockedSubmit).not.toHaveBeenCalled();
+  });
+
+  // —— 刷新直达经 submitContext 重建提交上下文(review P5-FIX,后端 input_json 白名单投影) ——
+
+  it('刷新丢 state 但响应带 submitContext:首轮重建 launch,问题标题恢复 + AskBar 可用 + 追问提交成功', async () => {
+    mockedFetchRun.mockResolvedValue(runState({
+      status: 'DONE',
+      artifact: ARTIFACT,
+      submitContext: {
+        cardVersionId: 11, sessionId: 3, nodeId: 6,
+        serviceType: 'EXPLAIN', question: '讲清楚:岳麓书院'
+      }
+    }));
+    const { wrapper } = await mountRun('7');
+    // 重建成功:标题回落真实问题(不再是「智能服务执行中」),AskBar 解禁
+    expect(wrapper.find('.q-title').text()).toBe('讲清楚:岳麓书院');
+    expect(wrapper.find('.ask-in').attributes('disabled')).toBeUndefined();
+    expect(wrapper.find('.ask-in').attributes('placeholder')).toContain('继续问');
+
+    await wrapper.find('.ask-in').setValue('那经费呢?');
+    await wrapper.find('.ask-send').trigger('click');
+    await flushPromises();
+    // 追问语义不变:重建的上下文 + parentRunId=当前 run
+    expect(mockedSubmit).toHaveBeenCalledWith({
+      cardVersionId: 11, sessionId: 3, nodeId: 6,
+      question: '那经费呢?', level: 'SIMPLE', parentRunId: 7
+    });
+  });
+
+  it('submitContext 不完整(缺 sessionId/nodeId):不足以重建提交,追问维持禁用', async () => {
+    mockedFetchRun.mockResolvedValue(runState({
+      status: 'DONE',
+      artifact: ARTIFACT,
+      submitContext: { cardVersionId: 11, question: '讲清楚:岳麓书院' }
+    }));
+    const { wrapper } = await mountRun('7');
+    expect(wrapper.find('.q-title').text()).toBe('智能服务执行中');
+    expect(wrapper.find('.ask-in').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('.ask-in').attributes('placeholder')).toContain('刷新后无法追问');
   });
 
   it('档位 chip 点击:循环切换调 PUT /sessions/{id}/explain-level + toast 下次生效', async () => {

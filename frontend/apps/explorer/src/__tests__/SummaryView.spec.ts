@@ -2,9 +2,10 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { createPinia } from 'pinia';
+import { showToast } from 'vant';
 import { ApiError } from '../api/http';
 import { fetchRun, isTerminal, summarize } from '../api/runs';
-import type { RunState, SummarizePayload } from '../api/runs';
+import type { RunState, RunSubmitContext, SummarizePayload } from '../api/runs';
 import { fetchOpenQuestions, fetchSessionTree } from '../api/sessions';
 import type { OpenQuestionItem, PathNode, SessionTree } from '../api/sessions';
 import SummaryView from '../views/SummaryView.vue';
@@ -69,6 +70,7 @@ const REPORT_RUN: RunState = {
   model: 'deepseek-chat',
   latencyMs: 5200,
   error: null,
+  submitContext: null,
   artifact: {
     type: 'REPORT',
     keyFindings: [
@@ -89,9 +91,15 @@ const REPORT_RUN: RunState = {
 function runState(patch: Partial<RunState>): RunState {
   return {
     runId: 7, status: 'RUNNING', serviceType: 'SUMMARIZE', model: null, latencyMs: null,
-    error: null, artifact: null, ...patch
+    error: null, artifact: null, submitContext: null, ...patch
   };
 }
+
+/** 来源讲解 run 的 submitContext 投影(review P5-FIX):「去追问」组装 keRun 的依据 */
+const OQ_SOURCE_CTX: RunSubmitContext = {
+  cardVersionId: 11, sessionId: 5, nodeId: 2,
+  serviceType: 'EXPLAIN', question: '书院经费从何而来?'
+};
 
 /** 直挂 SummaryView 的独立 memory 路由(含 /path /runs 兜底路由供跳转断言);
  *  state 经路由 history state 传入(与生产 router.push 一致,如 keSummary 提交上下文)。 */
@@ -250,9 +258,37 @@ describe('SummaryView(成果整理页,FR-E07 勾选阶段)', () => {
     expect(rows[0]!.text()).toContain('9月30日');
     expect(rows[1]!.text()).toContain('9月29日');
 
+    // 去追问(review P5-FIX):fetchRun 取 submitContext 组装 keRun state → 落地即可追问
+    mockedFetchRun.mockResolvedValue({
+      runId: 42, status: 'DONE', serviceType: 'EXPLAIN', model: 'deepseek-chat', latencyMs: 4200,
+      error: null, artifact: null, submitContext: OQ_SOURCE_CTX
+    });
     await rows[0]!.find('.oq-go').trigger('click');
     await flushPromises();
+    expect(mockedFetchRun).toHaveBeenCalledWith(42);
     expect(local.currentRoute.value.path).toBe('/runs/42');
+    expect(JSON.parse((local.options.history.state as Record<string, unknown>).keRun as string)).toEqual({
+      cardVersionId: 11, sessionId: 5, nodeId: 2,
+      question: '书院经费从何而来?', level: 'SIMPLE'
+    });
+  });
+
+  it('去追问失败(fetchRun 404/网络):toast「暂时无法追问」,停留整理页', async () => {
+    mockedFetchRun.mockRejectedValue(new ApiError(404, '运行不存在'));
+    const { wrapper, local } = await mountSummary('?sessionId=5');
+    await wrapper.findAll('.oq-row')[0]!.find('.oq-go').trigger('click');
+    await flushPromises();
+    expect(showToast).toHaveBeenCalledWith('暂时无法追问');
+    expect(local.currentRoute.value.path).toBe('/summary');
+  });
+
+  it('去追问但 submitContext 不完整(缺键):toast「暂时无法追问」,不跳转', async () => {
+    mockedFetchRun.mockResolvedValue(runState({ runId: 42 }));
+    const { wrapper, local } = await mountSummary('?sessionId=5');
+    await wrapper.findAll('.oq-row')[0]!.find('.oq-go').trigger('click');
+    await flushPromises();
+    expect(showToast).toHaveBeenCalledWith('暂时无法追问');
+    expect(local.currentRoute.value.path).toBe('/summary');
   });
 });
 

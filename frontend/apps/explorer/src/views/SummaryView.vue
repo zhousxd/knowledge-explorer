@@ -5,10 +5,11 @@ import { showToast } from 'vant';
 import { ClaimBadge, KeIcon } from '@ke/shared';
 import { ApiError } from '../api/http';
 import { fetchRun, isTerminal, summarize } from '../api/runs';
-import type { RunState, SummarizePayload } from '../api/runs';
+import type { RunState, RunSubmitPayload, SummarizePayload } from '../api/runs';
 import { fetchOpenQuestions, fetchSessionTree } from '../api/sessions';
 import type { OpenQuestionItem, PathNode, SessionTree } from '../api/sessions';
 import TopBar from '../components/TopBar.vue';
+import { useSessionStore } from '../stores/sessionStore';
 import { formatShortDateTime } from '../format';
 
 /**
@@ -24,7 +25,8 @@ import { formatShortDateTime } from '../format';
  * → 关键发现(每条 ClaimBadge 三档 + citations 角标 → 出处清单行高亮,P5-22 同模式)→ 报告
  * 未决疑问(clock 图标)→ 出处清单(sources map + stripped 警示)→ disclaimer 脚注。
  * 页面底部「还有哪些疑问」卡(FR-E09):GET open-questions 渲染会话全部遗留疑问(每条含来源
- * 时间),静态展示 + 「去追问」跳该来源 run 的 /runs/{runId} 结果页追问。
+ * 时间),静态展示 + 「去追问」fetchRun 取 submitContext(review P5-FIX)组装 keRun 提交上下文
+ * 跳该来源 run 的 /runs/{runId} 结果页追问(落地即可追问;取不到 toast「暂时无法追问」不跳转)。
  */
 const POLL_MS = 2000;
 /** 出处清单行文本截断(sources map 快照文本 → 行 snippet,与 RunView 同参) */
@@ -35,6 +37,7 @@ const HIGHLIGHT_MS = 2000;
 
 const route = useRoute();
 const router = useRouter();
+const sessionStore = useSessionStore();
 
 // —— 会话上下文(query 驻留,勾选/报告两态共用) ——
 
@@ -272,8 +275,33 @@ const showOqs = computed(
       : phase.value === 'done' && resultReady.value)
 );
 
-function goAsk(runId: number): void {
-  void router.push(`/runs/${runId}`);
+/**
+ * 去追问(review P5-FIX):异步 fetchRun 取该 run 的 submitContext 投影 → 组装 keRun 提交
+ * 上下文随 state 跳 /runs/{runId} —— 落地即追问可用(RunView 不必等重建);submitContext 不完整
+ * (旧行/无会话 legacy)或 fetchRun 失败(404/网络)→ toast「暂时无法追问」,停留本页。
+ */
+async function goAsk(runId: number): Promise<void> {
+  try {
+    const ctx = (await fetchRun(runId)).submitContext;
+    if (!ctx || ctx.question == null || ctx.sessionId == null || ctx.nodeId == null) {
+      showToast('暂时无法追问');
+      return;
+    }
+    const payload: RunSubmitPayload = {
+      cardVersionId: ctx.cardVersionId,
+      sessionId: ctx.sessionId,
+      nodeId: ctx.nodeId,
+      question: ctx.question,
+      // 档位回落会话档位记忆(submitContext 投影不含 level,与 RunView 重建同则)
+      level: sessionStore.explainLevel
+    };
+    await router.push({
+      path: `/runs/${runId}`,
+      state: { keRun: JSON.stringify(payload) }
+    });
+  } catch {
+    showToast('暂时无法追问');
+  }
 }
 
 // —— 轮询与状态切换 ——

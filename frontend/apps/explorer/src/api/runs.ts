@@ -2,7 +2,7 @@
  * 智能体运行 API 客户端 —— Phase 5 冻结契约(以 RunController/ExplainService 为准)。
  * POST /api/agent/runs → 202 {runId}(429 配额超限 envelope 由 http 层归一为 ApiError,
  * message 原样透传给调用方展示,04 §8.6);GET /api/agent/runs/{id} → 轮询详情。
- * 后端 jackson non_null 序列化把 null 键整键省略 —— model/latencyMs/error/artifact 都可能
+ * 后端 jackson non_null 序列化把 null 键整键省略 —— model/latencyMs/error/artifact/submitContext 都可能
  * 缺键,fetchRun 统一归一为 null 家族(Phase 4 终审 seam 钉子,参照 sessions.ts parentNodeId 先例),
  * 消费方(RunView/结果页)可放心按 null 分支。
  */
@@ -88,6 +88,18 @@ export interface RunArtifact {
   audit?: { stripped?: number; filtered?: number };
 }
 
+/** 提交上下文投影(后端 GET /runs/{id} 的 submitContext 键,review P5-FIX):input_json 白名单字段,
+ *  仅属主可见。jackson non_null 省略 null 键 → sessionId/nodeId/parentRunId/question 均可缺
+ *  (旧行/无会话 legacy run),消费方(RunView 重建 launch / SummaryView 去追问)须自行判空。 */
+export interface RunSubmitContext {
+  cardVersionId: number;
+  sessionId?: number;
+  nodeId?: number;
+  serviceType?: string;
+  parentRunId?: number;
+  question?: string;
+}
+
 /** GET /api/agent/runs/{id} 归一后形态(null 家族,消费方免判 undefined) */
 export interface RunState {
   runId: number;
@@ -102,6 +114,8 @@ export interface RunState {
   error: string | null;
   /** DONE 且有 artifact 时存在(无会话 run 不落 artifact,P5-18 决策);其余 null */
   artifact: RunArtifact | null;
+  /** 提交上下文投影(review P5-FIX):刷新丢路由 state 后重建追问/重试用;解析失败/旧行为 null */
+  submitContext: RunSubmitContext | null;
 }
 
 /** 提交讲解运行 → 202 {runId};429/400 等错误信封由 http 层抛 ApiError(code+message) */
@@ -115,8 +129,8 @@ export function summarize(payload: SummarizePayload): Promise<{ runId: number }>
 }
 
 /** wire 层归一(non_null 缺键 → null):RunController.RunView 的单一消费面 */
-function normalizeRun(run: Omit<RunState, 'model' | 'latencyMs' | 'error' | 'artifact' | 'serviceType'> &
-  Partial<Pick<RunState, 'model' | 'latencyMs' | 'error' | 'artifact' | 'serviceType'>>): RunState {
+function normalizeRun(run: Omit<RunState, 'model' | 'latencyMs' | 'error' | 'artifact' | 'serviceType' | 'submitContext'> &
+  Partial<Pick<RunState, 'model' | 'latencyMs' | 'error' | 'artifact' | 'serviceType' | 'submitContext'>>): RunState {
   return {
     runId: run.runId,
     status: run.status,
@@ -124,7 +138,8 @@ function normalizeRun(run: Omit<RunState, 'model' | 'latencyMs' | 'error' | 'art
     model: run.model ?? null,
     latencyMs: run.latencyMs ?? null,
     error: run.error ?? null,
-    artifact: run.artifact ?? null
+    artifact: run.artifact ?? null,
+    submitContext: run.submitContext ?? null
   };
 }
 

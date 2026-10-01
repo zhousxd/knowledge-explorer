@@ -21,8 +21,9 @@ import { useSessionStore } from '../stores/sessionStore';
  * 出处清单(sources map,audit.stripped/证据缺口警示行)→「还可以继续问」→ 受控生成声明脚注;
  * 比较(COMPARE,Task 23:artifact.type==='COMPARE_CARD'):chips(对比卡 · 由智能体生成)→
  * 问题标题 → CompareCard 维度×对象表格(citations 角标联动出处清单)→ 复用出处清单/脚注。
- * 底部 AskBar 常驻追问(payload 从路由 state 继承提交上下文,parentRunId 记追问链,刷新丢失
- * 则禁用——§8.7 禁用带原因;追问恒走讲解通道)。档位 chip 点击循环切换(PUT explain-level,
+ * 底部 AskBar 常驻追问(payload 从路由 state 继承提交上下文,parentRunId 记追问链;刷新丢
+ * state 后由 GET /runs/{id} 的 submitContext 投影原地重建,review P5-FIX——两者皆无才禁用,
+ * §8.7 禁用带原因;追问恒走讲解通道)。档位 chip 点击循环切换(PUT explain-level,
  * 下次讲解生效)。停顿三键不入结果页:经 TopBar 指南针去路径页(FR-E09「还有哪些疑问」=
  * openQuestions,「换个方向」=路径页分叉,Task 22 授权决策)。question/重试 payload 经路由
  * state(keRun)携带;FAILED/TIMEOUT 按错误卡模板给「重试/换个问法」;429 以页内错误态展示 envelope 文案。
@@ -51,7 +52,8 @@ const loadError = ref('');
 /** 重试遇 429:配额 envelope 文案以页内错误态展示(04 §8.6) */
 const quotaMsg = ref('');
 const retrying = ref(false);
-/** 提交上下文(含 question):路由 state 带入,重试/追问复用同一上下文 */
+/** 提交上下文(含 question):路由 state 带入;刷新丢 state 后由 submitContext 重建(review P5-FIX)。
+ *  重试/追问复用同一上下文 */
 const launch = ref<RunSubmitPayload | null>(null);
 
 /** 结果页追问/联动状态 */
@@ -75,6 +77,26 @@ function readLaunch(): RunSubmitPayload | null {
 }
 
 const question = computed(() => launch.value?.question ?? '智能服务执行中');
+
+/**
+ * 刷新丢路由 state 后的提交上下文重建(review P5-FIX):用 GET /runs/{id} 的 submitContext
+ * 投影(属主可见)拼回 launch——question/cardVersionId/sessionId/nodeId 缺一不可,level 回落
+ * 会话档位记忆(投影不含 level)。重建后追问/重试与路由 state 带入同语义;submitContext 也
+ * null(非属主不可达/旧行异常)→ launch 维持 null,AskBar/重试按禁用文案展示。
+ */
+function rebuildLaunch(state: RunState): void {
+  const ctx = state.submitContext;
+  if (launch.value !== null || !ctx || ctx.question == null || ctx.sessionId == null || ctx.nodeId == null) {
+    return;
+  }
+  launch.value = {
+    cardVersionId: ctx.cardVersionId,
+    sessionId: ctx.sessionId,
+    nodeId: ctx.nodeId,
+    question: ctx.question,
+    level: sessionStore.explainLevel
+  };
+}
 
 const phase = computed<'loading' | 'running' | 'done' | 'failed' | 'quota' | 'missing'>(() => {
   if (quotaMsg.value) return 'quota';
@@ -161,7 +183,7 @@ const levelLabel = computed(
   () => LEVELS.find((l) => l.value === sessionStore.explainLevel)?.label ?? '简明'
 );
 
-/** 追问可用=提交上下文仍在(路由 state);刷新丢失即禁用(§8.7 禁用带原因) */
+/** 追问可用=提交上下文仍在(路由 state 或刷新后经 submitContext 重建);两者皆无才禁用(§8.7 禁用带原因) */
 const canAsk = computed(() => launch.value !== null);
 const askPlaceholder = computed(() =>
   canAsk.value ? '针对这次讲解,继续问一句…' : '刷新后无法追问,请从卡片重新发起'
@@ -222,6 +244,8 @@ async function poll(): Promise<void> {
   try {
     const state = await fetchRun(Number(route.params.id));
     run.value = state;
+    // 刷新直达(无路由 state):首轮响应即经 submitContext 重建提交上下文(幂等,已有 launch 跳过)
+    rebuildLaunch(state);
     if (isTerminal(state.status)) {
       stopPolling();
       // 结果落地提示(任务简报:轮询结果落地后 toast 通知)
@@ -259,6 +283,7 @@ function onVisibility(): void {
 }
 
 onMounted(() => {
+  // 路由 state 优先;刷新丢 state 由首轮 poll 的 submitContext 重建(rebuildLaunch)
   launch.value = readLaunch();
   startPolling();
   document.addEventListener('visibilitychange', onVisibility);

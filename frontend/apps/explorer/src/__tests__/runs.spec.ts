@@ -12,7 +12,8 @@ function jsonResp(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as unknown as Response;
 }
 
-/** DONE 全键样本(artifact 形状 = ExplainResult content_json:output 嵌套 + sources/disclaimer/audit) */
+/** DONE 全键样本(artifact 形状 = ExplainResult content_json:output 嵌套 + sources/disclaimer/audit;
+ *  submitContext = review P5-FIX 的 input_json 白名单投影) */
 const DONE_RUN: RunState = {
   runId: 7,
   status: 'DONE',
@@ -20,6 +21,10 @@ const DONE_RUN: RunState = {
   model: 'deepseek-chat',
   latencyMs: 4200,
   error: null,
+  submitContext: {
+    cardVersionId: 11, sessionId: 3, nodeId: 6,
+    serviceType: 'EXPLAIN', question: '讲清楚:岳麓书院'
+  },
   artifact: {
     output: {
       summary: '岳麓书院创办于北宋…',
@@ -154,7 +159,7 @@ describe('fetchRun 轮询契约', () => {
     const raw = {
       runId: 8,
       status: 'RUNNING'
-      // model/latencyMs/error/artifact/serviceType(Task 23)整键缺失
+      // model/latencyMs/error/artifact/serviceType(Task 23)/submitContext(P5-FIX)整键缺失
     };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       jsonResp(200, { code: 0, message: 'ok', traceId: 't', data: raw })));
@@ -166,6 +171,8 @@ describe('fetchRun 轮询契约', () => {
     expect(run.latencyMs).toBeNull();
     expect(run.error).toBeNull();
     expect(run.artifact).toBeNull();
+    // submitContext 旧行/解析失败缺键 → null(消费方 RunView/SummaryView 按 null 维持禁用/toast)
+    expect(run.submitContext).toBeNull();
   });
 
   it('wire 归一:DONE 但 error 缺键、artifact 仅部分字段(敏感链裁剪)→ 缺处归 null 不虚报', async () => {
