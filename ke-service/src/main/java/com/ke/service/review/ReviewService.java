@@ -20,10 +20,12 @@ import com.ke.domain.card.content.TimelineCardContent;
 import com.ke.domain.enums.ReviewStatus;
 import com.ke.infra.entity.CardEntity;
 import com.ke.infra.entity.CardVersionEntity;
+import com.ke.infra.entity.EntryEntity;
 import com.ke.infra.entity.KeUserEntity;
 import com.ke.infra.entity.ReviewTaskEntity;
 import com.ke.infra.mapper.CardMapper;
 import com.ke.infra.mapper.CardVersionMapper;
+import com.ke.infra.mapper.EntryMapper;
 import com.ke.infra.mapper.KeUserMapper;
 import com.ke.infra.mapper.ReviewTaskMapper;
 import com.ke.service.card.CardService;
@@ -34,16 +36,20 @@ import com.ke.service.common.NotFoundException;
  * 审核工作流（FR-O03）：工作台队列的查询与裁决。
  * <ul>
  *   <li>队列 item：id/objectType/objectId/action/status/createdAt + summary（CARD＝
- *       标题 · 模板类型 · 提交人昵称）+ precheck（CARD＝contentValid 当前版本内容可过校验、
- *       hasSources 来源非空；ENTRY 等 Phase 6（Task 28）接入后才有意义，暂为 null）+
+ *       标题 · 模板类型 · 提交人昵称；ENTRY＝入口名 · 所属卡题 · 提交人昵称，Task 28）+
+ *       precheck（CARD＝contentValid 当前版本内容可过校验、hasSources 来源非空；ENTRY 无卡片
+ *       内容语义，恒为 null——前端需容错）+
  *       contentPreview（CARD＝当前版本内容大意：TEXT 取 summary、COMPARE/TIMELINE/TASK 取
  *       对应摘要，截 100 字；内容不可解析或非 CARD 为 null）——审批人不点开即可见内容大意；</li>
  *   <li>队列查询为 offset 分页（page 从 1 起，size 夹取 [1,100] 默认 20），返回
  *       {items, total, page, size}；</li>
  *   <li>approve：任务置 APPROVED 并委托对象动作（CARD → {@link CardService#publish}，
- *       其 @Audited 切面落 CARD_PUBLISH；ENTRY → 400 待 Task 6）；</li>
- *   <li>reject：notes 必填，任务置 REJECTED，CARD 经 returnToDraft 回 DRAFT；</li>
- *   <li>自审禁绝：审核人 = 提交人（card.maintainer_id）→ AccessDeniedException → 403 envelope。</li>
+ *       其 @Audited 切面落 CARD_PUBLISH；ENTRY → 入口无 publish 概念，维持 ACTIVE 即 Task 28
+ *       决策——公共入口创建即 ACTIVE，审核通过即维持不动）；</li>
+ *   <li>reject：notes 必填，任务置 REJECTED，CARD 经 returnToDraft 回 DRAFT，
+ *       ENTRY 置入口 DISABLED（驳回即下架，作者卡页不再可见）；</li>
+ *   <li>自审禁绝：审核人 = 提交人（CARD=card.maintainer_id；ENTRY=entry.author_id，Task 28）
+ *       → AccessDeniedException → 403 envelope。</li>
  * </ul>
  */
 @Service
@@ -58,16 +64,18 @@ public class ReviewService {
     private final ReviewTaskMapper reviewTasks;
     private final CardMapper cards;
     private final CardVersionMapper versions;
+    private final EntryMapper entries;
     private final KeUserMapper users;
     private final CardService cardService;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     public ReviewService(ReviewTaskMapper reviewTasks, CardMapper cards, CardVersionMapper versions,
-                         KeUserMapper users, CardService cardService,
+                         EntryMapper entries, KeUserMapper users, CardService cardService,
                          com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
         this.reviewTasks = reviewTasks;
         this.cards = cards;
         this.versions = versions;
+        this.entries = entries;
         this.users = users;
         this.cardService = cardService;
         this.objectMapper = objectMapper;
@@ -122,6 +130,14 @@ public class ReviewService {
             CardVersionEntity latest = latestVersion(task.getObjectId());
             precheck = precheckOf(card, latest);
             contentPreview = previewOf(card, latest);
+        } else if ("ENTRY".equals(task.getObjectType())) {
+            // Task 28：ENTRY 摘要 = 入口名 · 所属卡题 · 提交人昵称；precheck/contentPreview 无卡片内容语义，恒 null
+            EntryEntity entry = entries.selectById(task.getObjectId());
+            if (entry != null) {
+                CardEntity owner = entry.getCardId() == null ? null : cards.selectById(entry.getCardId());
+                summary = entry.getName() + " · " + (owner == null ? "—" : owner.getTitle())
+                        + " · " + nicknameOf(entry.getAuthorId());
+            }
         }
         return new ReviewItem(task.getId(), task.getObjectType(), task.getObjectId(), task.getAction(),
                 task.getStatus(), task.getCreatedAt(), summary, precheck, contentPreview);
@@ -272,29 +288,43 @@ public class ReviewService {
         }
     }
 
-    /** 自审禁绝：提交人（card.maintainer_id）与审核人相同 → 403 语义，交给 envelope */
+    /** 自审禁绝：提交人（CARD=card.maintainer_id；ENTRY=entry.author_id，Task 28）与审核人相同
+     *  → 403 语义，交给 envelope */
     private void guardNotSelf(ReviewTaskEntity task, long reviewerId) {
-        if (!"CARD".equals(task.getObjectType())) {
-            return;
+        Long submitterId = null;
+        if ("CARD".equals(task.getObjectType())) {
+            CardEntity card = cards.selectById(task.getObjectId());
+            submitterId = card == null ? null : card.getMaintainerId();
+        } else if ("ENTRY".equals(task.getObjectType())) {
+            EntryEntity entry = entries.selectById(task.getObjectId());
+            submitterId = entry == null ? null : entry.getAuthorId();
         }
-        CardEntity card = cards.selectById(task.getObjectId());
-        if (card != null && card.getMaintainerId() != null && card.getMaintainerId() == reviewerId) {
+        if (submitterId != null && submitterId == reviewerId) {
             throw new AccessDeniedException("不能审核自己提交的内容");
         }
     }
 
+    /** approve 委托：CARD 发布；ENTRY 入口无 publish 概念——创建即 ACTIVE，审核通过维持不动（Task 28 决策） */
     private void dispatch(ReviewTaskEntity task) {
         switch (task.getObjectType()) {
             case "CARD" -> cardService.publish(task.getObjectId());
-            case "ENTRY" -> throw new BadRequestException("入口审核在 Phase 6（Task 28）接入");
+            case "ENTRY" -> { }
             default -> throw new BadRequestException("未知审核对象类型: " + task.getObjectType());
         }
     }
 
+    /** reject 委托：CARD 回 DRAFT；ENTRY 置 DISABLED（驳回即下架，作者卡页不再可见） */
     private void dispatchReturn(ReviewTaskEntity task) {
         switch (task.getObjectType()) {
             case "CARD" -> cardService.returnToDraft(task.getObjectId());
-            case "ENTRY" -> throw new BadRequestException("入口审核在 Phase 6（Task 28）接入");
+            case "ENTRY" -> {
+                EntryEntity entry = entries.selectById(task.getObjectId());
+                if (entry != null) {
+                    entry.setStatus("DISABLED");
+                    entry.setUpdatedAt(java.time.OffsetDateTime.now());
+                    entries.updateById(entry);
+                }
+            }
             default -> throw new BadRequestException("未知审核对象类型: " + task.getObjectType());
         }
     }

@@ -24,9 +24,11 @@ import java.util.stream.Collectors;
  *   PUBLIC 全可见，PRIVATE 仅创建者本人可见（FR-N04 私人入口仅个人空间生效）；
  *   按 (sort,id) 升序，前 {@value #DEFAULT_VISIBLE} 个进 defaultEntries，其余进 folded；
  *   每项带 mine（author_id==当前用户）；config_json 不返回（Phase 6 试运行按需提供）。
- * - 写路径白名单守卫 {@link #checkInsertable}：type ∈ EntryType、scope/status 枚举白名单、
- *   LINK_CARD 必填 relation_label 且取值 ∈ RelationType 四词。本任务无写端点，
- *   Phase 6 的 CRUD/试运行/自然语言草稿（Task 26-31）写入前必须先过此守卫。
+ * - 写路径（Task 28）：保存端点（EntryMutationController/EntryMutationService）的权威硬门是
+ *   {@link EntryConfigValidator}（白名单 + 授权资产集 + 跨主题三要件，violations → 400 清单），
+ *   本类 {@link #checkInsertable} 保留为底层形状守卫（type/scope/status 枚举与关系词白名单），
+ *   供非 EntryConfig 形状的直插路径复用；注意 LINK_CARD 的 relation_label 由 Validator 按
+ *   跨主题与否决定必填或须空，本守卫的「必填」规则仅适用于跨主题链接入口。
  */
 @Service
 public class EntryService {

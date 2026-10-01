@@ -7,11 +7,12 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.OffsetDateTime;
 
 /**
- * entry 表映射（V1__core_schema.sql；V2 补 scope 注释）：
+ * entry 表映射（V1__core_schema.sql；V2 补 scope 注释；V5 补 test_total）：
  * 卡片入口（FR-E02/C09/N07）。type 只允许 {@link com.ke.domain.enums.EntryType} 三类 name()；
  * relation_label 只允许四类关系词（com.ke.domain.entry.RelationType 中文标签）；
  * scope ∈ PRIVATE/PUBLIC；status ∈ ACTIVE/DISABLED；version 为乐观锁占位（默认 1）；
- * config_json 为 JSONB 原文（仅写路径/试运行需要，探索端响应不返回）。
+ * config_json 为 JSONB 原文（仅写路径/试运行需要，探索端响应不返回）；
+ * test_total 为试运行次数（Task 28：每次提交试运行 +1，MVP 不计 pass）。
  */
 @TableName("entry")
 public class EntryEntity {
@@ -29,6 +30,7 @@ public class EntryEntity {
     private Integer version;
     private Long authorId;
     private Integer sort;
+    private Integer testTotal;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 
@@ -58,6 +60,8 @@ public class EntryEntity {
     public void setAuthorId(Long authorId) { this.authorId = authorId; }
     public Integer getSort() { return sort; }
     public void setSort(Integer sort) { this.sort = sort; }
+    public Integer getTestTotal() { return testTotal; }
+    public void setTestTotal(Integer testTotal) { this.testTotal = testTotal; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }

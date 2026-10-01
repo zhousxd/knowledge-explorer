@@ -1,8 +1,5 @@
 package com.ke.service.entry;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ke.domain.entry.EntryConfig;
 import com.ke.domain.entry.EntryConfigValidator;
@@ -10,11 +7,7 @@ import com.ke.domain.entry.NlIntent;
 import com.ke.domain.enums.CardStatus;
 import com.ke.domain.enums.EntryType;
 import com.ke.infra.entity.CardEntity;
-import com.ke.infra.entity.CardVersionEntity;
-import com.ke.infra.entity.KnowledgeAssetEntity;
 import com.ke.infra.mapper.CardMapper;
-import com.ke.infra.mapper.CardVersionMapper;
-import com.ke.infra.mapper.KnowledgeAssetMapper;
 import com.ke.service.card.CardService;
 import com.ke.service.common.BadRequestException;
 import com.ke.service.common.NotFoundException;
@@ -25,13 +18,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 自然语言入口草稿抽取（FR-N01/N02/N06/N07，Task 27）：用户一句话 → 意图分类
@@ -73,8 +67,7 @@ public class EntryDraftService {
     static final String NO_MATCH_ADVICE = "未找到相关卡片,可直接浏览专题选择";
 
     private final CardMapper cards;
-    private final CardVersionMapper cardVersions;
-    private final KnowledgeAssetMapper assets;
+    private final EntryAuthorizedAssets authorizedAssets;
     private final CardService cardService;
     private final NlIntentClassifier classifier;
     private final LlmGateway llm;
@@ -83,12 +76,11 @@ public class EntryDraftService {
     @Value("${draft.prompt.system}")
     private String draftSystemPrompt;
 
-    public EntryDraftService(CardMapper cards, CardVersionMapper cardVersions, KnowledgeAssetMapper assets,
+    public EntryDraftService(CardMapper cards, EntryAuthorizedAssets authorizedAssets,
                              CardService cardService, NlIntentClassifier classifier, LlmGateway llm,
                              ObjectMapper objectMapper) {
         this.cards = cards;
-        this.cardVersions = cardVersions;
-        this.assets = assets;
+        this.authorizedAssets = authorizedAssets;
         this.cardService = cardService;
         this.classifier = classifier;
         this.llm = llm;
@@ -157,9 +149,13 @@ public class EntryDraftService {
                     + (last == null ? "未知原因" : last.getMessage()));
         }
 
+        // 钉子③（P6-27 移交）：LLM 抽取的 assetScope 数组可能含 null 元素（模型幻觉输出形状），
+        // Set.copyOf 会 NPE 打穿重试——序列化前过滤 null；name/goal 等 null 由 Validator 出违规清单
+        Set<Long> scopeIds = output.assetScope() == null ? null
+                : output.assetScope().stream().filter(Objects::nonNull)
+                        .collect(Collectors.toCollection(LinkedHashSet::new));
         EntryConfig config = new EntryConfig(output.name(), EntryType.AGENT_SERVICE, output.goal(), null,
-                output.serviceType(), output.assetScope() == null ? null
-                        : Set.copyOf(output.assetScope()),
+                output.serviceType(), scopeIds == null ? null : Set.copyOf(scopeIds),
                 output.outputSpec(), null, null, null, null);
         List<String> violations = EntryConfigValidator.validate(config, SERVICE_WHITELIST,
                 authorized.keySet(), false);
@@ -214,59 +210,10 @@ public class EntryDraftService {
     /**
      * 当前卡版本的授权资产清单（LinkedHashMap 保 sources 顺序）：card_version.sources[].assetId
      * → knowledge_asset（license_expire 为空或 ≥ 今天，与 RetrievalService 同一授权过滤）。
-     * 解析失败/缺失资产静默跳过——受限集合只缩不涨。
+     * Task 28 抽出 {@link EntryAuthorizedAssets} 共用（草稿与保存同一份授权判定，口径不漂移）。
      */
     private Map<Long, String> authorizedAssets(Long cardVersionId) {
-        if (cardVersionId == null) {
-            return Map.of();
-        }
-        CardVersionEntity version = cardVersions.selectById(cardVersionId);
-        List<Long> assetIds = assetIdsOf(version == null ? null : version.getSources());
-        if (assetIds.isEmpty()) {
-            return Map.of();
-        }
-        List<KnowledgeAssetEntity> rows = assets.selectList(new LambdaQueryWrapper<KnowledgeAssetEntity>()
-                .in(KnowledgeAssetEntity::getId, assetIds)
-                .and(w -> w.isNull(KnowledgeAssetEntity::getLicenseExpire)
-                        .or().ge(KnowledgeAssetEntity::getLicenseExpire, LocalDate.now())));
-        Map<Long, String> titles = new LinkedHashMap<>();
-        for (KnowledgeAssetEntity asset : rows) {
-            titles.put(asset.getId(), asset.getTitle());
-        }
-        Map<Long, String> ordered = new LinkedHashMap<>();
-        for (Long assetId : assetIds) {
-            String title = titles.get(assetId);
-            if (title != null) {
-                ordered.put(assetId, title);
-            }
-        }
-        return ordered;
-    }
-
-    /** sources JSON 数组 → 非空 assetId（去重、保序）；非法 JSON 一律当无挂接 */
-    private List<Long> assetIdsOf(String sourcesJson) {
-        if (sourcesJson == null || sourcesJson.isBlank()) {
-            return List.of();
-        }
-        try {
-            JsonNode sources = objectMapper.readTree(sourcesJson);
-            if (sources == null || !sources.isArray()) {
-                return List.of();
-            }
-            List<Long> ids = new ArrayList<>();
-            for (JsonNode source : sources) {
-                JsonNode assetId = source == null ? null : source.get("assetId");
-                if (assetId != null && !assetId.isNull() && assetId.canConvertToLong()) {
-                    long id = assetId.longValue();
-                    if (id > 0 && !ids.contains(id)) {
-                        ids.add(id);
-                    }
-                }
-            }
-            return ids;
-        } catch (JsonProcessingException e) {
-            return List.of();
-        }
+        return authorizedAssets.of(cardVersionId);
     }
 
     /** 提示词用资料清单：每行「- {id}:{标题}」 */
