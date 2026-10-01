@@ -16,9 +16,14 @@ public record SnapshotJson(String title, String summary, List<SnapshotNode> node
     /**
      * 快照节点：{@code cardVersionId} 为 null 表示纯追问节点（无挂接卡版本，title 即追问文本）；
      * {@code removed=true} 表示卡版本已不可用（非 PUBLISHED），title 用追问文本占位、不泄露卡标题。
+     *
+     * <p>{@code nodeRef}/{@code parentNodeRef}（Task 31 接续副本，add-only）：原会话 path_node 的
+     * 本节点/父节点 id，纯内部字段，前端可忽略——快照必须自足（分享可能撤销、原会话可变），
+     * 接续复制按 parentNodeRef→新父 id 的映射重建树；旧快照（无此键）反序列化为 null，复制时按根处理。
      */
     public record SnapshotNode(String title, Long cardVersionId, List<SnapshotEntry> entries,
-                               String question, String visitedAt, boolean removed, String note) {
+                               String question, String visitedAt, boolean removed, String note,
+                               Long nodeRef, Long parentNodeRef) {
     }
 
     /** 快照入口：只含展示所需的最小字段（名称/关系标签），不泄露 authorId/scope/status。 */

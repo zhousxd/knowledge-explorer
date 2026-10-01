@@ -24,7 +24,11 @@ import com.ke.support.ItDb;
  * - GET /s/{token}（匿名 permitAll）：内容=快照（A4 数据面）；撤销/不存在统一 404 不泄露存在性；
  * - DELETE /api/shares/{token}（属主）：撤销置 revoked=true，已撤销再撤幂等 200；
  * - token：SecureRandom Base62 21 位不可枚举，两次生成不同；
- * - 快照视图规则 wiring（Task 29 SnapshotFilter）：DRAFT 版本 → removed 占位、入口 ACTIVE+PUBLIC/分享者本人。
+ * - 快照视图规则 wiring（Task 29 SnapshotFilter）：DRAFT 版本 → removed 占位、入口 ACTIVE+PUBLIC/分享者本人；
+ * - GET /s/{token} 响应附 continueNotice 常量（FR-H07 一期简化：静态提示条，不做后端差异计算）；
+ * - POST /s/{token}/continue（Task 31，FR-H05，认证面）：按快照复制独立副本（user=接收者、
+ *   origin_share_id 记源、树结构一致、removed 占位跳过），原会话零写入（A5）；
+ *   匿名 401 / 撤销与不存在统一 404。
  *
  * 角色账号：API 注册后经 JdbcTemplate 提权再重新登录（照 SessionPathIT 模式）。
  */
@@ -174,6 +178,15 @@ class ShareIT {
         return http.exchange("/api/shares/" + shareToken, HttpMethod.DELETE, bearer(callerToken), String.class);
     }
 
+    /** POST /s/{token}/continue（认证面，Task 31 接续副本） */
+    private ResponseEntity<String> continueShare(String callerToken, String shareToken) {
+        return http.postForEntity("/s/" + shareToken + "/continue", bearer(callerToken), String.class);
+    }
+
+    private long sessionNodeCount(long sessionId) {
+        return jdbc.queryForObject("select count(*) from path_node where session_id=?", Long.class, sessionId);
+    }
+
     // ---------- scenarios ----------
 
     /** P7-29 Step1 主案：创建 → 匿名可读且内容=快照（A4 数据面）；快照无 findings/artifacts 键（裁决钉①） */
@@ -234,6 +247,12 @@ class ShareIT {
 
         // 裁决钉①：快照=节点+标题+来源，不含讲解 findings / 整理 artifacts 键（JSON 级断言）
         assertThat(view.getBody()).doesNotContain("findings").doesNotContain("artifacts");
+
+        // Task 31：FR-H07 一期简化——匿名视图附 continueNotice 静态提示常量；快照节点带内部 nodeRef（前端可忽略）
+        assertThat((String) JsonPath.read(view.getBody(), "$.data.continueNotice"))
+                .isEqualTo("来源与模型可能已更新，接续后的结果或有差异");
+        assertThat(((Number) JsonPath.read(view.getBody(), "$.data.snapshot.nodes[0].nodeRef")).longValue())
+                .isEqualTo(n1);
     }
 
     /** 撤销即隐藏（FR-H03/H06）：撤销 → 匿名 404；已撤销再撤幂等 200 */
@@ -437,5 +456,146 @@ class ShareIT {
                 .isEqualTo(JsonPath.read(missingView.getBody(), "$.message"));
         assertThat((Integer) JsonPath.read(revokedView.getBody(), "$.code"))
                 .isEqualTo(JsonPath.read(missingView.getBody(), "$.code"));
+    }
+
+    // ---------- Task 31：接续副本（FR-H05，A5） ----------
+
+    /**
+     * 主案：B 接续分享 → 新会话归 B（status=ACTIVE、theme 同源、goal=「接续自分享:{title}」截 100、
+     * origin_share_id 记源），节点按快照复制且树结构一致（根/父子关系、card_version_id 保留）；
+     * 原会话零写入（A5）：updated_at 与节点数不变。
+     */
+    @Test
+    void continueCreatesIndependentCopy() {
+        String creator = newUserToken("13800170032", "接续卡创作", "CREATOR");
+        String editor = newUserToken("13800170033", "接续卡编辑", "EDITOR");
+        String sharer = newUserToken("13800170034", "接续分享者", "EXPLORER");
+        String receiver = newUserToken("13800170035", "接续接收者", "EXPLORER");
+        long receiverId = userIdByPhone("13800170035");
+        long versionId = publishCard(creator, editor, "接续卡", "接续摘要")[1];
+
+        long sid = createSession(sharer, "academy", "接续探索");
+        long n1 = addNode(sharer, sid, versionId, null, "书院根问");
+        long n2 = addNode(sharer, sid, null, n1, "书院子问");
+        // 150 字标题 → goal「接续自分享:{title}」须截断到 100
+        String longTitle = "湖".repeat(150);
+        String token = createShare(sharer, sid, "[" + n1 + "," + n2 + "]", longTitle, null);
+
+        // 零写入断言基线：原会话 updated_at + 节点数
+        Object updatedAtBefore = jdbc.queryForObject(
+                "select updated_at from exploration_session where id=?", Object.class, sid);
+        long nodeCountBefore = sessionNodeCount(sid);
+
+        ResponseEntity<String> cont = continueShare(receiver, token);
+        assertThat(cont.getStatusCode().value()).as("continue body=%s", cont.getBody()).isEqualTo(200);
+        assertThat((Integer) JsonPath.read(cont.getBody(), "$.code")).isZero();
+        long newSid = ((Number) JsonPath.read(cont.getBody(), "$.data.sessionId")).longValue();
+        assertThat(newSid).isNotEqualTo(sid);
+        assertThat(((Number) JsonPath.read(cont.getBody(), "$.data.nodeCount")).longValue()).isEqualTo(2);
+
+        // 新会话归属与元数据
+        java.util.Map<String, Object> row = jdbc.queryForMap(
+                "select user_id, theme, goal, status, origin_share_id from exploration_session where id=?", newSid);
+        assertThat(((Number) row.get("user_id")).longValue()).isEqualTo(receiverId);
+        assertThat((String) row.get("theme")).isEqualTo("academy");
+        assertThat((String) row.get("goal")).startsWith("接续自分享:").hasSize(100);
+        assertThat((String) row.get("status")).isEqualTo("ACTIVE");
+        assertThat(row.get("origin_share_id")).as("origin_share_id 记源").isNotNull();
+
+        // 树结构一致：root(卡版本) → 子(纯追问)；card_version_id 原样保留
+        java.util.List<java.util.Map<String, Object>> nodes = jdbc.queryForList(
+                "select id, parent_node_id, card_version_id, question_text from path_node "
+                        + "where session_id=? order by id", newSid);
+        assertThat(nodes).hasSize(2);
+        assertThat(nodes.get(0).get("parent_node_id")).isNull();
+        assertThat(nodes.get(0).get("question_text")).isEqualTo("书院根问");
+        assertThat(((Number) nodes.get(0).get("card_version_id")).longValue()).isEqualTo(versionId);
+        assertThat(((Number) nodes.get(1).get("parent_node_id")).longValue())
+                .isEqualTo(((Number) nodes.get(0).get("id")).longValue());
+        assertThat(nodes.get(1).get("question_text")).isEqualTo("书院子问");
+        assertThat(nodes.get(1).get("card_version_id")).isNull();
+
+        // A5 零写入：原会话 updated_at/节点数均不变
+        Object updatedAtAfter = jdbc.queryForObject(
+                "select updated_at from exploration_session where id=?", Object.class, sid);
+        assertThat(updatedAtAfter).as("原会话 updated_at 不变").isEqualTo(updatedAtBefore);
+        assertThat(sessionNodeCount(sid)).as("原会话节点数不变").isEqualTo(nodeCountBefore);
+    }
+
+    /** removed 占位节点不入副本：3 节点快照（1 个 removed）→ 副本 2 节点；被跳过节点的子节点挂到根 */
+    @Test
+    void continueRemovedPlaceholderSkipped() {
+        String creator = newUserToken("13800170036", "跳过卡创作", "CREATOR");
+        String editor = newUserToken("13800170037", "跳过卡编辑", "EDITOR");
+        String sharer = newUserToken("13800170038", "跳过分享者", "EXPLORER");
+        String receiver = newUserToken("13800170039", "跳过接收者", "EXPLORER");
+        long versionId = publishCard(creator, editor, "可用卡", "跳过摘要")[1];
+
+        long sid = createSession(sharer, "academy", "跳过探索");
+        long n1 = addNode(sharer, sid, versionId, null, "可用根问");
+
+        // 造 DRAFT 卡版本节点（快照里 removed 占位）+ 其纯追问子节点
+        ResponseEntity<String> draft = http.postForEntity("/api/wb/cards",
+                jsonWithToken("{\"theme\":\"academy\",\"templateType\":\"TEXT\",\"title\":\"跳过草稿卡\",\"content\":"
+                        + textContent("跳过草稿摘要") + "}", creator), String.class);
+        long draftCardId = ((Number) JsonPath.read(draft.getBody(), "$.data.cardId")).longValue();
+        Long draftVersionId = jdbc.queryForObject(
+                "select id from card_version where card_id=? order by id limit 1", Long.class, draftCardId);
+        long n2 = insertNodeRaw(sid, draftVersionId, "草稿占位问");
+        long n3 = addNode(sharer, sid, null, n2, "占位下的子问");
+
+        String token = createShare(sharer, sid, "[" + n1 + "," + n2 + "," + n3 + "]", null, null);
+        ResponseEntity<String> view = anonView(token);
+        assertThat((java.util.List<Boolean>) JsonPath.read(view.getBody(),
+                "$.data.snapshot.nodes[?(@.question=='草稿占位问')].removed")).containsExactly(true);
+
+        ResponseEntity<String> cont = continueShare(receiver, token);
+        assertThat(cont.getStatusCode().value()).as("continue body=%s", cont.getBody()).isEqualTo(200);
+        long newSid = ((Number) JsonPath.read(cont.getBody(), "$.data.sessionId")).longValue();
+        assertThat(((Number) JsonPath.read(cont.getBody(), "$.data.nodeCount")).longValue()).isEqualTo(2);
+
+        // 副本不含 removed 节点；其子问保留（父不可映射 → 挂根），可用根问仍在
+        java.util.List<String> questions = jdbc.queryForList(
+                "select question_text from path_node where session_id=? order by id", String.class, newSid);
+        assertThat(questions).containsExactly("可用根问", "占位下的子问");
+        Long orphanParent = jdbc.queryForObject(
+                "select parent_node_id from path_node where session_id=? and question_text=?",
+                Long.class, newSid, "占位下的子问");
+        assertThat(orphanParent).as("removed 父被跳过 → 子问挂根").isNull();
+    }
+
+    /** 认证与存在性：匿名 POST continue → 401；撤销 token → 404「分享不存在」；不存在 token 同形 404 */
+    @Test
+    void continueAuthAndMissing() {
+        String creator = newUserToken("13800170040", "接续401卡创作", "CREATOR");
+        String editor = newUserToken("13800170041", "接续401卡编辑", "EDITOR");
+        String sharer = newUserToken("13800170042", "接续401分享者", "EXPLORER");
+        String receiver = newUserToken("13800170043", "接续401接收者", "EXPLORER");
+        long versionId = publishCard(creator, editor, "接续401卡", "接续401摘要")[1];
+
+        long sid = createSession(sharer, "academy", "接续401探索");
+        long n1 = addNode(sharer, sid, versionId, null, "接续401问");
+        String token = createShare(sharer, sid, "[" + n1 + "]", null, null);
+
+        // 匿名（无 Authorization）→ 401（SecurityConfig 仅 GET /s/* permitAll，POST 走 authenticated 兜底）
+        ResponseEntity<String> anon = http.postForEntity("/s/" + token + "/continue",
+                new HttpEntity<>(new HttpHeaders()), String.class);
+        assertThat(anon.getStatusCode().value()).as("anon continue body=%s", anon.getBody()).isEqualTo(401);
+        assertThat((Integer) JsonPath.read(anon.getBody(), "$.code")).isEqualTo(401);
+
+        // 撤销后接续 → 404 与不存在 token 同形（不泄露存在性）
+        assertThat(revoke(sharer, token).getStatusCode().value()).isEqualTo(200);
+        ResponseEntity<String> revoked = continueShare(receiver, token);
+        assertThat(revoked.getStatusCode().value()).as("revoked continue body=%s", revoked.getBody()).isEqualTo(404);
+        ResponseEntity<String> missing = continueShare(receiver, "wwwwwwwwwwwwwwwwwwwww");
+        assertThat(missing.getStatusCode().value()).isEqualTo(404);
+        assertThat((String) JsonPath.read(revoked.getBody(), "$.message"))
+                .isEqualTo(JsonPath.read(missing.getBody(), "$.message"));
+
+        // 撤销的分享不可接续：不得产生新会话
+        Integer copies = jdbc.queryForObject(
+                "select count(*) from exploration_session where origin_share_id in "
+                        + "(select id from share where token=?)", Integer.class, token);
+        assertThat(copies).isZero();
     }
 }

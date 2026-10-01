@@ -18,6 +18,7 @@ import com.ke.infra.mapper.CardMapper;
 import com.ke.infra.mapper.CardVersionMapper;
 import com.ke.infra.mapper.EntryMapper;
 import com.ke.infra.mapper.PathNodeMapper;
+import com.ke.infra.mapper.SessionMapper;
 import com.ke.infra.mapper.ShareMapper;
 import com.ke.infra.mapper.ShareSnapshotMapper;
 import com.ke.service.common.BadRequestException;
@@ -43,7 +44,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 分享创建/撤销/免登录浏览（FR-H01–H04/H06，02 §9「有权阅读≠有权转发」）：
+ * 分享创建/撤销/免登录浏览/接续副本（FR-H01–H07，02 §9「有权阅读≠有权转发」）：
  * - create：会话属主校验（403/404 三分，复用 {@link SessionService#ownedSession}）→ 勾选集校验
  *   （**P7-29 钉②：只接受属于该会话的节点 id**，外会话/不存在 → 400；空集 → 400。隐藏分支语义由此
  *   字面保障：SnapshotFilter 按选择集裁剪，未勾选的任何节点——含已勾选节点的子树——不入快照）→
@@ -52,8 +53,14 @@ import java.util.stream.Collectors;
  *   share + share_snapshot 一次事务 INSERT（快照不可变，只插不改）；token 冲突换号重试 ≤3 次。
  *   **裁决钉①**：快照=节点+标题+来源（SnapshotJson 形状天然不含 findings/artifacts——Task 29 裁决豁免）。
  * - revoke：属主校验 → revoked=true；已 revoked 幂等。
- * - viewPublic：revoked/不存在/快照缺失 → 统一 404「分享不存在」（不泄露存在性）。
- * - 埋点 share_create / share_view：**分析表由 Phase 8 Task 33 建（analytics_event），本任务仅打日志**。
+ * - viewPublic：revoked/不存在/快照缺失 → 统一 404「分享不存在」（不泄露存在性）；
+ *   响应附 {@link #CONTINUE_NOTICE} 静态差异提示（FR-H07 一期简化：仅提示条，不做后端差异计算）。
+ * - continueFrom（Task 31，FR-H05，A5）：登录态按快照复制独立会话副本——user=接收者、theme 取原会话、
+ *   goal=「接续自分享:{快照 title}」截 100、origin_share_id=shareId；节点按 snapshot.nodes 顺序复制
+ *   （removed 占位跳过；parentNodeRef→新父 id 映射重建树，父不可映射挂根；isNewKnowledge 按副本内
+ *   首现规则重算）；快照自足（分享可撤销/原会话可变，不读原树）；**原会话零写入**（A5）。
+ * - 埋点 share_create / share_view / share_continue：**分析表由 Phase 8 Task 33 建（analytics_event），
+ *   本任务仅打日志**。
  */
 @Service
 public class ShareService {
@@ -63,7 +70,16 @@ public class ShareService {
     /** token 唯一冲突换号重试上限（62^21 空间，实际不可达） */
     private static final int TOKEN_ATTEMPTS = 3;
 
+    /** 接续副本 goal 前缀 + 总长上限（brief Task 31：截 100） */
+    private static final String CONTINUE_GOAL_PREFIX = "接续自分享:";
+    private static final int GOAL_MAX_LENGTH = 100;
+
+    /** FR-H07 一期简化（决策钉）：静态差异提示常量，随 GET /s/{token} 下发，前端渲染常驻提示条；
+     *  不做后端差异计算（来源/模型/入口变更的逐节点 diff 二期再做） */
+    public static final String CONTINUE_NOTICE = "来源与模型可能已更新，接续后的结果或有差异";
+
     private final SessionService sessions;
+    private final SessionMapper sessionRows;
     private final PathNodeMapper pathNodes;
     private final CardVersionMapper cardVersions;
     private final CardMapper cards;
@@ -74,11 +90,12 @@ public class ShareService {
     /** share+snapshot 双写原子性 + token 冲突重试需独立事务：不走 @Transactional 自调用代理，显式模板 */
     private final TransactionTemplate writeTx;
 
-    public ShareService(SessionService sessions, PathNodeMapper pathNodes,
+    public ShareService(SessionService sessions, SessionMapper sessionRows, PathNodeMapper pathNodes,
                         CardVersionMapper cardVersions, CardMapper cards, EntryMapper entries,
                         ShareMapper shares, ShareSnapshotMapper snapshots, ObjectMapper objectMapper,
                         PlatformTransactionManager transactionManager) {
         this.sessions = sessions;
+        this.sessionRows = sessionRows;
         this.pathNodes = pathNodes;
         this.cardVersions = cardVersions;
         this.cards = cards;
@@ -99,9 +116,16 @@ public class ShareService {
     public record ShareCreated(String token, String url) {
     }
 
-    /** 匿名浏览视图：title/summary 与快照同源（share 表不存标题，撤销后即 404 不存在泄露面） */
+    /** 接续副本结果：新会话 id + 复制节点数（removed 占位不入副本，故可小于快照节点数） */
+    public record ContinueResult(long sessionId, long nodeCount) {
+    }
+
+    /**
+     * 匿名浏览视图：title/summary 与快照同源（share 表不存标题，撤销后即 404 不存在泄露面）；
+     * continueNotice=静态差异提示常量（FR-H07 一期简化，前端渲染常驻提示条）。
+     */
     public record ShareView(String token, String title, String summary, SnapshotJson snapshot,
-                            OffsetDateTime createdAt) {
+                            OffsetDateTime createdAt, String continueNotice) {
     }
 
     // ---------- 创建 ----------
@@ -195,7 +219,109 @@ public class ShareService {
         }
         // 埋点 share_view：分析表 Phase 8 Task 33 落 analytics_event，本任务仅结构化日志
         log.info("share_view shareId={} (埋点 Phase 8 Task 33 落表)", share.getId());
-        return new ShareView(share.getToken(), snapshot.title(), snapshot.summary(), snapshot, share.getCreatedAt());
+        return new ShareView(share.getToken(), snapshot.title(), snapshot.summary(), snapshot,
+                share.getCreatedAt(), CONTINUE_NOTICE);
+    }
+
+    // ---------- 接续副本（Task 31，FR-H05，A5） ----------
+
+    /**
+     * 接续：登录态（SecurityConfig 仅 GET /s/* permitAll，POST 走 anyRequest().authenticated() 兜底 401）
+     * 按快照复制独立会话副本。revoked/不存在/快照缺失 → 与匿名浏览同形 404「分享不存在」。
+     *
+     * <p>复制规则（快照自足——分享可撤销、原会话可变，不读原树）：
+     * <ul>
+     *   <li>新会话：user=接收者、theme 取原会话行（theme 建后无更新路径，行不物理删）、
+     *       goal=「接续自分享:{快照 title}」截 100、origin_share_id=shareId、status=ACTIVE、
+     *       explain_level=SIMPLE；</li>
+     *   <li>节点：按 snapshot.nodes 顺序（P4-16 树序列化序）复制；removed 占位跳过；
+     *       新 parentId=parentNodeRef→新 id 映射（根/父不可映射——removed 或未勾选的父——挂根）；
+     *       cardVersionId 原样保留（版本不可变，全局引用）；entryId 快照未含 → null；
+     *       isNewKnowledge 按副本内该 cardVersionId 首现规则重算（与 SessionService.addNode 同则）；</li>
+     *   <li>visited_at 统一取同一 now：树序（visited_at,id）退化为插入序=快照序，确定性成立；</li>
+     *   <li>**原会话零写入**（A5）：只 INSERT 新行，不 UPDATE 任何既有行。</li>
+     * </ul>
+     */
+    public ContinueResult continueFrom(String token, long userId) {
+        ShareEntity share = requireShare(token);
+        if (Boolean.TRUE.equals(share.getRevoked())) {
+            throw missing(); // 与「不存在」同形：撤销即不可接续
+        }
+        ShareSnapshotEntity row = snapshots.selectOne(new LambdaQueryWrapper<ShareSnapshotEntity>()
+                .eq(ShareSnapshotEntity::getShareId, share.getId())
+                .orderByDesc(ShareSnapshotEntity::getId)
+                .last("LIMIT 1"));
+        if (row == null) {
+            throw missing(); // 快照缺失属数据异常，同形 404
+        }
+        SnapshotJson snapshot;
+        try {
+            snapshot = objectMapper.readValue(row.getSnapshotJson(), SnapshotJson.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("分享快照数据损坏", e);
+        }
+        // theme 取原会话（SnapshotJson 不含 theme；会话行无物理删除路径，join 稳定）
+        SessionEntity origin = share.getObjectId() == null ? null : sessionRows.selectById(share.getObjectId());
+        String theme = origin == null ? null : origin.getTheme();
+        String goal = truncateGoal(CONTINUE_GOAL_PREFIX + (snapshot.title() == null ? "" : snapshot.title()));
+
+        ContinueResult result = writeTx.execute(tx -> copySnapshot(share.getId(), userId, theme, goal, snapshot));
+        long newSessionId = result.sessionId();
+        // 埋点 share_continue：分析表 Phase 8 Task 33 落 analytics_event，本任务仅结构化日志
+        log.info("share_continue userId={} originShareId={} newSessionId={} nodeCount={} (埋点 Phase 8 Task 33 落表)",
+                userId, share.getId(), newSessionId, result.nodeCount());
+        return result;
+    }
+
+    /** 事务体：INSERT 新会话 + 按 snapshot.nodes 顺序复制节点（零写入原会话，A5） */
+    private ContinueResult copySnapshot(long shareId, long userId, String theme, String goal,
+                                        SnapshotJson snapshot) {
+        OffsetDateTime now = OffsetDateTime.now();
+        SessionEntity copy = new SessionEntity();
+        copy.setUserId(userId);
+        copy.setTheme(theme);
+        copy.setGoal(goal);
+        copy.setExplainLevel("SIMPLE");
+        copy.setStatus("ACTIVE");
+        copy.setOriginShareId(shareId);
+        copy.setCreatedAt(now);
+        copy.setUpdatedAt(now);
+        sessionRows.insert(copy);
+
+        // nodeRef(原节点 id) → 新节点 id；快照节点按序即树序，逐点建映射供子节点挂父
+        Map<Long, Long> newNodeIdByRef = new HashMap<>();
+        Set<Long> seenVersions = new java.util.HashSet<>();
+        long copied = 0;
+        if (snapshot.nodes() != null) {
+            for (SnapshotJson.SnapshotNode node : snapshot.nodes()) {
+                if (node == null || node.removed()) {
+                    continue; // removed 占位（卡版本不可用）不入副本
+                }
+                Long parentNodeId = node.parentNodeRef() == null ? null
+                        : newNodeIdByRef.get(node.parentNodeRef()); // 父被剥离/未入快照 → 挂根
+                // isNewKnowledge=副本内该 card_version_id 首现（01 A1 语义，与 addNode 同则）
+                boolean isNewKnowledge = node.cardVersionId() != null && seenVersions.add(node.cardVersionId());
+                PathNodeEntity nodeRow = new PathNodeEntity();
+                nodeRow.setSessionId(copy.getId());
+                nodeRow.setParentNodeId(parentNodeId);
+                nodeRow.setCardVersionId(node.cardVersionId());
+                nodeRow.setEntryId(null); // 快照不含入口引用（裁决钉①：快照=节点+标题+来源）
+                nodeRow.setQuestionText(node.question());
+                nodeRow.setIsNewKnowledge(isNewKnowledge);
+                nodeRow.setVisitedAt(now); // 同钟：树序 (visited_at,id) 退化为插入序=快照序
+                pathNodes.insert(nodeRow);
+                if (node.nodeRef() != null) {
+                    newNodeIdByRef.put(node.nodeRef(), nodeRow.getId());
+                }
+                copied++;
+            }
+        }
+        return new ContinueResult(copy.getId(), copied);
+    }
+
+    /** goal 截断到 100 字符（brief Task 31） */
+    private static String truncateGoal(String goal) {
+        return goal.length() <= GOAL_MAX_LENGTH ? goal : goal.substring(0, GOAL_MAX_LENGTH);
     }
 
     // ---------- 内部 ----------

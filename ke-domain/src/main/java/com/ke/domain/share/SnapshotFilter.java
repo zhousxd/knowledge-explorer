@@ -79,12 +79,14 @@ public final class SnapshotFilter {
         if (node.cardVersionId() == null) {
             // 纯追问：保留（title=追问文本，entries 恒空）
             return new SnapshotJson.SnapshotNode(node.questionText(), null, List.of(),
-                    node.questionText(), node.visitedAt(), false, null);
+                    node.questionText(), node.visitedAt(), false, null,
+                    node.nodeId(), node.parentNodeId());
         }
         if (version == null || !CARD_PUBLISHED.equals(version.status())) {
             // 无权阅读的卡版本：整点剥离留占位（不泄露不可用版本的标题与入口）
             return new SnapshotJson.SnapshotNode(node.questionText(), node.cardVersionId(),
-                    List.of(), node.questionText(), node.visitedAt(), true, UNAVAILABLE_NOTE);
+                    List.of(), node.questionText(), node.visitedAt(), true, UNAVAILABLE_NOTE,
+                    node.nodeId(), node.parentNodeId());
         }
         List<SnapshotJson.SnapshotEntry> entries = new ArrayList<>();
         if (version.entries() != null) {
@@ -96,7 +98,8 @@ public final class SnapshotFilter {
             }
         }
         return new SnapshotJson.SnapshotNode(version.title(), node.cardVersionId(),
-                List.copyOf(entries), node.questionText(), node.visitedAt(), false, null);
+                List.copyOf(entries), node.questionText(), node.visitedAt(), false, null,
+                node.nodeId(), node.parentNodeId());
     }
 
     /** 入口可见 = ACTIVE 且（PUBLIC 或 分享者本人创作）；未知状态/范围按不可见（fail-closed）。 */

@@ -68,6 +68,11 @@ class SnapshotFilterTest {
                 .containsExactly("根问题", "支线");
         assertThat(json.nodes()).allMatch(n -> !n.removed());
         assertThat(json.generatedAt()).isEqualTo("2026-09-30T12:00:00Z");
+        // Task 31 接续副本：nodeRef=原节点 id 供复制建映射（根节点 parentNodeRef=null）
+        assertThat(json.nodes().get(0).nodeRef()).isEqualTo(1L);
+        assertThat(json.nodes().get(0).parentNodeRef()).isNull();
+        assertThat(json.nodes().get(1).nodeRef()).isEqualTo(4L);
+        assertThat(json.nodes().get(1).parentNodeRef()).isNull();
     }
 
     // ---------- 2. 未勾选子树不入（勾选父节点不自动带上子树） ----------
@@ -227,6 +232,22 @@ class SnapshotFilterTest {
         assertThat(n.question()).isEqualTo("追问一");
         assertThat(n.entries()).isEmpty();
         assertThat(n.visitedAt()).isEqualTo("2026-09-30T10:00:02Z");
+        // 父链引用随节点一并保留（接续副本重建树用）：追问一 nodeRef=2、父=根问题(1)
+        assertThat(n.nodeRef()).isEqualTo(2L);
+        assertThat(n.parentNodeRef()).isEqualTo(1L);
+    }
+
+    // ---------- 12b. 三层链的父引用完整（接续副本按 parentNodeRef 重建树） ----------
+
+    @Test
+    void parentRefChainPreserved() {
+        SnapshotJson json = SnapshotFilter.build(tree(), selected(1L, 2L, 3L),
+                versions(), SHARER, null, null, "t0");
+
+        assertThat(json.nodes()).extracting(SnapshotJson.SnapshotNode::nodeRef)
+                .containsExactly(1L, 2L, 3L);
+        assertThat(json.nodes()).extracting(SnapshotJson.SnapshotNode::parentNodeRef)
+                .containsExactly(null, 1L, 2L);
     }
 
     // ---------- 13. 标题摘要覆盖与回退 ----------
