@@ -238,7 +238,8 @@ public class EntryDraftService {
             return new DraftResult(NlIntent.LINK_CARD, null, List.of(), NO_MATCH_ADVICE);
         }
         CardService.CardListItem target = matches.get(0);
-        // 跨主题判定与 RelationGuard 同则：任一 theme 缺失视为同主题（不要求三要件）
+        // 跨主题判定与 RelationGuard 同则：任一 theme 缺失视为同主题（不要求三要件）；
+        // 保存路径以 RelationGuard 实体计算为准，此处仅供草稿预校验
         boolean crossTheme = target.theme() != null && !target.theme().equals(card.getTheme());
         String name = truncate("关于" + text, MAX_DRAFT_NAME_CHARS);
         EntryConfig config = new EntryConfig(name, EntryType.LINK_CARD, null, null,

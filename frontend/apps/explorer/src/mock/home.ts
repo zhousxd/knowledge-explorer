@@ -13,7 +13,7 @@ export interface HomeTheme {
   count: number;
 }
 
-/** 演示字段:icon 对应首页 SVG 图标语言;张数为演示值,Phase 4 换 GET /cards 聚合 */
+/** 演示字段:icon 对应首页 SVG 图标语言;专题张数为演示数据(界面占位,未接 GET /cards 真数聚合) */
 const THEME_ICONS = { academy: 'temple', cuisine: 'bowl', sound: 'wave' } as const;
 const THEME_DEMO_COUNT = { academy: 12, cuisine: 9, sound: 7 } as const;
 

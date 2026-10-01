@@ -121,7 +121,8 @@ async function generate(): Promise<void> {
       advice.value = result.advice ?? '暂不支持该类入口';
       return;
     }
-    seedForm(result);    violations.value = result.violations ?? [];
+    seedForm(result);
+    violations.value = result.violations ?? [];
     step.value = 2;
   } catch (e) {
     showToast(e instanceof ApiError ? e.message : '生成失败,请稍后重试');
@@ -274,7 +275,7 @@ async function submitPublic(): Promise<void> {
   if (submittingPublic.value || saved.value == null) return;
   submittingPublic.value = true;
   try {
-    // 已存私人入口 → PUT scope 挂审核；否则直接以 PUBLIC 保存（同一 400 清单语义）
+    // Step2 已存为私人入口 → 此处仅 PUT scope 挂审核队列（前置审核：PENDING 待审态对他人不可见）
     await changeEntryScope(saved.value.entryId, 'PUBLIC');
     saved.value = { ...saved.value, scope: 'PUBLIC' };
     publicSubmitted.value = true;
