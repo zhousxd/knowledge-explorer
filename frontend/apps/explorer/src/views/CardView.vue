@@ -241,7 +241,8 @@ async function onService(kind: ServiceKind): Promise<void> {
       sessionId,
       nodeId: node.nodeId,
       question,
-      level: 'SIMPLE'
+      // FR-E10 档位随讲解生效:读会话档位记忆(结果页/路径页切换后,下一次提交即新档)
+      level: sessionStore.explainLevel
     };
     const { runId } = await submitRun(payload);
     await router.push({ path: `/runs/${runId}`, state: { keRun: JSON.stringify(payload) } });

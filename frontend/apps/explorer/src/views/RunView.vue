@@ -1,27 +1,46 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { showToast } from 'vant';
-import { KeIcon } from '@ke/shared';
+import { ClaimBadge, KeIcon } from '@ke/shared';
 import { ApiError } from '../api/http';
 import { fetchRun, isTerminal, submitRun } from '../api/runs';
 import type { RunState, RunSubmitPayload } from '../api/runs';
+import type { ExplainLevel } from '../api/sessions';
+import AskBar from '../components/AskBar.vue';
 import TopBar from '../components/TopBar.vue';
+import { useSessionStore } from '../stores/sessionStore';
 
 /**
- * 执行态页(04 §7.2 RunProgress + §8.3/8.4/8.6,FR-S04 界面):spinner 44 主色环 +
- * 任务问题 + 三步清单(读取上下文→检索资料→生成讲解并校验出处)+ 限时说明。
- * 2s 轮询 GET /runs/{id}:组件卸载停止、页面隐藏(document.visibilitychange)暂停、
- * 终态即停;禁止无限 spinner —— FAILED/TIMEOUT 按错误卡模板给「重试/换个问法」。
- * question 与重试 payload 经路由 history state(keRun)携带,刷新丢失走「智能服务执行中」
- * 兜底、重试置灰(§8.7 禁用带原因);429 重试以页内错误态展示 envelope 文案。
- * DONE 暂以简单成功卡承载(Task 22 结果页接入后替换),「查看讲解」入口先行置灰占位。
+ * 执行态页 + 讲解结果页(04 §7.2 RunProgress/ExplainResult,FR-S04/E08/E10/E11 界面):
+ * 运行中为 spinner + 任务问题 + 三步清单 + 限时说明,2s 轮询 GET /runs/{id}(隐藏暂停、
+ * 终态即停、404/403 终止);DONE 且有 artifact 时同路由原地渲染讲解结果页 ——
+ * chips(讲解卡 · 由智能体生成 + 档位)→ 宋体问题标题 → summary 引言段 → 分段正文
+ * (14/1.8 两端对齐,段尾 ClaimBadge 三档 + citations 角标)→ 出处清单(sources map,
+ * audit.stripped/证据缺口警示行)→「还可以继续问」→ 受控生成声明脚注;底部 AskBar
+ * 常驻追问(payload 从路由 state 继承提交上下文,parentRunId 记追问链,刷新丢失则禁用
+ * ——§8.7 禁用带原因)。档位 chip 点击循环切换(PUT explain-level,下次讲解生效)。
+ * 停顿三键不入结果页:经 TopBar 指南针去路径页(FR-E09「还有哪些疑问」=openQuestions,
+ * 「换个方向」=路径页分叉,Task 22 授权决策)。question/重试 payload 经路由 state(keRun)
+ * 携带;FAILED/TIMEOUT 按错误卡模板给「重试/换个问法」;429 以页内错误态展示 envelope 文案。
  */
 const POLL_MS = 2000;
 const STEPS = ['读取上下文', '检索资料', '生成讲解并校验出处'] as const;
+/** 出处清单行文本截断(sources map 快照文本 → 行 snippet) */
+const SNIPPET_MAX = 30;
+/** 角标 title 的出处文本缩略(Task 22:首 12 字) */
+const CITE_TITLE_MAX = 12;
+const HIGHLIGHT_MS = 2000;
+/** FR-E10 档位三档(PathView 同 label;结果页 chip 点击循环切换) */
+const LEVELS: ReadonlyArray<{ value: ExplainLevel; label: string }> = [
+  { value: 'SIMPLE', label: '简明' },
+  { value: 'DEEP', label: '深入' },
+  { value: 'CHILD', label: '儿童' }
+];
 
 const route = useRoute();
 const router = useRouter();
+const sessionStore = useSessionStore();
 
 const run = ref<RunState | null>(null);
 /** 404/403:运行不可见(不存在/非属主),轮询终止 */
@@ -29,8 +48,15 @@ const loadError = ref('');
 /** 重试遇 429:配额 envelope 文案以页内错误态展示(04 §8.6) */
 const quotaMsg = ref('');
 const retrying = ref(false);
-/** 提交上下文(含 question):路由 state 带入,重试复用同一 payload */
+/** 提交上下文(含 question):路由 state 带入,重试/追问复用同一上下文 */
 const launch = ref<RunSubmitPayload | null>(null);
+
+/** 结果页追问/联动状态 */
+const cited = ref<number | null>(null);
+const askDraft = ref('');
+const asking = ref(false);
+const switching = ref(false);
+let citeTimer: number | undefined;
 
 let timer: number | undefined;
 
@@ -67,6 +93,113 @@ const reasonLine = computed(() => {
   if (r?.error) return r.error;
   return r?.status === 'TIMEOUT' ? '任务超时,请稍后重试' : '服务繁忙,请稍后重试';
 });
+
+// —— 讲解结果页(artifact.output 包一层,P5-21 实测形状;全键 optional 容 non_null 缺省) ——
+
+const output = computed(() => run.value?.artifact?.output ?? null);
+/** 结果页可渲染=DONE 且 artifact.output 存在(无 artifact 的 legacy DONE 走简单成功卡兜底) */
+const resultReady = computed(() => output.value !== null);
+
+const disclaimer = computed(() => run.value?.artifact?.disclaimer ?? '');
+const strippedCount = computed(() => run.value?.artifact?.audit?.stripped ?? 0);
+const evidenceGaps = computed(() => output.value?.evidenceGaps ?? []);
+const openQuestions = computed(() => output.value?.openQuestions ?? []);
+
+/** sources map(assetId→检索文本)→ 有序出处行(key=assetId,序号即 [n] 角标编号) */
+const sourceEntries = computed(() =>
+  Object.entries(run.value?.artifact?.sources ?? {}).map(([assetId, text]) => ({
+    assetId: Number(assetId),
+    text
+  }))
+);
+
+const sourceRows = computed(() =>
+  sourceEntries.value.map((e, i) => ({
+    index: i + 1,
+    assetId: e.assetId,
+    snippet: e.text.length > SNIPPET_MAX ? `${e.text.slice(0, SNIPPET_MAX)}…` : e.text
+  }))
+);
+
+function citeNo(assetId: number): number {
+  return sourceEntries.value.findIndex((e) => e.assetId === assetId) + 1;
+}
+
+function citeTitle(assetId: number): string {
+  const text = sourceEntries.value.find((e) => e.assetId === assetId)?.text ?? '';
+  return text.slice(0, CITE_TITLE_MAX);
+}
+
+interface DecoratedSection {
+  body: string;
+  claim: 'fact' | 'synth' | 'gen';
+  cites: Array<{ assetId: number; no: number; title: string }>;
+}
+
+/** 段落装饰:claimType→ClaimBadge 三档(未知值安全降级 gen);citations 只留清单内的 assetId */
+const decorated = computed<DecoratedSection[]>(() =>
+  (output.value?.sections ?? [])
+    .filter((s): s is NonNullable<typeof s> => s != null && typeof s.body === 'string')
+    .map((s) => ({
+      body: s.body,
+      claim: s.claimType === 'FACT' ? 'fact' : s.claimType === 'SYNTHESIS' ? 'synth' : 'gen',
+      cites: (s.citations ?? [])
+        .map((assetId) => ({ assetId, no: citeNo(assetId), title: citeTitle(assetId) }))
+        .filter((c) => c.no > 0)
+    }))
+);
+
+const levelLabel = computed(
+  () => LEVELS.find((l) => l.value === sessionStore.explainLevel)?.label ?? '简明'
+);
+
+/** 追问可用=提交上下文仍在(路由 state);刷新丢失即禁用(§8.7 禁用带原因) */
+const canAsk = computed(() => launch.value !== null);
+const askPlaceholder = computed(() =>
+  canAsk.value ? '针对这次讲解,继续问一句…' : '刷新后无法追问,请从卡片重新发起'
+);
+
+// —— 出处联动(P3-15 同模式):点角标 → 清单对应行高亮,2s 回落 ——
+
+const srcWrap = ref<HTMLElement | null>(null);
+/** 页根:追问输入框预填聚焦的查询范围(AskBar 常驻底部,同树内) */
+const pageEl = ref<HTMLElement | null>(null);
+
+function onCite(no: number): void {
+  cited.value = no;
+  window.clearTimeout(citeTimer);
+  citeTimer = window.setTimeout(() => {
+    cited.value = null;
+  }, HIGHLIGHT_MS);
+  void nextTick(() => {
+    srcWrap.value?.querySelector('.row-hl')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
+}
+
+/** 还可以继续问:点击预填追问输入框并聚焦 */
+function prefill(q: string): void {
+  askDraft.value = q;
+  void nextTick(() => {
+    pageEl.value?.querySelector<HTMLInputElement>('.ask-in')?.focus();
+  });
+}
+
+// —— 档位切换(FR-E10):chip 点击循环三档,PUT 会话档位,下次讲解生效 ——
+
+async function cycleLevel(): Promise<void> {
+  if (switching.value) return;
+  const idx = LEVELS.findIndex((l) => l.value === sessionStore.explainLevel);
+  const next = LEVELS[(idx + 1) % LEVELS.length]!;
+  switching.value = true;
+  try {
+    await sessionStore.changeExplainLevel(next.value);
+    showToast('已切换,下次讲解生效');
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : '操作失败,请稍后重试');
+  } finally {
+    switching.value = false;
+  }
+}
 
 // —— 轮询:挂载即首轮 + 2s 间隔;终态/不可见即停,404/403 终止,网络抖动静默续拍 ——
 
@@ -118,6 +251,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopPolling();
+  window.clearTimeout(citeTimer);
   document.removeEventListener('visibilitychange', onVisibility);
 });
 
@@ -128,10 +262,7 @@ async function retry(): Promise<void> {
   retrying.value = true;
   try {
     const { runId: nextId } = await submitRun(launch.value);
-    await router.replace({ path: `/runs/${nextId}`, state: { keRun: JSON.stringify(launch.value) } });
-    run.value = null;
-    loadError.value = '';
-    startPolling();
+    await enterRun(nextId, launch.value);
   } catch (e) {
     if (e instanceof ApiError && e.code === 429) {
       quotaMsg.value = e.message;
@@ -141,6 +272,42 @@ async function retry(): Promise<void> {
   } finally {
     retrying.value = false;
   }
+}
+
+/** 追问发送(FR-E08):payload 继承路由 state 提交上下文 + parentRunId=当前 run → 跳新 run 续拍 */
+async function sendAsk(text: string): Promise<void> {
+  const base = launch.value;
+  const current = run.value;
+  if (asking.value || !base || !current) return;
+  asking.value = true;
+  try {
+    const payload: RunSubmitPayload = {
+      cardVersionId: base.cardVersionId,
+      sessionId: base.sessionId,
+      nodeId: base.nodeId,
+      question: text,
+      level: sessionStore.explainLevel,
+      parentRunId: current.runId
+    };
+    const { runId } = await submitRun(payload);
+    askDraft.value = '';
+    await enterRun(runId, payload);
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : '操作失败,请稍后重试');
+  } finally {
+    asking.value = false;
+  }
+}
+
+/** 切换到新 run(重试/追问共用):带 state 跳转 + 复位轮询与联动状态 */
+async function enterRun(nextId: number, payload: RunSubmitPayload): Promise<void> {
+  await router.push({ path: `/runs/${nextId}`, state: { keRun: JSON.stringify(payload) } });
+  launch.value = payload;
+  run.value = null;
+  loadError.value = '';
+  quotaMsg.value = '';
+  cited.value = null;
+  startPolling();
 }
 
 /** 返回:有历史则 back(换个问法=回卡页),直达链接兜底回首页 */
@@ -154,7 +321,10 @@ function goBack(): void {
 </script>
 
 <template>
-  <div class="page">
+  <div
+    ref="pageEl"
+    class="page"
+  >
     <TopBar section="智能服务" />
 
     <!-- 运行中(含首轮加载):RunProgress -->
@@ -199,7 +369,112 @@ function goBack(): void {
       </p>
     </main>
 
-    <!-- DONE:简单成功卡(Task 22 结果页接入后整块替换;「查看讲解」先行占位) -->
+    <!-- DONE + artifact:讲解结果页(04 §7.2 讲解卡形态;同路由终态渲染) -->
+    <main
+      v-else-if="phase === 'done' && resultReady"
+      class="wrap result-wrap"
+    >
+      <div class="chips">
+        <span class="chip gen-tag">
+          讲解卡 · 由智能体生成
+        </span>
+        <button
+          type="button"
+          class="chip lvl"
+          aria-label="讲解档位,点击切换"
+          :disabled="switching"
+          @click="cycleLevel"
+        >
+          {{ levelLabel }}档
+        </button>
+      </div>
+      <h1 class="q-title">
+        {{ question }}
+      </h1>
+      <p
+        v-if="output?.summary"
+        class="sum"
+      >
+        {{ output.summary }}
+      </p>
+      <p
+        v-for="(s, i) in decorated"
+        :key="i"
+        class="para"
+      >
+        {{ s.body }}
+        <button
+          v-for="c in s.cites"
+          :key="c.assetId"
+          type="button"
+          class="cite"
+          :title="c.title"
+          @click="onCite(c.no)"
+        >
+          [{{ c.no }}]
+        </button>
+        <ClaimBadge
+          class="badge"
+          :type="s.claim"
+        />
+      </p>
+      <section
+        ref="srcWrap"
+        class="src"
+      >
+        <b>出处清单</b>
+        <p
+          v-for="row in sourceRows"
+          :key="row.assetId"
+          class="row"
+          :class="{ 'row-hl': cited === row.index }"
+        >
+          [{{ row.index }}] {{ row.snippet }}
+        </p>
+        <p
+          v-if="strippedCount > 0"
+          class="warn"
+        >
+          引用校验:已剥离 {{ strippedCount }} 个无效引用
+        </p>
+        <p
+          v-for="g in evidenceGaps"
+          :key="g"
+          class="warn"
+        >
+          <KeIcon
+            class="w-ic"
+            name="alert"
+          />
+          证据缺口:{{ g }}
+        </p>
+      </section>
+      <section
+        v-if="openQuestions.length"
+        class="more"
+      >
+        <b class="more-t">
+          还可以继续问
+        </b>
+        <button
+          v-for="q in openQuestions"
+          :key="q"
+          type="button"
+          class="more-q"
+          @click="prefill(q)"
+        >
+          {{ q }}
+        </button>
+      </section>
+      <p
+        v-if="disclaimer"
+        class="foot"
+      >
+        {{ disclaimer }}
+      </p>
+    </main>
+
+    <!-- DONE 无 artifact(legacy):简单成功卡兜底,不渲染结果页与追问条 -->
     <main
       v-else-if="phase === 'done'"
       class="wrap"
@@ -212,16 +487,8 @@ function goBack(): void {
           讲解已生成
         </b>
         <span class="done-s">
-          「{{ question }}」已完成,查看讲解即将上线
+          本次讲解没有产出内容,请从卡片重新发起
         </span>
-        <button
-          type="button"
-          class="done-view"
-          disabled
-          title="结果页即将上线"
-        >
-          查看讲解
-        </button>
       </div>
     </main>
 
@@ -311,6 +578,17 @@ function goBack(): void {
         </button>
       </div>
     </main>
+
+    <!-- 追问条:仅结果页常驻(AskBar 内部承载禁用与原因) -->
+    <AskBar
+      v-if="phase === 'done' && resultReady"
+      v-model="askDraft"
+      class="ask"
+      :disabled="!canAsk"
+      :busy="asking"
+      :placeholder="askPlaceholder"
+      @send="sendAsk"
+    />
   </div>
 </template>
 
@@ -334,17 +612,48 @@ function goBack(): void {
 .st-ic .ke-icon { width: 14px; height: 14px; }
 .note { margin: 26px 0 0; font-size: 12px; line-height: 1.8; color: var(--ke-sub-2); }
 
-/* 成功/错误卡(KCard 族:白底细线描边圆角 l) */
-.done-card, .err-card { margin-top: 8px; padding: 26px 18px 22px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-l); background: var(--ke-surface); }
-.done-ic, .err-ic { display: inline-flex; width: 40px; height: 40px; align-items: center; justify-content: center; border-radius: var(--ke-radius-full); }
-.done-ic { background: var(--ke-fact-soft); color: var(--ke-fact); }
-.err-ic { background: var(--ke-surface-2); color: var(--ke-sub-2); }
-.done-ic .ke-icon, .err-ic .ke-icon { width: 22px; height: 22px; }
-.done-t, .err-t { display: block; margin-top: 12px; font-size: 14px; font-weight: 600; line-height: 1.6; color: var(--ke-ink); }
-.done-s, .err-reason { display: block; margin-top: 6px; font-size: 12px; line-height: 1.7; color: var(--ke-sub); overflow-wrap: anywhere; }
-.done-view, .err-retry, .err-alt { display: block; width: 100%; margin-top: 12px; padding: 10px 0; border-radius: var(--ke-radius-m); font-size: 13px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; box-sizing: border-box; }
-.done-view { border: none; background: var(--ke-primary-soft); color: var(--ke-primary); }
+/* 错误卡(KCard 族:白底细线描边圆角 l) */
+.err-card { margin-top: 8px; padding: 26px 18px 22px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-l); background: var(--ke-surface); }
+.err-ic { display: inline-flex; width: 40px; height: 40px; align-items: center; justify-content: center; border-radius: var(--ke-radius-full); background: var(--ke-surface-2); color: var(--ke-sub-2); }
+.err-ic .ke-icon { width: 22px; height: 22px; }
+.err-t { display: block; margin-top: 12px; font-size: 14px; font-weight: 600; line-height: 1.6; color: var(--ke-ink); }
+.err-reason { display: block; margin-top: 6px; font-size: 12px; line-height: 1.7; color: var(--ke-sub); overflow-wrap: anywhere; }
+.err-retry, .err-alt { display: block; width: 100%; margin-top: 12px; padding: 10px 0; border-radius: var(--ke-radius-m); font-size: 13px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; box-sizing: border-box; }
 .err-retry { border: none; background: var(--ke-primary-soft); color: var(--ke-primary); }
-.done-view:disabled, .err-retry:disabled { opacity: 0.45; cursor: default; }
+.err-retry:disabled { opacity: 0.45; cursor: default; }
 .err-alt { border: 1px solid var(--ke-line-strong); background: var(--ke-surface); color: var(--ke-ink); }
+
+/* DONE 无 artifact 兜底卡 */
+.done-card { margin-top: 8px; padding: 26px 18px 22px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-l); background: var(--ke-surface); }
+.done-ic { display: inline-flex; width: 40px; height: 40px; align-items: center; justify-content: center; border-radius: var(--ke-radius-full); background: var(--ke-fact-soft); color: var(--ke-fact); }
+.done-ic .ke-icon { width: 22px; height: 22px; }
+.done-t { display: block; margin-top: 12px; font-size: 14px; font-weight: 600; line-height: 1.6; color: var(--ke-ink); }
+.done-s { display: block; margin-top: 6px; font-size: 12px; line-height: 1.7; color: var(--ke-sub); }
+
+/* —— 讲解结果页(04 §7.2 讲解卡形态:chips→标题→正文段+徽标+角标→出处清单→继续问→脚注) —— */
+.result-wrap { max-width: 480px; margin-top: 24px; padding-bottom: 88px; text-align: left; }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 9px; border: none; border-radius: var(--ke-radius-full); font-size: 11px; font-weight: 600; line-height: 1.7; }
+.chip.gen-tag { background: var(--ke-gen-soft); color: var(--ke-gen); }
+.chip.lvl { background: var(--ke-primary-soft); color: var(--ke-primary); font-family: var(--ke-font); cursor: pointer; }
+.chip.lvl:disabled { opacity: 0.6; cursor: default; }
+.q-title { margin: 12px 0 0; font-family: var(--ke-font-display); font-size: 18px; font-weight: 900; line-height: 1.45; color: var(--ke-ink); }
+.sum { margin: 10px 0 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--ke-primary); font-size: 14px; line-height: 1.8; color: var(--ke-sub); }
+.para { margin: 12px 0 0; font-size: 14px; line-height: 1.8; text-align: justify; color: var(--ke-ink); }
+.cite { margin: 0 1px; padding: 0 2px; border: none; background: none; color: var(--ke-primary); font-size: 11px; font-weight: 700; vertical-align: super; cursor: pointer; }
+.cite:hover { text-decoration: underline; }
+.badge { margin-left: 6px; vertical-align: 1px; }
+
+.src { margin-top: 16px; background: var(--ke-surface-2); border: 1px solid var(--ke-line); border-radius: var(--ke-radius-s); padding: 10px 13px; font-size: 12px; color: var(--ke-sub); line-height: 1.85; }
+.src b { color: var(--ke-ink); }
+.row { margin: 0; overflow-wrap: anywhere; transition: background var(--ke-dur-fast) var(--ke-ease), transform var(--ke-dur-fast) var(--ke-ease); }
+.row.row-hl { margin: 0 -4px; padding: 0 4px; border-radius: var(--ke-radius-xs); background: var(--ke-primary-soft); color: var(--ke-ink); transform: scale(1.03); transform-origin: left center; }
+.warn { display: flex; align-items: baseline; gap: 4px; margin: 4px 0 0; color: var(--ke-warn); }
+.w-ic { width: 12px; height: 12px; }
+
+.more { margin-top: 16px; padding: 12px 13px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-l); background: var(--ke-surface); }
+.more-t { font-size: 13px; font-weight: 700; color: var(--ke-ink); }
+.more-q { display: block; width: 100%; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-m); background: var(--ke-surface-2); font-size: 13px; line-height: 1.6; color: var(--ke-ink); text-align: left; font-family: var(--ke-font); cursor: pointer; box-sizing: border-box; }
+.more-q:active { background: var(--ke-primary-soft); }
+.foot { margin: 14px 0 0; font-size: 11px; line-height: 1.7; color: var(--ke-sub-2); }
 </style>

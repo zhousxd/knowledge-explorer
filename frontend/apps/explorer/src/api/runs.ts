@@ -21,6 +21,8 @@ export interface RunSubmitPayload {
   nodeId: number;
   question: string;
   level: ExplainLevel;
+  /** 追问链(FR-E08,Task 22):父 run id,后端校验存在且属主否则 400;首次讲解不传 */
+  parentRunId?: number;
 }
 
 /** artifact.output 形状(= ExplainOutput:结构化讲解输出) */

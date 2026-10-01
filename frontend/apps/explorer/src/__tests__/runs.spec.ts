@@ -48,6 +48,19 @@ describe('submitRun 契约', () => {
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1].body)).toEqual(payload);
   });
 
+  it('追问提交(FR-E08):payload 带 parentRunId 原样透传(后端校验存在且属主)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResp(202, { code: 0, message: 'ok', traceId: 't', data: { runId: 43 } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const payload = {
+      cardVersionId: 11, sessionId: 3, nodeId: 6,
+      question: '那经费从哪来?', level: 'SIMPLE' as const, parentRunId: 7
+    };
+    await expect(submitRun(payload)).resolves.toEqual({ runId: 43 });
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1].body)).toEqual(payload);
+  });
+
   it('429 配额超限:ApiError code/message 原样透传给调用方展示(04 §8.6 envelope)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       jsonResp(429, { code: 429, message: '今日 30 次智能服务已用完,明早 8 点恢复', traceId: 't9', data: null })));
