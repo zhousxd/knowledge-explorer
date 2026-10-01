@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { showToast } from 'vant';
 import { KeIcon, SourceList } from '@ke/shared';
+import { ApiError } from '../api/http';
 import { fetchCardEntries, getCard } from '../api/cards';
 import type { CardDetail, CardEntryItem, CardEntryGroup, TextContent } from '../api/cards';
+import { favorite, unfavorite } from '../api/favorites';
+import CitationPopover from '../components/CitationPopover.vue';
 import { CARD_TYPE_LABELS, CardRenderer } from '../components/CardRenderer';
 import ServiceBar from '../components/ServiceBar.vue';
 import { THEME_NAMES } from '../mock/home';
@@ -22,6 +26,12 @@ const foldOpen = ref(false);
 const notFound = ref(false);
 const errorMsg = ref('');
 const loading = ref(true);
+/** 收藏态(FR-C10):详情 favorited 带出初态,点击调 API 切换 */
+const favorited = ref(false);
+const favBusy = ref(false);
+/** 出处联动状态(P3-15):当前点亮的角标序号(2s 回落),null=无 */
+const cited = ref<number | null>(null);
+let citeTimer: number | undefined;
 
 /** 入口独立加载:失败只降级入口区(局部重试),不遮蔽卡主内容 */
 async function loadEntries(id: number): Promise<void> {
@@ -41,6 +51,10 @@ async function load(): Promise<void> {
   notFound.value = false;
   errorMsg.value = '';
   card.value = null;
+  favorited.value = false;
+  favBusy.value = false;
+  cited.value = null;
+  window.clearTimeout(citeTimer);
   entries.value = null;
   entriesError.value = false;
   foldOpen.value = false;
@@ -54,6 +68,7 @@ async function load(): Promise<void> {
     card.value = await getCard(id);
     // 不存在/非 PUBLISHED 一律 404(后端契约)→ 空态,不泄露草稿存在性
     notFound.value = card.value === null;
+    favorited.value = card.value?.favorited ?? false;
   } catch (e) {
     errorMsg.value = e instanceof Error ? e.message : '加载失败,请稍后重试';
   } finally {
@@ -99,6 +114,44 @@ const sourceRows = computed(() =>
   }))
 );
 
+// —— 出处联动(P3-15):点角标 → 清单对应行高亮(2s 回落)+ CitationPopover 浮出对应出处 ——
+const srcWrap = ref<HTMLElement | null>(null);
+const HIGHLIGHT_MS = 2000;
+
+const citedSource = computed(() => sourceRows.value.find((s) => s.index === cited.value) ?? null);
+
+/** 角标点击:高亮出处清单对应行(scrollIntoView + 放大提示),浮层随高亮窗口显隐 */
+function onCite(n: number): void {
+  cited.value = n;
+  window.clearTimeout(citeTimer);
+  citeTimer = window.setTimeout(() => {
+    cited.value = null;
+  }, HIGHLIGHT_MS);
+  void nextTick(() => {
+    srcWrap.value?.querySelector('.row-hl')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
+}
+
+// —— 收藏(FR-C10):匿名引导登录(不带 redirect,登录后回首页重进);已登录调 API 切换 ——
+async function toggleFavorite(): Promise<void> {
+  if (!auth.token) {
+    showToast('登录后可收藏');
+    void router.push('/login');
+    return;
+  }
+  if (favBusy.value || !card.value) return;
+  favBusy.value = true;
+  try {
+    const next = !favorited.value;
+    const resp = await (next ? favorite(card.value.id) : unfavorite(card.value.id));
+    favorited.value = resp.favorited;
+  } catch (e) {
+    showToast(e instanceof ApiError ? e.message : '操作失败,请稍后重试');
+  } finally {
+    favBusy.value = false;
+  }
+}
+
 const visibleEntries = computed(() => {
   if (!entries.value) return [];
   return foldOpen.value
@@ -117,11 +170,6 @@ function goBack(): void {
 
 function openCard(cardId: number): void {
   void router.push(`/cards/${cardId}`);
-}
-
-/** 角标点击:本任务仅 Console 提示,出处弹层由 P3-15 接 */
-function onCite(n: number): void {
-  console.info(`查看出处 [${n}](出处弹层由 P3-15 接线)`);
 }
 
 /** 入口点击:链接入口跳目标卡;服务/比较入口由 Phase 5 接线 */
@@ -174,6 +222,16 @@ function entrySub(e: CardEntryItem): string {
           卡片详情
         </template>
       </div>
+      <button
+        type="button"
+        class="ic fav-btn"
+        :class="{ faved: favorited }"
+        :aria-label="favorited ? '取消收藏' : '收藏'"
+        :disabled="favBusy"
+        @click="toggleFavorite"
+      >
+        <KeIcon name="star" />
+      </button>
       <button
         type="button"
         class="ic"
@@ -279,10 +337,21 @@ function entrySub(e: CardEntryItem): string {
           @cite="onCite"
           @open="openCard"
         />
-        <SourceList
+        <div
+          ref="srcWrap"
           class="srclist"
-          :sources="sourceRows"
-        />
+        >
+          <CitationPopover
+            v-if="citedSource"
+            class="cite-pop"
+            :source="citedSource"
+            :index="citedSource.index"
+          />
+          <SourceList
+            :sources="sourceRows"
+            :highlight-index="cited"
+          />
+        </div>
       </article>
 
       <section class="sec">
@@ -381,6 +450,10 @@ function entrySub(e: CardEntryItem): string {
 .kimg-tag { position: absolute; right: 8px; bottom: 8px; padding: 1px 8px; border-radius: var(--ke-radius-s); background: var(--ke-surface); color: var(--ke-sub-2); font-size: 10px; }
 .cr-fallback { margin: 12px 0 0; font-size: 13px; color: var(--ke-sub); }
 .srclist { margin-top: 12px; }
+.srclist .cite-pop { margin: 0 0 8px; }
+.fav-btn.faved { color: var(--ke-primary); }
+.fav-btn.faved .ke-icon { fill: var(--ke-primary); }
+.ic:disabled { opacity: 0.5; cursor: default; }
 .sec-title { display: flex; align-items: center; gap: 6px; margin: 14px 0 8px; font-size: 13px; font-weight: 700; color: var(--ke-ink); }
 .sec-title .ln { flex: 1; height: 1px; background: var(--ke-line); }
 .entry { display: flex; width: 100%; align-items: center; gap: 10px; margin: 0 0 8px; padding: 12px 13px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-l); background: var(--ke-surface); text-align: left; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); box-sizing: border-box; }

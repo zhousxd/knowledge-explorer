@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { getCard, fetchCardEntries } from '../api/cards';
 import type { CardDetail, CardEntryGroup } from '../api/cards';
+import { favorite, unfavorite } from '../api/favorites';
 import CompareCard from '../components/CardRenderer/CompareCard.vue';
 import TextCard from '../components/CardRenderer/TextCard.vue';
 import { useAuthStore } from '../stores/auth';
@@ -14,8 +15,16 @@ vi.mock('../api/cards', () => ({
   listPublicCards: vi.fn(),
   fetchCardEntries: vi.fn()
 }));
+vi.mock('../api/favorites', () => ({
+  favorite: vi.fn(),
+  unfavorite: vi.fn(),
+  listFavorites: vi.fn()
+}));
+vi.mock('vant', () => ({ showToast: vi.fn() }));
 const mockedGet = vi.mocked(getCard);
 const mockedEntries = vi.mocked(fetchCardEntries);
+const mockedFavorite = vi.mocked(favorite);
+const mockedUnfavorite = vi.mocked(unfavorite);
 
 const TEXT_CARD: CardDetail = {
   id: 1,
@@ -24,6 +33,7 @@ const TEXT_CARD: CardDetail = {
   title: '岳麓书院',
   versionNo: 3,
   updatedAt: '2026-09-30T10:00:00Z',
+  favorited: false,
   content: {
     summary: '中国四大书院之一。',
     sections: [{ h: '书院的由来', body: '北宋开宝九年创办。', citations: [1] }],
@@ -80,6 +90,7 @@ describe('CardView(卡片页,04 §7.2 KCard)', () => {
     localStorage.clear();
     mockedGet.mockResolvedValue(TEXT_CARD);
     mockedEntries.mockResolvedValue(ENTRIES);
+    Element.prototype.scrollIntoView = vi.fn();
   });
 
   it('TEXT 卡完整渲染:chips/宋体标题/分发正文/出处条数/入口列表', async () => {
@@ -163,5 +174,56 @@ describe('CardView(卡片页,04 §7.2 KCard)', () => {
     const { wrapper } = await mountCard('1', { authed: true });
     expect(mockedEntries).toHaveBeenCalledWith(1);
     expect(wrapper.findAll('.entry')).toHaveLength(2);
+  });
+
+  it('点角标 [2] → 出处清单第 2 行高亮并滚动到位,CitationPopover 浮出对应出处', async () => {
+    const { wrapper } = await mountCard('1', { authed: true });
+    await wrapper.findComponent(TextCard).vm.$emit('cite', 2);
+    await flushPromises();
+    // 浮层:渲染对应 source([2] + 题名 + 定位)
+    const pop = wrapper.find('.cite-pop');
+    expect(pop.exists()).toBe(true);
+    expect(pop.text()).toContain('[2]');
+    expect(pop.text()).toContain('湖南大学岳麓书院官网');
+    expect(pop.text()).toContain('书院沿革');
+    // 清单对应行:高亮类 + scrollIntoView 滚动到位
+    const hl = wrapper.find('.row-hl');
+    expect(hl.exists()).toBe(true);
+    expect(hl.text()).toContain('[2] 湖南大学岳麓书院官网');
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
+  it('收藏按钮:匿名点击 → toast「登录后可收藏」跳 /login,不调 API', async () => {
+    const { wrapper, local } = await mountCard();
+    await wrapper.find('.fav-btn').trigger('click');
+    await flushPromises();
+    const { showToast } = await import('vant');
+    expect(showToast).toHaveBeenCalledWith('登录后可收藏');
+    expect(local.currentRoute.value.path).toBe('/login');
+    expect(mockedFavorite).not.toHaveBeenCalled();
+    expect(mockedUnfavorite).not.toHaveBeenCalled();
+  });
+
+  it('已登录点击收藏:调 API 并切换星标实心态', async () => {
+    mockedFavorite.mockResolvedValue({ favorited: true });
+    mockedUnfavorite.mockResolvedValue({ favorited: false });
+    const { wrapper } = await mountCard('1', { authed: true });
+    expect(wrapper.find('.fav-btn').classes()).not.toContain('faved');
+    await wrapper.find('.fav-btn').trigger('click');
+    await flushPromises();
+    expect(mockedFavorite).toHaveBeenCalledWith(1);
+    expect(wrapper.find('.fav-btn').classes()).toContain('faved');
+    // 再点取消:调 unfavorite,星标回落空心
+    await wrapper.find('.fav-btn').trigger('click');
+    await flushPromises();
+    expect(mockedUnfavorite).toHaveBeenCalledWith(1);
+    expect(wrapper.find('.fav-btn').classes()).not.toContain('faved');
+  });
+
+  it('详情 favorited=true:初态即实心,无需点击', async () => {
+    mockedGet.mockResolvedValue({ ...TEXT_CARD, favorited: true });
+    const { wrapper } = await mountCard('1', { authed: true });
+    expect(wrapper.find('.fav-btn').classes()).toContain('faved');
+    expect(mockedFavorite).not.toHaveBeenCalled();
   });
 });

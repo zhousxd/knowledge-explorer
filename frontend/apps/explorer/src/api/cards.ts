@@ -73,7 +73,7 @@ export interface TaskContent {
 
 // ---------- 响应 ----------
 
-/** GET /api/cards/{id} 响应 data(仅 PUBLISHED) */
+/** GET /api/cards/{id} 响应 data(仅 PUBLISHED);favorited = 当前用户已收藏否(匿名 false,FR-C10) */
 export interface CardDetail {
   id: number;
   theme: string;
@@ -81,6 +81,7 @@ export interface CardDetail {
   title: string;
   versionNo: number;
   updatedAt: string;
+  favorited: boolean;
   content: unknown;
   sources: CardSourceRef[];
 }
