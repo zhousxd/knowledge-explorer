@@ -1,7 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { TOKEN_KEY } from '../api/http';
 import LoginView from '../views/LoginView.vue';
-import Home from '../pages/Home.vue';
+import HomeView from '../views/HomeView.vue';
+import CardsView from '../views/CardsView.vue';
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -13,8 +14,10 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', component: LoginView, meta: { title: '登录' } },
-    // 公开浏览首页(冒烟占位;Task 13/14 在此接入真实卡片数据)
-    { path: '/home', component: Home, meta: { title: '知识探索' } },
+    // 探索端首页(品牌头/搜索/专题格/推荐入口/继续探索卡占位)
+    { path: '/home', component: HomeView, meta: { title: '知识探索' } },
+    // 卡片浏览页占位:Task 14 替换为真卡片页;?q=&theme= 由首页搜索/专题透传
+    { path: '/cards', component: CardsView, meta: { title: '卡片' } },
     { path: '/', redirect: '/home' },
     // catch-all:未知路径回首页(避免白屏)
     { path: '/:pathMatch(.*)*', redirect: '/home' }
