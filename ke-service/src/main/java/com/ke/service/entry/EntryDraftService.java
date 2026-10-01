@@ -65,6 +65,8 @@ public class EntryDraftService {
     static final String OUT_OF_SCOPE_ADVICE =
             "暂不支持该类入口。可以试试:深入了解某个问题、对比两个事物、或把相关卡片连接为入口";
     static final String NO_MATCH_ADVICE = "未找到相关卡片,可直接浏览专题选择";
+    /** 钉子④（P6-27 移交）：卡无挂接知识单元时 EXPLAIN/COMPARE 草稿的短路 violations 文案 */
+    static final String NO_ASSET_ADVICE = "该卡暂无挂接知识单元,请先在知识资源挂接";
 
     private final CardMapper cards;
     private final EntryAuthorizedAssets authorizedAssets;
@@ -129,6 +131,11 @@ public class EntryDraftService {
 
     private DraftResult agentServiceDraft(NlIntent intent, CardEntity card, String text) {
         Map<Long, String> authorized = authorizedAssets(card.getCurrentVersionId());
+        // 钉子④（P6-27 移交）：卡无挂接知识单元 → 短路返回 violations,不打生成 LLM
+        //（没有可作资料范围的对象,抽取结果必然违规;省一次调用与等待）
+        if (authorized.isEmpty()) {
+            return new DraftResult(intent, null, List.of(NO_ASSET_ADVICE), null);
+        }
         String user = "用户请求:" + text + "\n所在卡片:《" + card.getTitle() + "》"
                 + (card.getSummaryText() == null || card.getSummaryText().isBlank()
                         ? "" : "\n卡片摘要:" + card.getSummaryText())

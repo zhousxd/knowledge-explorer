@@ -209,6 +209,24 @@ class EntryDraftIT {
     }
 
     @Test
+    void noAttachedAssetsShortCircuitsBeforeGeneration() {
+        // 钉子④（P6-27 移交）：卡无挂接知识单元 → EXPLAIN 意图草稿短路返回 violations,不打生成 LLM
+        long card = publishedCard("草稿无挂接岳麓卡", "academy", null);
+        String token = newUserToken("13800007006", "起草者己");
+        StubLlmGateway.reset("EXPLAIN", draftJson("讲讲岳麓书院", "EXPLAIN", "讲清讲会制度", 999L));
+
+        ResponseEntity<String> res = draft(token, card, "深入讲讲岳麓书院的讲会制度");
+        assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(200);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.intent")).isEqualTo("EXPLAIN");
+        assertThat((int) JsonPath.read(res.getBody(), "$.data.violations.length()")).isEqualTo(1);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.violations[0]"))
+                .contains("该卡暂无挂接知识单元").contains("知识资源挂接");
+        assertThat(data(res.getBody()).has("config")).isFalse();
+        // 只有分类一次调用,抽取生成不发起
+        assertThat(StubLlmGateway.CALLS.get()).isEqualTo(1);
+    }
+
+    @Test
     void textTooLongRejected() {
         long card = publishedCard("草稿超长卡", "academy", null);
         String token = newUserToken("13800007005", "起草者戊");
