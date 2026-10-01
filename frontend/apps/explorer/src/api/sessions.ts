@@ -5,7 +5,8 @@
  */
 import { ApiError, http } from './http';
 
-/** 最近一次探索会话摘要(字段以 Phase 4 冻结契约为准,届时由 openapi 生成类型替换) */
+/** 最近一次探索会话摘要(字段以 Phase 4 冻结契约为准,届时由 openapi 生成类型替换)
+ * 形状 Phase 4 Task 16 冻结;progress 展示文案拟改 lastVisitedAt 时间戳由前端格式化 */
 export interface ResumeSession {
   /** 会话标题(最近节点所属卡片/主题) */
   title: string;

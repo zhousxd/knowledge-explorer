@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { ApiError } from '../api/http';
 import { useAuthStore } from '../stores/auth';
 
@@ -14,7 +14,16 @@ const password = ref('');
 const errorMsg = ref('');
 const busy = ref(false);
 const router = useRouter();
+const route = useRoute();
 const auth = useAuthStore();
+
+/** 登录后回跳:redirect 仅接受站内路径(以 / 开头且非 //,防外链),否则回首页 */
+function afterLoginPath(): string {
+  const redirect = route.query.redirect;
+  return typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')
+    ? redirect
+    : '/';
+}
 
 const phoneValid = computed(() => PHONE_RE.test(phone.value.trim()));
 
@@ -64,7 +73,7 @@ async function submit() {
   try {
     if (tab.value === 'code') await auth.loginByCode(phone.value.trim(), code.value.trim());
     else await auth.login(phone.value.trim(), password.value);
-    await router.push('/');
+    await router.push(afterLoginPath());
   } catch (e) {
     errorMsg.value = e instanceof ApiError ? e.message : '登录失败,请稍后重试';
   } finally {

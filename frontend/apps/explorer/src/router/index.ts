@@ -29,11 +29,11 @@ const router = createRouter({
   ]
 });
 
-// 导航守卫:无 token 且目标非 /login 且未标 meta.public → 回登录页
+// 导航守卫:无 token 且目标非 /login 且未标 meta.public → 回登录页(带 redirect 回跳,登录后回到原目标)
 // (键名与 http.ts 共用 TOKEN_KEY;个性化页如 Phase 4 的 /path 默认仍受保护)
 router.beforeEach((to) => {
   if (to.path !== '/login' && !to.meta.public && !localStorage.getItem(TOKEN_KEY)) {
-    return { path: '/login' };
+    return { path: '/login', query: { redirect: to.fullPath } };
   }
   return true;
 });

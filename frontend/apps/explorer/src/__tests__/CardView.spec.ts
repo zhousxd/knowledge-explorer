@@ -63,6 +63,13 @@ const ENTRIES: CardEntryGroup = {
   }))
 };
 
+/** 卡 9 的入口组(与卡 1 区分:仅 1 条默认入口,校验 reqSeq 守卫不串卡) */
+const ENTRIES_OF_9: CardEntryGroup = {
+  cardId: 9,
+  defaultEntries: [{ ...ENTRIES.defaultEntries[0]!, id: 99, name: 'B 卡独有入口' }],
+  folded: []
+};
+
 /** 直挂 CardView 的独立 memory 路由:/cards/:id 详情 + 相关跳转目标 */
 async function mountCard(id = '1', opts: { authed?: boolean } = {}) {
   const pinia = createPinia();
@@ -144,6 +151,52 @@ describe('CardView(卡片页,04 §7.2 KCard)', () => {
     expect(mockedGet.mock.calls.length).toBeGreaterThan(calls);
   });
 
+  it('时序守卫:卡 A 详情慢响应后到 → 丢弃,仍显示卡 B 内容', async () => {
+    let resolveSlow!: (v: CardDetail) => void;
+    mockedGet.mockImplementation((id: number) => {
+      if (id === 1) {
+        return new Promise<CardDetail>((resolve) => { resolveSlow = resolve; });
+      }
+      return Promise.resolve({ ...TEXT_CARD, id: 9, title: '朱张会讲' });
+    });
+    const { wrapper, local } = await mountCard('1');
+    // 卡 A 挂起:页面停在加载态
+    expect(wrapper.text()).toContain('加载中');
+    // 直接切到卡 B(入口慢挂起,TextCard 未渲染,无法 emit open)
+    void local.push('/cards/9');
+    await flushPromises();
+    expect(wrapper.find('h1').text()).toBe('朱张会讲');
+    // 卡 A 慢响应此刻才到:必须被丢弃,不得覆盖卡 B
+    resolveSlow({ ...TEXT_CARD, id: 1 });
+    await flushPromises();
+    expect(local.currentRoute.value.path).toBe('/cards/9');
+    expect(wrapper.find('h1').text()).toBe('朱张会讲');
+  });
+
+  it('时序守卫:卡 A 入口慢响应后到 → 丢弃,不覆盖卡 B 入口', async () => {
+    let resolveSlowEntries!: (v: CardEntryGroup) => void;
+    mockedGet.mockResolvedValue(TEXT_CARD);
+    mockedEntries.mockImplementation((id: number) => {
+      if (id === 1) {
+        return new Promise<CardEntryGroup>((resolve) => { resolveSlowEntries = resolve; });
+      }
+      return Promise.resolve(ENTRIES_OF_9);
+    });
+    const { wrapper, local } = await mountCard('1', { authed: true });
+    // 卡 A 入口挂起:入口列表为空但主内容正常
+    expect(wrapper.findAll('.entry')).toHaveLength(0);
+    expect(wrapper.find('h1').text()).toBe('岳麓书院');
+    void local.push('/cards/9');
+    await flushPromises();
+    expect(wrapper.findAll('.entry')).toHaveLength(1);
+    expect(wrapper.text()).toContain('B 卡独有入口');
+    // 卡 A 入口慢响应此刻才到:必须被丢弃
+    resolveSlowEntries(ENTRIES);
+    await flushPromises();
+    expect(wrapper.findAll('.entry')).toHaveLength(1);
+    expect(wrapper.text()).toContain('B 卡独有入口');
+  });
+
   it('折叠入口展开后显示全部', async () => {
     const { wrapper } = await mountCard('1', { authed: true });
     await wrapper.find('.fold').trigger('click');
@@ -164,10 +217,14 @@ describe('CardView(卡片页,04 §7.2 KCard)', () => {
     expect(wrapper.text()).not.toContain('入口加载失败');
   });
 
-  it('匿名(无 token):不调入口接口,给出登录引导', async () => {
-    const { wrapper } = await mountCard();
+  it('匿名(无 token):不调入口接口,给出登录引导;点引导跳 /login 并带 redirect', async () => {
+    const { wrapper, local } = await mountCard();
     expect(mockedEntries).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('登录后查看这张卡的探索入口');
+    await wrapper.find('.sec .fold').trigger('click');
+    await flushPromises();
+    expect(local.currentRoute.value.path).toBe('/login');
+    expect(local.currentRoute.value.query.redirect).toBe('/cards/1');
   });
 
   it('已登录:调 GET /cards/{id}/entries 渲染入口', async () => {
@@ -193,13 +250,12 @@ describe('CardView(卡片页,04 §7.2 KCard)', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
   });
 
-  it('收藏按钮:匿名点击 → toast「登录后可收藏」跳 /login,不调 API', async () => {
+  it('收藏按钮:匿名点击 → 跳 /login?redirect=/cards/1,不调 API', async () => {
     const { wrapper, local } = await mountCard();
     await wrapper.find('.fav-btn').trigger('click');
     await flushPromises();
-    const { showToast } = await import('vant');
-    expect(showToast).toHaveBeenCalledWith('登录后可收藏');
     expect(local.currentRoute.value.path).toBe('/login');
+    expect(local.currentRoute.value.query.redirect).toBe('/cards/1');
     expect(mockedFavorite).not.toHaveBeenCalled();
     expect(mockedUnfavorite).not.toHaveBeenCalled();
   });

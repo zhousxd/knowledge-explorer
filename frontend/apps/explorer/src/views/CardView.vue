@@ -33,20 +33,31 @@ const favBusy = ref(false);
 const cited = ref<number | null>(null);
 let citeTimer: number | undefined;
 
-/** 入口独立加载:失败只降级入口区(局部重试),不遮蔽卡主内容 */
+/** 详情加载时序守卫:新请求发起后,旧请求的慢响应一律丢弃 */
+let cardSeq = 0;
+
+/** 入口独立加载:失败只降级入口区(局部重试),不遮蔽卡主内容;seq 守卫丢弃切卡后的旧响应 */
+let entrySeq = 0;
+
 async function loadEntries(id: number): Promise<void> {
+  const seq = ++entrySeq;
   if (!auth.token) return;
   entriesError.value = false;
   entries.value = null;
   try {
     // 入口接口要 viewer 身份(公有/私有过滤):匿名不调用,给登录引导
-    entries.value = await fetchCardEntries(id);
+    const group = await fetchCardEntries(id);
+    if (seq !== entrySeq) return; // 过期响应:已切到别的卡,丢弃
+    entries.value = group;
   } catch {
+    if (seq !== entrySeq) return;
     entriesError.value = true;
   }
 }
 
 async function load(): Promise<void> {
+  // 时序守卫(同 CardsView reqSeq):相关跳转复用本组件,快速切卡后旧慢响应一律丢弃
+  const seq = ++cardSeq;
   loading.value = true;
   notFound.value = false;
   errorMsg.value = '';
@@ -65,14 +76,19 @@ async function load(): Promise<void> {
     return;
   }
   try {
-    card.value = await getCard(id);
+    const detail = await getCard(id);
+    if (seq !== cardSeq) return; // 过期响应:已切到别的卡,丢弃
     // 不存在/非 PUBLISHED 一律 404(后端契约)→ 空态,不泄露草稿存在性
-    notFound.value = card.value === null;
-    favorited.value = card.value?.favorited ?? false;
+    card.value = detail;
+    notFound.value = detail === null;
+    favorited.value = detail?.favorited ?? false;
   } catch (e) {
+    if (seq !== cardSeq) return;
     errorMsg.value = e instanceof Error ? e.message : '加载失败,请稍后重试';
   } finally {
-    loading.value = false;
+    if (seq === cardSeq) {
+      loading.value = false;
+    }
   }
   if (card.value !== null) void loadEntries(id);
 }
@@ -132,11 +148,10 @@ function onCite(n: number): void {
   });
 }
 
-// —— 收藏(FR-C10):匿名引导登录(不带 redirect,登录后回首页重进);已登录调 API 切换 ——
+// —— 收藏(FR-C10):匿名引导登录并带 redirect 回跳(登录后回到本卡);已登录调 API 切换 ——
 async function toggleFavorite(): Promise<void> {
   if (!auth.token) {
-    showToast('登录后可收藏');
-    void router.push('/login');
+    void router.push({ path: '/login', query: { redirect: route.fullPath } });
     return;
   }
   if (favBusy.value || !card.value) return;
@@ -405,7 +420,7 @@ function entrySub(e: CardEntryItem): string {
           v-else
           type="button"
           class="fold"
-          @click="router.push('/login')"
+          @click="router.push({ path: '/login', query: { redirect: route.fullPath } })"
         >
           登录后查看这张卡的探索入口
         </button>
