@@ -19,6 +19,9 @@ import com.ke.infra.mapper.CitationMapper;
 import com.ke.infra.mapper.PathNodeMapper;
 import com.ke.service.agent.dto.ExplainOutput;
 import com.ke.service.agent.dto.ExplainResult;
+import com.ke.service.agent.post.ClaimLabelAppender;
+import com.ke.service.agent.post.RunMetrics;
+import com.ke.service.agent.post.SensitiveWordFilter;
 import com.ke.service.common.BadRequestException;
 import com.ke.service.common.RateLimitException;
 import com.ke.service.explore.SessionService;
@@ -52,10 +55,11 @@ import java.util.concurrent.TimeoutException;
 /**
  * 讲解服务流水线（FR-S02 / 02 §5.2）：受限检索 → 提示词组装 → LLM（{@code ke.agent.llm-timeout-seconds}
  * 超时护栏，超时置 TIMEOUT 不重试）→ Jackson 绑定 {@link ExplainOutput}（失败自动重试 1 次）→
- * 引用校验（FR-S05，{@link CitationSanitizer}：越界引用剔除 + FACT 空引用降级，剥离留痕
- * agent_run.error 不置 FAILED）→ artifact(EXPLAIN) + citation(object_type=agent_run) 落库 →
- * 回写 agent_run(DONE, artifact_ids)。任何异常置 FAILED(error=消息)。
- * 提交前置配额（FR-S04，{@link QuotaService#tryConsume}，超限 RateLimitException → 429 envelope）。
+ * 后处理链（Task 20）：敏感词过滤（FR-S10，summary+各段 body 命中替换等长 *）→ 引用校验
+ * （FR-S05，{@link CitationSanitizer}：越界引用剔除 + FACT 空引用降级）→ 生成标识 disclaimer（R8）+
+ * 审计旁注 audit 落 artifact → citation(object_type=agent_run) 落库 → 回写 agent_run(DONE, artifact_ids)。
+ * 任何异常置 FAILED(error=消息)。提交前置配额（FR-S04，{@link QuotaService#tryConsume}，
+ * 超限 RateLimitException → 429 envelope）。
  *
  * 线程模型：submit 前置校验（会话属主/卡已发布/配额）在 controller 线程（userId 在 submit 时
  * 捕获进 input_json，虚拟线程不再依赖 SecurityContext）；执行走 agentExecutor 虚拟线程（自代理
@@ -88,6 +92,7 @@ public class ExplainService {
     private final LlmGateway llm;
     private final ObjectMapper objectMapper;
     private final QuotaService quota;
+    private final SensitiveWordFilter sensitiveWords;
     /** 自代理：submit 必须经代理调 executeExplain，同类 this 调用会让 @Async 失效退化为同步 */
     private final ExplainService self;
 
@@ -112,7 +117,7 @@ public class ExplainService {
     public ExplainService(AgentRunMapper runs, CardMapper cards, CardVersionMapper cardVersions,
                           PathNodeMapper pathNodes, SessionService sessions, RetrievalService retrieval,
                           ArtifactMapper artifacts, CitationMapper citations, LlmGateway llm,
-                          ObjectMapper objectMapper, QuotaService quota,
+                          ObjectMapper objectMapper, QuotaService quota, SensitiveWordFilter sensitiveWords,
                           @Lazy ExplainService self) {
         this.runs = runs;
         this.cards = cards;
@@ -125,6 +130,7 @@ public class ExplainService {
         this.llm = llm;
         this.objectMapper = objectMapper;
         this.quota = quota;
+        this.sensitiveWords = sensitiveWords;
         this.self = self;
     }
 
@@ -238,14 +244,36 @@ public class ExplainService {
         }
     }
 
-    /** 终态回写：artifact(EXPLAIN, content_json={output,sources}) + citation 落表 + DONE/artifact_ids */
+    /** 终态回写：artifact(EXPLAIN, content_json={output,sources,disclaimer,audit}) + citation 落表 + DONE/artifact_ids */
     private void finish(long runId, long start, ExplainInput input,
                         ExplainOutput output, Map<Long, String> materials) {
-        // FR-S05/R2 引用校验（Task 19）：LLM 绑定成功后、落 artifact/citation 之前——
+        // Task 20 后处理链 ①敏感词过滤（FR-S10）：summary + 各段 body 命中词表 → 等长 '*' 替换，命中数留审计
+        SensitiveWordFilter.FilterResult summary = sensitiveWords.filter(output.summary());
+        List<ExplainOutput.Section> cleanedSections = new ArrayList<>();
+        int filtered = summary.hits();
+        if (output.sections() != null) {
+            for (ExplainOutput.Section section : output.sections()) {
+                if (section == null) {
+                    continue; // 展示层职责：落 artifact 不含 null 段（与 withSections 同则）
+                }
+                SensitiveWordFilter.FilterResult body = sensitiveWords.filter(section.body());
+                filtered += body.hits();
+                cleanedSections.add(new ExplainOutput.Section(body.text(), section.claimType(), section.citations()));
+            }
+        }
+        ExplainOutput cleaned = new ExplainOutput(summary.text(), cleanedSections,
+                output.openQuestions(), output.evidenceGaps());
+
+        // ②引用校验（FR-S05，Task 19）：LLM 绑定成功后、落 artifact/citation 之前——
         // 越界引用剔除（只剩本次检索资料内的 id），FACT 空引用降级 SYNTHESIS（段落档位自表达，不加顶层标志）
         SanitizeReport report = CitationSanitizer.sanitize(
-                toSanitizedSections(output.sections()), materials.keySet());
-        ExplainOutput sanitized = withSections(output, report.sections());
+                toSanitizedSections(cleaned.sections()), materials.keySet());
+        ExplainOutput sanitized = withSections(cleaned, report.sections());
+
+        // ③生成标识（R8）+ 审计旁注（FR-S13 计量的 MVP 口径=latency+model；tokens/cost 随网关二期）：
+        // artifact content_json 顶层 disclaimer + audit={stripped,filtered}
+        RunMetrics.Audit audit = new RunMetrics.Audit(report.strippedCitations().size(), filtered);
+        ExplainResult result = ClaimLabelAppender.label(sanitized, materials, audit);
 
         Long artifactId = null;
         if (input.sessionId() != null) {
@@ -253,7 +281,7 @@ public class ExplainService {
             ArtifactEntity artifact = new ArtifactEntity();
             artifact.setSessionId(input.sessionId());
             artifact.setType(SERVICE_TYPE);
-            artifact.setContentJson(json(new ExplainResult(sanitized, materials)));
+            artifact.setContentJson(json(result));
             artifact.setStatus("DRAFT");
             artifacts.insert(artifact);
             artifactId = artifact.getId();
@@ -265,7 +293,7 @@ public class ExplainService {
         done.setModel(generatorModel);
         done.setArtifactIds(artifactId == null ? json(List.of()) : json(List.of(artifactId)));
         if (!report.strippedCitations().isEmpty()) {
-            // 旁路留痕（不置 FAILED）：LLM 幻觉引用被拦截的事实挂在 error 字段
+            // 旁路留痕（不置 FAILED，Task 19 起的既有行为，IT 依赖）：完整审计数据在 artifact.audit
             done.setError("引用校验:剥离 " + report.strippedCitations().size() + " 个越界引用");
         }
         runs.updateById(done);

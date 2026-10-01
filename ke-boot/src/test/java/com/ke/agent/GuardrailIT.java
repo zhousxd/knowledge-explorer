@@ -1,6 +1,7 @@
 package com.ke.agent;
 
 import com.jayway.jsonpath.JsonPath;
+import com.ke.service.agent.post.AgentLabels;
 import com.ke.service.quota.QuotaService;
 import com.ke.support.ItDb;
 import com.ke.support.RedisFlush;
@@ -28,9 +29,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 智能服务护栏端到端（FR-S04/S13，Task 20）：
+ * 智能服务护栏端到端（FR-S04/S10/S13 / R8，Task 20）：
  * - 配额（FR-S04）：QuotaService Redis INCR，30 次/日（ke.quota.daily-limit），超限 submit → 429 envelope；
  * - 超时（FR-S13）：ke.agent.llm-timeout-seconds=1 + Stub delay 3s → run 置 TIMEOUT（不重试）；
+ * - 敏感词（FR-S10）：命中词等长 '*' 替换，审计旁注 artifact.audit.filtered；
+ * - 生成标识（R8）：artifact.content_json 顶层 disclaimer；
  * - 配额查询：GET /api/me/quota → {used,limit,remaining,resetAt}。
  * 网关用 StubLlmGateway（profile explain-test）；直连 WSL ke_test（@ItDb）+ Redis db15（RedisFlush）。
  * 超时阈值压到 1s（真实阈值 60s 测试等不起），Stub delay 3s 稳定越过阈值。
@@ -202,6 +205,37 @@ class GuardrailIT {
         assertThat((String) JsonPath.read(res.getBody(), "$.data.status")).isEqualTo("TIMEOUT");
         assertThat((String) JsonPath.read(res.getBody(), "$.data.error")).contains("服务超时");
         assertThat(StubLlmGateway.CALLS.get()).as("超时不重试").isEqualTo(1);
+    }
+
+    @Test
+    void sensitiveWordFiltered() {
+        // Stub 输出含词表词（「毒品交易」摘要 + 「枪支买卖」正文）→ 等长 '*' 替换；
+        // 审计旁注 artifact.audit.filtered = 命中总次数（2）
+        long versionId = insertPublishedCard("敏感词卡", null);
+        String token = newUserToken("13833300005", "戊");
+        long[] ids = newSessionWithNode(token, versionId);
+
+        StubLlmGateway.reset("{\"summary\":\"摘要提到毒品交易\",\"sections\":[{\"body\":\"正文含枪支买卖线索\",\"claimType\":\"GEN\",\"citations\":[]}],\"openQuestions\":[],\"evidenceGaps\":[]}");
+        long runId = submitOk(token, versionId, ids, "会输出敏感词吗？");
+
+        ResponseEntity<String> res = awaitTerminal(token, runId);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.status")).isEqualTo("DONE");
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.artifact.output.summary")).isEqualTo("摘要提到****");
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.artifact.output.sections[0].body")).isEqualTo("正文含****线索");
+        assertThat((Integer) JsonPath.read(res.getBody(), "$.data.artifact.audit.filtered")).isEqualTo(2);
+    }
+
+    @Test
+    void disclaimerPresent() {
+        // R8 生成内容显著标识：artifact.content_json 顶层 disclaimer（前端 Task 22 渲染）
+        long versionId = insertPublishedCard("标识卡", null);
+        String token = newUserToken("13833300006", "己");
+        long[] ids = newSessionWithNode(token, versionId);
+
+        long runId = submitOk(token, versionId, ids, "有标识吗？");
+        ResponseEntity<String> res = awaitTerminal(token, runId);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.status")).isEqualTo("DONE");
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.artifact.disclaimer")).isEqualTo(AgentLabels.DISCLAIMER);
     }
 
     @Test
