@@ -17,9 +17,11 @@ const resume = ref<ResumeSession | null>(null);
 
 onMounted(() => {
   if (!auth.token) return;
-  void fetchLatestSession().then((latest) => {
-    resume.value = latest;
-  });
+  void fetchLatestSession()
+    .then((latest) => {
+      resume.value = latest;
+    })
+    .catch(() => {}); // 网络失败静默隐藏续探卡(首页其余功能区不受影响)
 });
 
 function goLogin() {

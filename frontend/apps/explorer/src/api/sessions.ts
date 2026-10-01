@@ -59,8 +59,9 @@ export interface PathNode {
 /** GET /api/sessions/{id} → 会话元数据 + 完整树(visited_at 升序;403 非属主/404 不存在/401 匿名) */
 export interface SessionTree {
   sessionId: number;
-  theme: string;
-  goal: string;
+  /** jackson non_null 对空值整键省略 → 可选;消费处走 || 兜底(goal→「新探索」) */
+  theme?: string;
+  goal?: string;
   explainLevel: string;
   status: string;
   createdAt: string;
@@ -101,14 +102,24 @@ export async function fetchLatestSession(): Promise<ResumeSession | null> {
   }
 }
 
+/**
+ * wire 层归一(在进 store 之前,单一实现):后端 jackson default-property-inclusion: non_null
+ * 会把 null 键整键省略 —— 根节点 parentNodeId 缺键成 undefined,而树渲染以 null 为根键,
+ * 不归一则真实 API 下 /path 渲染空树。树接口与追节点响应同族,统一走此函数。
+ */
+function normalizeNode(n: PathNode): PathNode {
+  return { ...n, parentNodeId: n.parentNodeId ?? null };
+}
+
 /** 会话 + 完整树(visited_at 升序);403/404 语义由调用方按 ApiError.code 处理 */
-export function fetchSessionTree(id: number): Promise<SessionTree> {
-  return http.get<SessionTree>(`/sessions/${id}`);
+export async function fetchSessionTree(id: number): Promise<SessionTree> {
+  const tree = await http.get<SessionTree>(`/sessions/${id}`);
+  return { ...tree, nodes: tree.nodes.map(normalizeNode) };
 }
 
 /** 追加节点(parentNodeId 缺省=挂根;isNewKnowledge 由后端判定) */
-export function addNode(sessionId: number, payload: AddNodePayload): Promise<PathNode> {
-  return http.post<PathNode>(`/sessions/${sessionId}/nodes`, payload);
+export async function addNode(sessionId: number, payload: AddNodePayload): Promise<PathNode> {
+  return normalizeNode(await http.post<PathNode>(`/sessions/${sessionId}/nodes`, payload));
 }
 
 /** FR-E10 讲解度(SIMPLE/DEEP/CHILD):成功响应回填 {explainLevel} */

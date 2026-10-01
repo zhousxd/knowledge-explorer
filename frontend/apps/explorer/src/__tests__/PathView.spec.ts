@@ -148,6 +148,28 @@ describe('PathView(我的路径,FR-E03/E04/E05)', () => {
     expect(rows.find((r) => r.text().includes('从选址到人物'))?.find('.chip.fork').exists()).toBe(true);
   });
 
+  it('确认成功后摘掉跳转参数:URL 不再含 cardVersionId,二次确认不再调 addNode(防刷新重触发)', async () => {
+    mockedTree.mockResolvedValue(TREE);
+    mockedAdd.mockResolvedValue(node({ nodeId: 8, parentNodeId: 1, cardTitle: '新分支卡' }));
+    const wrapper = await gotoPath('?sessionId=5&cardVersionId=66');
+
+    const root = wrapper.findAll('.node').find((r) => r.text().includes('从选址到人物'))!;
+    await root.trigger('click');
+    await wrapper.find('.resume-bar .rb-go').trigger('click');
+    await flushPromises();
+
+    expect(mockedAdd).toHaveBeenCalledTimes(1);
+    // 跳转参数已摘:URL 只剩会话游标 → 刷新/重进不再重触发挂载
+    expect(router.currentRoute.value.query.cardVersionId).toBeUndefined();
+    expect(router.currentRoute.value.query.sessionId).toBe('5');
+
+    // 再点同一节点确认:payload 已摘 → 纯确认,只切当前不重复挂载
+    await root.trigger('click');
+    await wrapper.find('.resume-bar .rb-go').trigger('click');
+    await flushPromises();
+    expect(mockedAdd).toHaveBeenCalledTimes(1);
+  });
+
   it('档位 chip 点击调 PUT 并回填高亮;失败 toast 报错且档位不变', async () => {
     mockedTree.mockResolvedValue(TREE);
     mockedLevel.mockRejectedValueOnce(new ApiError(400, '讲解度仅支持 SIMPLE/DEEP/CHILD'));

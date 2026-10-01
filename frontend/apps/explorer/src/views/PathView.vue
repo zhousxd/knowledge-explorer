@@ -90,6 +90,11 @@ async function confirmResume(): Promise<void> {
       await store.addNodeAt(pending.value.nodeId, pendingPayload.value);
       showToast('已在该节点下开始新分支');
     }
+    // 摘掉跳转参数(cardVersionId/entryId):成功后 URL 只留会话游标,防刷新/重进重触发挂载
+    // (纯确认虽不消费 payload 也归位,保持幂等)
+    if (store.sessionId != null) {
+      void router.replace({ path: '/path', query: { sessionId: String(store.sessionId) } });
+    }
   } catch (e) {
     showToast(e instanceof ApiError ? e.message : '操作失败,请稍后重试');
   } finally {

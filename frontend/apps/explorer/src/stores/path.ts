@@ -87,11 +87,11 @@ export const usePathStore = defineStore('path', {
       }
     },
 
-    /** 树数据落库 + 游标定位最近访问节点 */
+    /** 树数据落库 + 游标定位最近访问节点(theme/goal 缺键归一空串,标题 getter 已有 || 兜底) */
     applyTree(tree: SessionTree): void {
       this.sessionId = tree.sessionId;
-      this.theme = tree.theme;
-      this.goal = tree.goal;
+      this.theme = tree.theme ?? '';
+      this.goal = tree.goal ?? '';
       this.explainLevel = tree.explainLevel;
       this.status = tree.status;
       this.nodes = tree.nodes;

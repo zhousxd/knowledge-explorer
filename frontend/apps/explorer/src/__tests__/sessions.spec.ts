@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchLatestSession, fetchMySessions, fetchSessionTree } from '../api/sessions';
+import { addNode, fetchLatestSession, fetchMySessions, fetchSessionTree } from '../api/sessions';
 import type { ResumeSession, SessionPage, SessionTree } from '../api/sessions';
 
 function jsonResp(status: number, body: unknown) {
@@ -68,5 +68,47 @@ describe('fetchLatestSession 契约', () => {
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/sessions?page=2&size=5');
     expect(fetchMock.mock.calls[1]?.[0]).toBe('/api/sessions/9');
+  });
+
+  /**
+   * 回归(Phase 4 终审 Critical):jackson non_null 把根节点 parentNodeId=null 整键省略,
+   * 树渲染以 null 为根键 —— 不归一则真实 API 下 /path 渲染空树。fixture 用 delete 模拟真实序列化
+   * (而非显式 null);theme/goal 同族空值也整键缺失。放在本 spec 的原因:PathView/path spec
+   * 整体 mock ../api/sessions,deleted-key fixture 会绕过 api 层归一;此处走真实 fetchSessionTree,
+   * 归一后的 null 根键由既有 store/PathView 渲染测试(childrenMap.get(null))衔接保证成树。
+   */
+  it('wire 归一:根节点 parentNodeId 键被省略(non_null)→ 归一为 null,theme/goal 缺键不虚报必有', async () => {
+    const raw = {
+      sessionId: 9,
+      explainLevel: 'DEEP',
+      status: 'ACTIVE',
+      createdAt: '2026-09-28T09:00:00Z',
+      updatedAt: '2026-09-29T21:00:00Z',
+      nodes: [
+        { nodeId: 1, cardVersionId: 11, entryId: null, questionText: null,
+          isNewKnowledge: true, visitedAt: '2026-09-28T09:00:00Z', cardTitle: '岳麓书院：从选址到人物' },
+        { nodeId: 2, parentNodeId: 1, cardVersionId: null, entryId: null, questionText: '为什么建在这里',
+          isNewKnowledge: false, visitedAt: '2026-09-29T21:00:00Z', cardTitle: null }
+      ]
+    };
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValue(jsonResp(200, { code: 0, message: 'ok', traceId: 't', data: raw })));
+
+    const tree = await fetchSessionTree(9);
+    expect(tree.theme).toBeUndefined();
+    expect(tree.goal).toBeUndefined();
+    const [root, child] = tree.nodes;
+    expect(root?.parentNodeId).toBeNull(); // 归一后根键=null → childrenMap.get(null) 命中根节点
+    expect(child?.parentNodeId).toBe(1);
+  });
+
+  it('addNode 响应同族归一:挂根(缺省 parentNodeId)时缺键归一为 null', async () => {
+    const raw = { nodeId: 6, cardVersionId: 77, entryId: null, questionText: null,
+      isNewKnowledge: true, visitedAt: '2026-09-30T10:00:00Z', cardTitle: '根上新卡' };
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValue(jsonResp(200, { code: 0, message: 'ok', traceId: 't', data: raw })));
+
+    const created = await addNode(9, { cardVersionId: 77 });
+    expect(created.parentNodeId).toBeNull();
   });
 });
