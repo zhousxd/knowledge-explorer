@@ -397,4 +397,52 @@ class SessionPathIT {
         assertThat(((java.util.List<Object>) JsonPath.read(page3.getBody(), "$.data.items")).size()).isEqualTo(2);
         assertThat(((Number) JsonPath.read(page3.getBody(), "$.data.items[1].sessionId")).longValue()).isEqualTo(second);
     }
+
+    /** latest：最新节点为纯追问节点（无卡版本）→ 200，title 走 goal→「新探索」兜底（回归：List.of(null) NPE） */
+    @Test
+    void latestPureQuestionNodeFallsBackTitle() {
+        String reader = newUserToken("13800160019", "追问用户", "EXPLORER");
+        long sid = createSession(reader, "academy", "学习书院");
+        addNode(reader, sid, null, null, "书院是什么");
+
+        ResponseEntity<String> latest = http.exchange("/api/sessions/latest", HttpMethod.GET, bearer(reader), String.class);
+        assertThat(latest.getStatusCode().value()).as("latest body=%s", latest.getBody()).isEqualTo(200);
+        assertThat((Integer) JsonPath.read(latest.getBody(), "$.code")).isZero();
+        assertThat(((Number) JsonPath.read(latest.getBody(), "$.data.sessionId")).longValue()).isEqualTo(sid);
+        assertThat((String) JsonPath.read(latest.getBody(), "$.data.title")).isEqualTo("学习书院");
+        assertThat((String) JsonPath.read(latest.getBody(), "$.data.lastVisitedAt")).isNotBlank();
+        assertThat(((Number) JsonPath.read(latest.getBody(), "$.data.nodeCount")).longValue()).isEqualTo(1);
+
+        // 无 goal 会话的纯追问 → title 兜底「新探索」，且 latest 取 updated_at 最新的会话
+        ResponseEntity<String> created = http.postForEntity("/api/sessions",
+                bearerJson(reader, "{\"theme\":\"sound\"}"), String.class);
+        assertThat(created.getStatusCode().value()).as("create body=%s", created.getBody()).isEqualTo(201);
+        long sid2 = ((Number) JsonPath.read(created.getBody(), "$.data.sessionId")).longValue();
+        addNode(reader, sid2, null, null, "再问一句");
+        ResponseEntity<String> latest2 = http.exchange("/api/sessions/latest", HttpMethod.GET, bearer(reader), String.class);
+        assertThat(latest2.getStatusCode().value()).as("latest2 body=%s", latest2.getBody()).isEqualTo(200);
+        assertThat(((Number) JsonPath.read(latest2.getBody(), "$.data.sessionId")).longValue()).isEqualTo(sid2);
+        assertThat((String) JsonPath.read(latest2.getBody(), "$.data.title")).isEqualTo("新探索");
+    }
+
+    /** 全追问会话列表：无任何卡版本 → listMine 不 500，title 走兜底（回归：Map.of().get(null) NPE） */
+    @Test
+    void listMineAllQuestionNodesNoNpe() {
+        String reader = newUserToken("13800160020", "纯追问列表用户", "EXPLORER");
+        long sid1 = createSession(reader, "cuisine", "湘菜问一");
+        long sid2 = createSession(reader, "cuisine", "湘菜问二");
+        addNode(reader, sid1, null, null, "臭豆腐为何黑");
+        addNode(reader, sid2, null, null, "剁椒鱼头怎样蒸");
+
+        ResponseEntity<String> list = http.exchange("/api/sessions", HttpMethod.GET, bearer(reader), String.class);
+        assertThat(list.getStatusCode().value()).as("list body=%s", list.getBody()).isEqualTo(200);
+        assertThat((Integer) JsonPath.read(list.getBody(), "$.code")).isZero();
+        assertThat((Integer) JsonPath.read(list.getBody(), "$.data.total")).isEqualTo(2);
+        // 最新会话在前，title 兜底为 goal；nodeCount=1、branchCount=0
+        assertThat(((Number) JsonPath.read(list.getBody(), "$.data.items[0].sessionId")).longValue()).isEqualTo(sid2);
+        assertThat((String) JsonPath.read(list.getBody(), "$.data.items[0].title")).isEqualTo("湘菜问二");
+        assertThat(((Number) JsonPath.read(list.getBody(), "$.data.items[0].nodeCount")).longValue()).isEqualTo(1);
+        assertThat(((Number) JsonPath.read(list.getBody(), "$.data.items[0].branchCount")).longValue()).isZero();
+        assertThat((String) JsonPath.read(list.getBody(), "$.data.items[1].title")).isEqualTo("湘菜问一");
+    }
 }

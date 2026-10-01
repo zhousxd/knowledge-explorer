@@ -136,7 +136,9 @@ public class SessionService {
                 .map(s -> {
                     SessionMapper.SessionStatsRow stat = stats.get(s.getId());
                     PathNodeMapper.LatestNodeRow latest = latestNodes.get(s.getId());
-                    String latestTitle = latest == null ? null : titles.get(latest.getCardVersionId());
+                    // 全追问会话（最新节点无卡版本）title 走兜底；titles 为空 Map 时对 null 键取值会 NPE，先判
+                    String latestTitle = latest == null || latest.getCardVersionId() == null ? null
+                            : titles.get(latest.getCardVersionId());
                     return new SessionItem(
                             s.getId(), s.getTheme(), titleOf(s, latestTitle), s.getGoal(),
                             stat == null || stat.getNodeCount() == null ? 0 : stat.getNodeCount(),
@@ -161,8 +163,12 @@ public class SessionService {
             return null;
         }
         PathNodeMapper.LatestNodeRow latest = latestNodesByUser(userId).get(session.getId());
-        String latestTitle = latest == null ? null
-                : cardTitlesByVersionIds(java.util.List.of(latest.getCardVersionId())).get(latest.getCardVersionId());
+        // 最新节点可为纯追问节点（card_version_id 为空）：跳过查题，titleOf 走 goal→「新探索」兜底
+        String latestTitle = null;
+        if (latest != null && latest.getCardVersionId() != null) {
+            latestTitle = cardTitlesByVersionIds(java.util.List.of(latest.getCardVersionId()))
+                    .get(latest.getCardVersionId());
+        }
         SessionMapper.SessionStatsRow stat = statsByUser(userId).get(session.getId());
         return new ResumeSession(
                 session.getId(),
@@ -240,13 +246,13 @@ public class SessionService {
         return toView(node, cardTitle);
     }
 
-    /** FR-E10 讲解度更新：SIMPLE/DEEP/CHILD 白名单（非法 → 400）；顺带刷新 updated_at（会话活动） */
+    /** FR-E10 讲解度更新：先校验属主（与 addNode 写路径同序，消除陌生会话枚举探测面），再 SIMPLE/DEEP/CHILD 白名单（非法 → 400）；顺带刷新 updated_at（会话活动） */
     @Transactional
     public String updateExplainLevel(long userId, long sessionId, String level) {
+        requireOwned(userId, sessionId);
         if (level == null || !EXPLAIN_LEVELS.contains(level)) {
             throw new BadRequestException("讲解度仅支持 SIMPLE/DEEP/CHILD");
         }
-        requireOwned(userId, sessionId);
         SessionEntity patch = new SessionEntity();
         patch.setId(sessionId);
         patch.setExplainLevel(level);

@@ -15,13 +15,14 @@ public interface PathNodeMapper extends BaseMapper<PathNodeEntity> {
     /**
      * 递归子树（Phase 4 钉死契约，成果整理/分享共用）：从任意节点向下收集整棵子树。
      * parent_node_id 只增不改（无 UPDATE 路径），结构必为森林无环，UNION ALL 安全；
+     * 递归臂额外约束 n.session_id = #{sessionId} 双保险（子节点跨会话也不串树）；
      * ORDER BY visited_at, id 给出稳定的「访问顺序」视图。
      */
     @Select("""
             WITH RECURSIVE subtree AS (
                 SELECT * FROM path_node WHERE session_id = #{sessionId} AND id = #{nodeId}
                 UNION ALL
-                SELECT n.* FROM path_node n JOIN subtree s ON n.parent_node_id = s.id
+                SELECT n.* FROM path_node n JOIN subtree s ON n.parent_node_id = s.id AND n.session_id = #{sessionId}
             ) SELECT * FROM subtree ORDER BY visited_at, id
             """)
     List<PathNodeEntity> selectSubtree(@Param("sessionId") long sessionId, @Param("nodeId") long nodeId);
@@ -31,7 +32,7 @@ public interface PathNodeMapper extends BaseMapper<PathNodeEntity> {
             WITH RECURSIVE subtree AS (
                 SELECT * FROM path_node WHERE session_id = #{sessionId} AND parent_node_id IS NULL
                 UNION ALL
-                SELECT n.* FROM path_node n JOIN subtree s ON n.parent_node_id = s.id
+                SELECT n.* FROM path_node n JOIN subtree s ON n.parent_node_id = s.id AND n.session_id = #{sessionId}
             ) SELECT * FROM subtree ORDER BY visited_at, id
             """)
     List<PathNodeEntity> selectTree(@Param("sessionId") long sessionId);
