@@ -303,6 +303,50 @@ class SessionPathIT {
         assertThat(ghost.getStatusCode().value()).as("ghost body=%s", ghost.getBody()).isEqualTo(400);
     }
 
+    /** 仅可挂已发布卡：DRAFT 卡版本挂进会话 → 400「卡片未发布」（版本存在，与「卡片版本不存在」400 语义分立，
+     *  防草稿版本经树接口读出卡题绕过公开卡 404 可见性）；发布后同版本照常成功（既有 PUBLISHED 场景即证，此处复验闭环） */
+    @Test
+    void addNodeRejectsUnpublishedCardVersion() {
+        String creator = newUserToken("13800160021", "未发卡创作", "CREATOR");
+        String editor = newUserToken("13800160022", "未发卡编辑", "EDITOR");
+        String reader = newUserToken("13800160023", "未发卡读者", "EXPLORER");
+        // 造 DRAFT 卡（建卡即落 version 1，不送审不发布）
+        ResponseEntity<String> created = http.postForEntity("/api/wb/cards",
+                jsonWithToken("{\"theme\":\"academy\",\"templateType\":\"TEXT\",\"title\":\"待发布卡\",\"content\":"
+                        + textContent("待发布摘要") + "}", creator), String.class);
+        assertThat(created.getStatusCode().value()).as("create body=%s", created.getBody()).isEqualTo(201);
+        long cardId = ((Number) JsonPath.read(created.getBody(), "$.data.cardId")).longValue();
+        Long draftVersionId = jdbc.queryForObject(
+                "select id from card_version where card_id=? order by id limit 1", Long.class, cardId);
+        assertThat(draftVersionId).as("draft card must have version 1").isNotNull();
+
+        long sid = createSession(reader, "academy", "未发卡会话");
+        ResponseEntity<String> rejected = http.postForEntity("/api/sessions/" + sid + "/nodes",
+                bearerJson(reader, "{\"cardVersionId\":" + draftVersionId + ",\"questionText\":\"偷看草稿\"}"),
+                String.class);
+        assertThat(rejected.getStatusCode().value()).as("rejected body=%s", rejected.getBody()).isEqualTo(400);
+        assertThat((Integer) JsonPath.read(rejected.getBody(), "$.code")).isEqualTo(400);
+        assertThat((String) JsonPath.read(rejected.getBody(), "$.message")).contains("卡片未发布");
+        // 400 不落节点：树仍为空
+        ResponseEntity<String> tree = getSession(reader, sid);
+        assertThat(((java.util.List<Object>) JsonPath.read(tree.getBody(), "$.data.nodes")).size()).isZero();
+
+        // 送审 + 发布后，同一版本照常挂载成功（PUBLISHED 放行，不误伤正常路径）
+        assertThat(http.exchange("/api/wb/cards/" + cardId + "/submit", HttpMethod.POST,
+                jsonWithToken("{}", creator), String.class).getStatusCode().value()).isEqualTo(200);
+        assertThat(http.exchange("/api/wb/cards/" + cardId + "/publish", HttpMethod.POST,
+                jsonWithToken("{}", editor), String.class).getStatusCode().value()).isEqualTo(200);
+        Long publishedVersionId = jdbc.queryForObject(
+                "select current_version_id from card where id=?", Long.class, cardId);
+        ResponseEntity<String> ok = http.postForEntity("/api/sessions/" + sid + "/nodes",
+                bearerJson(reader, "{\"cardVersionId\":" + publishedVersionId + ",\"questionText\":\"发布后访问\"}"),
+                String.class);
+        assertThat(ok.getStatusCode().value()).as("ok body=%s", ok.getBody()).isEqualTo(200);
+        assertThat((Integer) JsonPath.read(ok.getBody(), "$.code")).isZero();
+        assertThat((String) JsonPath.read(ok.getBody(), "$.data.cardTitle")).isEqualTo("待发布卡");
+        assertThat((Boolean) JsonPath.read(ok.getBody(), "$.data.isNewKnowledge")).isTrue();
+    }
+
     /** isNewKnowledge：同卡版本同会话第二次访问=false；跨会话重新=true */
     @Test
     void repeatVisitNotNewKnowledge() {

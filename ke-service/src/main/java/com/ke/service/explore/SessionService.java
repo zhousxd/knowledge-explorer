@@ -1,6 +1,7 @@
 package com.ke.service.explore;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.ke.domain.enums.CardStatus;
 import com.ke.infra.entity.CardEntity;
 import com.ke.infra.entity.CardVersionEntity;
 import com.ke.infra.entity.PathNodeEntity;
@@ -200,6 +201,8 @@ public class SessionService {
     /**
      * 追加节点（FR-E05）：校验会话属主；parentNodeId 必须属于本会话（否则 400）；
      * card_version_id/entry_id 存在性校验（否则 400，避免外键 500）；
+     * cardVersionId 所属卡须 PUBLISHED（否则 400「卡片未发布」——草稿/待审版本挂进会话即可经树接口
+     * 读出卡题，绕过公开卡 404 可见性规则；版本不存在 400 已有，未发布 400 语义分立）；
      * isNewKnowledge=同会话内该 card_version_id 首次出现；写 visited_at 并刷新 session.updated_at。
      */
     @Transactional
@@ -220,7 +223,11 @@ public class SessionService {
                 throw new BadRequestException("卡片版本不存在");
             }
             CardEntity card = cards.selectById(version.getCardId());
-            cardTitle = card == null ? null : card.getTitle();
+            // 仅可挂已发布卡（与公开详情/收藏同则）：DRAFT/PENDING/DISABLED 一律拒之
+            if (card == null || !CardStatus.PUBLISHED.name().equals(card.getStatus())) {
+                throw new BadRequestException("卡片未发布");
+            }
+            cardTitle = card.getTitle();
         }
         if (cmd.entryId() != null && entries.selectById(cmd.entryId()) == null) {
             throw new BadRequestException("入口不存在");
