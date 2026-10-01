@@ -44,8 +44,8 @@ import com.ke.service.common.NotFoundException;
  *   <li>队列查询为 offset 分页（page 从 1 起，size 夹取 [1,100] 默认 20），返回
  *       {items, total, page, size}；</li>
  *   <li>approve：任务置 APPROVED 并委托对象动作（CARD → {@link CardService#publish}，
- *       其 @Audited 切面落 CARD_PUBLISH；ENTRY → 入口无 publish 概念，维持 ACTIVE 即 Task 28
- *       决策——公共入口创建即 ACTIVE，审核通过即维持不动）；</li>
+ *       其 @Audited 切面落 CARD_PUBLISH；ENTRY → 前置审核语义：PENDING → ACTIVE 发布生效，
+ *       P6-28 评审定版）；</li>
  *   <li>reject：notes 必填，任务置 REJECTED，CARD 经 returnToDraft 回 DRAFT，
  *       ENTRY 置入口 DISABLED（驳回即下架，作者卡页不再可见）；</li>
  *   <li>自审禁绝：审核人 = 提交人（CARD=card.maintainer_id；ENTRY=entry.author_id，Task 28）
@@ -304,11 +304,22 @@ public class ReviewService {
         }
     }
 
-    /** approve 委托：CARD 发布；ENTRY 入口无 publish 概念——创建即 ACTIVE，审核通过维持不动（Task 28 决策） */
+    /**
+     * approve 委托：CARD 发布；ENTRY 前置审核（P6-28 评审，01 文档「公共入口维护者确认后发布」）——
+     * scope=PUBLIC 的入口创建/切换即 PENDING（读路径只回 ACTIVE → 对他人不可见），通过置 ACTIVE
+     * 发布生效（幂等：已 ACTIVE 维持不变）。
+     */
     private void dispatch(ReviewTaskEntity task) {
         switch (task.getObjectType()) {
             case "CARD" -> cardService.publish(task.getObjectId());
-            case "ENTRY" -> { }
+            case "ENTRY" -> {
+                EntryEntity entry = entries.selectById(task.getObjectId());
+                if (entry != null) {
+                    entry.setStatus("ACTIVE");
+                    entry.setUpdatedAt(java.time.OffsetDateTime.now());
+                    entries.updateById(entry);
+                }
+            }
             default -> throw new BadRequestException("未知审核对象类型: " + task.getObjectType());
         }
     }

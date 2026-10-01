@@ -21,7 +21,8 @@ import java.util.Map;
  * SecurityConfig 兜底）：
  * <ul>
  *   <li>POST /api/entries {cardId, config, scope} → 201 {entryId, scope, status}
- *       （PRIVATE 即 ACTIVE；PUBLIC 即 ACTIVE + 挂审核队列；违规 400 清单 envelope）；</li>
+ *       （PRIVATE 即 ACTIVE；PUBLIC 前置审核：status=PENDING + 挂审核队列，approve → ACTIVE
+ *       才对他人可见，reject → DISABLED；违规 400 清单 envelope）；</li>
  *   <li>POST /api/entries/{id}/test → 202 {runId, testTotal}（真实执行一次，配额内；
  *       LINK_CARD 400；非作者 403；轮询走 GET /api/agent/runs/{runId}）；</li>
  *   <li>GET /api/entries/mine → 我的入口列表（状态/所属卡题/试运行次数）；</li>

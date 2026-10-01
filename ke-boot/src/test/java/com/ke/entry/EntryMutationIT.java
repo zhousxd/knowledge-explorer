@@ -26,14 +26,16 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 入口保存/试运行/双通道发布端到端（FR-N02–N07，Task 28）：
+ * 入口保存/试运行/双通道发布端到端（FR-N02–N07，Task 28 + P6-28 评审前置审核语义）：
  * POST /api/entries {cardId, config, scope}——保存路径必过 EntryConfigValidator（越权 assetScope
- * → 400 清单，没有例外路径）；PRIVATE 直接 ACTIVE；PUBLIC 直接 ACTIVE 但挂 review_task(ENTRY)，
- * approve 维持 ACTIVE、reject 置 DISABLED（P1-4 ReviewService 队列复用）。
+ * → 400 清单，没有例外路径）；PRIVATE 直接 ACTIVE；PUBLIC 前置审核：创建即 ACTIVE 的旧决策废除，
+ * scope=PUBLIC（创建/changeScope）→ status=PENDING（对他人不可见，作者 mine 仍见），
+ * approve → ACTIVE（发布生效）、reject → DISABLED（P1-4 ReviewService 队列复用）；
+ * PUBLIC→PRIVATE 直接回 ACTIVE 并把未决 PENDING 任务 CAS 置 CANCELLED；DISABLED 禁止再进公共队列。
  * POST /api/entries/{id}/test——LINK_CARD 400；服务入口=无会话真实执行一次（P5-18：不落 artifact
  * 只回状态），配额消耗，entry.test_total +1；非作者 403。
  * GET /api/entries/mine——我的入口（状态/所属卡题/试运行次数）。
- * PUT /api/entries/{id}/scope——PRIVATE→PUBLIC 挂审核，PUBLIC→PRIVATE 直接，非作者 403。
+ * PUT /api/entries/{id}/scope——双通道切换，仅作者。
  * 网关用 StubLlmGateway（explain-test），直连 WSL ke_test，Awaitility 等待异步终态。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -188,7 +190,7 @@ class EntryMutationIT {
     }
 
     @Test
-    void savePublicEntryQueuesReviewAndApproveKeepsActive() {
+    void savePublicEntryQueuesReviewAndApproveActivates() {
         long assetId = insertAsset("《送审岳麓志》", "书院创建于唐开宝年间。");
         long card = publishedCard("送审公共岳麓卡", "academy",
                 "[{\"assetId\":" + assetId + ",\"title\":\"《送审岳麓志》\",\"locator\":\"第1页\"}]");
@@ -198,18 +200,55 @@ class EntryMutationIT {
         ResponseEntity<String> res = save(author, card, serviceConfig("公共讲岳麓", "EXPLAIN", assetId), "PUBLIC");
         assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(201);
         long entryId = ((Number) JsonPath.read(res.getBody(), "$.data.entryId")).longValue();
-        // 决策:PUBLIC 入口创建即 ACTIVE,但挂 PENDING 审核
-        assertThat((String) JsonPath.read(res.getBody(), "$.data.status")).isEqualTo("ACTIVE");
+        // 前置审核(01 文档「公共入口维护者确认后发布」):创建即挂审核,状态 PENDING,对他人不可见
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.status")).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("select status from entry where id=?", String.class, entryId))
+                .isEqualTo("PENDING");
 
         long reviewId = pendingEntryReviewId(editor, entryId);
         ResponseEntity<String> approve = http.postForEntity("/api/wb/reviews/" + reviewId + "/approve",
                 json("{}", editor), String.class);
         assertThat(approve.getStatusCode().value()).as("body=%s", approve.getBody()).isEqualTo(200);
 
-        // approve 分支:入口保持 ACTIVE(scope=PUBLIC 已可见,审核通过即维持)
+        // approve 分支:PENDING → ACTIVE(公共入口发布生效)
         assertThat((String) JsonPath.read(approve.getBody(), "$.data.status")).isEqualTo("APPROVED");
         assertThat(jdbc.queryForObject("select status from entry where id=?", String.class, entryId))
                 .isEqualTo("ACTIVE");
+    }
+
+    @Test
+    void publicEntryHiddenUntilApproved() {
+        long assetId = insertAsset("《预审岳麓志》", "书院创建于唐开宝年间。");
+        long card = publishedCard("预审公共岳麓卡", "academy",
+                "[{\"assetId\":" + assetId + ",\"title\":\"《预审岳麓志》\",\"locator\":\"第1页\"}]");
+        String author = newUserToken("13800008014", "预审者甲", null);
+        String other = newUserToken("13800008015", "预审者乙", null);
+        String editor = newUserToken("13800008016", "预审编辑", "EDITOR");
+
+        long entryId = ((Number) JsonPath.read(
+                save(author, card, serviceConfig("预审讲岳麓", "EXPLAIN", assetId), "PUBLIC").getBody(),
+                "$.data.entryId")).longValue();
+
+        // 前置审核:待审入口对他人(与匿名)不可见;作者经 mine 仍见(PENDING)
+        assertThat(idsOf(card, other)).doesNotContain((int) entryId);
+        ResponseEntity<String> anon = http.getForEntity("/api/cards/" + card + "/entries", String.class);
+        assertThat(anon.getStatusCode().value()).isEqualTo(401);
+        ResponseEntity<String> mine = http.exchange("/api/entries/mine", HttpMethod.GET,
+                bearer(author), String.class);
+        assertThat((String) JsonPath.read(mine.getBody(), "$.data[0].status")).isEqualTo("PENDING");
+
+        // approve 后对他人可见(状态 ACTIVE)
+        long reviewId = pendingEntryReviewId(editor, entryId);
+        ResponseEntity<String> approve = http.postForEntity("/api/wb/reviews/" + reviewId + "/approve",
+                json("{}", editor), String.class);
+        assertThat(approve.getStatusCode().value()).isEqualTo(200);
+        assertThat(idsOf(card, other)).containsExactly((int) entryId);
+    }    /** 用户 token 的卡入口列表可见入口 id 集(status=ACTIVE 过滤由后端负责) */
+    private List<Integer> idsOf(long cardId, String token) {
+        ResponseEntity<String> res = http.exchange("/api/cards/" + cardId + "/entries", HttpMethod.GET,
+                bearer(token), String.class);
+        assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(200);
+        return JsonPath.read(res.getBody(), "$.data.defaultEntries[*].id");
     }
 
     @Test
@@ -326,17 +365,16 @@ class EntryMutationIT {
                 "$.data.entryId")).longValue();
         String editor = newUserToken("13800008012", "切换审核编辑", "EDITOR");
 
-        // PRIVATE→PUBLIC:挂审核,入口保持 ACTIVE
+        // PRIVATE→PUBLIC:挂审核,前置审核状态 PENDING(对他人不可见)
         ResponseEntity<String> toPublic = http.exchange("/api/entries/" + entryId + "/scope",
                 HttpMethod.PUT, json("{\"scope\":\"PUBLIC\"}", author), String.class);
         assertThat(toPublic.getStatusCode().value()).as("body=%s", toPublic.getBody()).isEqualTo(200);
         assertThat((String) JsonPath.read(toPublic.getBody(), "$.data.scope")).isEqualTo("PUBLIC");
         long reviewId = pendingEntryReviewId(editor, entryId);
         assertThat(jdbc.queryForObject("select status from entry where id=?", String.class, entryId))
-                .isEqualTo("ACTIVE");
-        http.postForEntity("/api/wb/reviews/" + reviewId + "/approve", json("{}", editor), String.class);
+                .isEqualTo("PENDING");
 
-        // PUBLIC→PRIVATE:直接,不再挂审核
+        // PUBLIC→PRIVATE(审核未决时):直接;未决 PENDING 审核任务 CAS 置 CANCELLED(不悬空);入口回 ACTIVE
         ResponseEntity<String> toPrivate = http.exchange("/api/entries/" + entryId + "/scope",
                 HttpMethod.PUT, json("{\"scope\":\"PRIVATE\"}", author), String.class);
         assertThat(toPrivate.getStatusCode().value()).isEqualTo(200);
@@ -344,11 +382,46 @@ class EntryMutationIT {
         assertThat(jdbc.queryForObject(
                 "select count(*) from review_task where object_type='ENTRY' and object_id=? and status='PENDING'",
                 Long.class, entryId)).isZero();
+        assertThat(jdbc.queryForObject(
+                "select count(*) from review_task where object_type='ENTRY' and object_id=? and status='CANCELLED'",
+                Long.class, entryId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select status from entry where id=?", String.class, entryId))
+                .isEqualTo("ACTIVE");
+
+        // 再回公共区 + approve:PENDING → ACTIVE(发布生效)
+        ResponseEntity<String> toPublicAgain = http.exchange("/api/entries/" + entryId + "/scope",
+                HttpMethod.PUT, json("{\"scope\":\"PUBLIC\"}", author), String.class);
+        assertThat(toPublicAgain.getStatusCode().value()).isEqualTo(200);
+        long secondReviewId = pendingEntryReviewId(editor, entryId);
+        http.postForEntity("/api/wb/reviews/" + secondReviewId + "/approve", json("{}", editor), String.class);
+        assertThat(jdbc.queryForObject("select status from entry where id=?", String.class, entryId))
+                .isEqualTo("ACTIVE");
 
         // 非作者改 scope:403
         ResponseEntity<String> forbidden = http.exchange("/api/entries/" + entryId + "/scope",
                 HttpMethod.PUT, json("{\"scope\":\"PUBLIC\"}", newUserToken("13800008013", "切换者乙", null)),
                 String.class);
         assertThat(forbidden.getStatusCode().value()).isEqualTo(403);
+    }
+
+    @Test
+    void disabledEntryCannotReenterPublicQueue() {
+        long assetId = insertAsset("《停用岳麓志》", "书院创建于唐开宝年间。");
+        long card = publishedCard("停用岳麓卡", "academy",
+                "[{\"assetId\":" + assetId + ",\"title\":\"《停用岳麓志》\",\"locator\":\"第1页\"}]");
+        String author = newUserToken("13800008017", "停用者甲", null);
+        long entryId = ((Number) JsonPath.read(
+                save(author, card, serviceConfig("停用讲岳麓", "EXPLAIN", assetId), "PRIVATE").getBody(),
+                "$.data.entryId")).longValue();
+        jdbc.update("update entry set status='DISABLED' where id=?", entryId);
+
+        // DISABLED 入口禁止再进公共审核队列
+        ResponseEntity<String> res = http.exchange("/api/entries/" + entryId + "/scope",
+                HttpMethod.PUT, json("{\"scope\":\"PUBLIC\"}", author), String.class);
+        assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(400);
+        assertThat((String) JsonPath.read(res.getBody(), "$.message")).contains("入口已停用");
+        assertThat(jdbc.queryForObject(
+                "select count(*) from review_task where object_type='ENTRY' and object_id=?",
+                Long.class, entryId)).isZero();
     }
 }

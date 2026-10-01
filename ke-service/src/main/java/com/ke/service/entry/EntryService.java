@@ -20,7 +20,8 @@ import java.util.stream.Collectors;
 
 /**
  * 卡片入口（FR-E02/C09/N07）：
- * - 读路径（探索端）：仅 PUBLISHED 卡可见（否则 404 不泄露）；仅 ACTIVE 入口；
+ * - 读路径（探索端）：仅 PUBLISHED 卡可见（否则 404 不泄露）；仅 ACTIVE 入口
+ *   （PUBLIC 的 PENDING 待审态天然不可见——前置审核语义，P6-28）；
  *   PUBLIC 全可见，PRIVATE 仅创建者本人可见（FR-N04 私人入口仅个人空间生效）；
  *   按 (sort,id) 升序，前 {@value #DEFAULT_VISIBLE} 个进 defaultEntries，其余进 folded；
  *   每项带 mine（author_id==当前用户）；config_json 不返回（Phase 6 试运行按需提供）。

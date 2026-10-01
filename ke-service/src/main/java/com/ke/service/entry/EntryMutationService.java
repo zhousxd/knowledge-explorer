@@ -38,16 +38,18 @@ import java.util.Set;
  *       同则不视为跨主题）——violations 非空抛 {@link EntryConfigViolationException} → 400 清单
  *       （保存端没有草稿期的自动收窄，白名单是硬边界，没有例外路径）；落库后再过
  *       {@link RelationGuard} 复检 config_json 形状（双保险）。scope=PRIVATE 直接 ACTIVE；
- *       PUBLIC 同样创建即 ACTIVE 但挂 review_task(object_type=ENTRY, action=SUBMIT)——
- *       复用 P1-4 审核队列（决策：公共入口创建即可用，审核通过维持，驳回 DISABLED）。</li>
+ *       scope=PUBLIC 前置审核（01 文档「公共入口维护者确认后发布」）：status=PENDING
+ *       （读路径只回 ACTIVE → 对他人不可见，作者经 mine 仍见），挂
+ *       review_task(object_type=ENTRY, action=SUBMIT)——approve → ACTIVE，reject → DISABLED。</li>
  *   <li><b>试运行</b>（POST /api/entries/{id}/test）：仅作者（403）；LINK_CARD 400「链接类入口
- *       无需试运行」；DISABLED 400。服务入口=调 {@link ExplainService#explain} 真实执行一次
+ *       无需试运行」；DISABLED/PENDING 400。服务入口=调 {@link ExplainService#explain} 真实执行一次
  *       （serviceType=入口.serviceType、question=config.goal、cardVersionId=所属卡当前版本、
  *       sessionId=null——P5-18 无会话 run 不落 artifact 只回状态），配额在 explain 内前置消耗；
  *       成功落 run 后 entry.test_total+1（202 {runId}），轮询终态由前端做。</li>
  *   <li><b>我的入口</b>（GET /api/entries/mine）：author_id=本人，含状态/所属卡题/试运行次数。</li>
  *   <li><b>scope 切换</b>（PUT /api/entries/{id}/scope）：仅作者；PRIVATE→PUBLIC 挂审核
- *       （入口即 ACTIVE）；PUBLIC→PRIVATE 直接；同值幂等不重复挂队列。</li>
+ *       （status=PENDING，禁 DISABLED 再进公共队列）；PUBLIC→PRIVATE 直接回 ACTIVE 并把未决
+ *       PENDING 审核 CAS 置 CANCELLED（不留悬空任务）；同值幂等不重复挂队列。</li>
  * </ul>
  */
 @Service
@@ -138,7 +140,9 @@ public class EntryMutationService {
         entry.setServiceType(config.serviceType());
         entry.setConfigJson(json(config));
         entry.setScope(targetScope);
-        entry.setStatus("ACTIVE");
+        // 前置审核（01 文档「公共入口维护者确认后发布」）：PUBLIC 待审 → PENDING（读路径只回
+        // ACTIVE → 对他人不可见），approve → ACTIVE；PRIVATE 直接 ACTIVE
+        entry.setStatus("PUBLIC".equals(targetScope) ? "PENDING" : "ACTIVE");
         entry.setVersion(1);
         entry.setAuthorId(userId);
         entry.setSort(0);
@@ -170,7 +174,8 @@ public class EntryMutationService {
             throw new BadRequestException("链接类入口无需试运行");
         }
         if (!"ACTIVE".equals(entry.getStatus())) {
-            throw new BadRequestException("入口已停用,不能试运行");
+            throw new BadRequestException("PENDING".equals(entry.getStatus())
+                    ? "入口待审核,通过后可试运行" : "入口已停用,不能试运行");
         }
         EntryConfig config = parseConfig(entry.getConfigJson());
         if (config == null || config.goal() == null || config.goal().isBlank()) {
@@ -219,14 +224,35 @@ public class EntryMutationService {
             throw new BadRequestException("非法入口范围: " + scope);
         }
         EntryEntity entry = requireOwned(entryId, userId, "无权修改该入口");
+        if ("PUBLIC".equals(targetScope) && "DISABLED".equals(entry.getStatus())) {
+            throw new BadRequestException("入口已停用,不能提交公共区审核");
+        }
         if (targetScope.equals(entry.getScope())) {
             return new EntryWritten(entryId, entry.getScope(), entry.getStatus()); // 同值幂等，不重复挂队列
         }
-        entry.setScope(targetScope);
-        entry.setUpdatedAt(OffsetDateTime.now());
-        entries.updateById(entry);
         if ("PUBLIC".equals(targetScope)) {
+            // 前置审核：回公共区必须重审 → PENDING + 挂队列（对他人不可见直到 approve）
+            entry.setScope(targetScope);
+            entry.setStatus("PENDING");
+            entry.setUpdatedAt(OffsetDateTime.now());
+            entries.updateById(entry);
             queueReview(entryId);
+        } else {
+            // PUBLIC→PRIVATE：直接生效；未决 PENDING 审核 CAS 置 CANCELLED（不留悬空任务，
+            // 复用自由串状态值，审核中心只查 PENDING 不受影响）；PENDING 态回 ACTIVE
+            entry.setScope(targetScope);
+            entry.setUpdatedAt(OffsetDateTime.now());
+            if ("PENDING".equals(entry.getStatus())) {
+                entry.setStatus("ACTIVE");
+            }
+            entries.updateById(entry);
+            LambdaUpdateWrapper<ReviewTaskEntity> cancel = new LambdaUpdateWrapper<ReviewTaskEntity>()
+                    .eq(ReviewTaskEntity::getObjectType, "ENTRY")
+                    .eq(ReviewTaskEntity::getObjectId, entryId)
+                    .eq(ReviewTaskEntity::getStatus, ReviewStatus.PENDING.name())
+                    .set(ReviewTaskEntity::getStatus, "CANCELLED")
+                    .set(ReviewTaskEntity::getUpdatedAt, OffsetDateTime.now());
+            reviewTasks.update(cancel);
         }
         return new EntryWritten(entryId, targetScope, entry.getStatus());
     }

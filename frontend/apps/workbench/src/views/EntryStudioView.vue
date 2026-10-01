@@ -5,9 +5,10 @@ import { fetchMyEntries } from '../api/entries';
 import type { WorkbenchEntry } from '../api/entries';
 
 /**
- * 入口编排工作台(FR-N04/N05 界面,Task 28):当前用户创建的全部入口一览——
- * 状态 tabs(全部/生效/已停用;待审核流程走审核中心)+ 入口表(名称/类型/所属卡/范围/
- * 状态/试运行次数)+ 详情抽屉简版(全字段只读)。入口的创建/试运行/送审在探索端四步流完成。
+ * 入口编排工作台(FR-N04/N05 界面,Task 28 + P6-28 前置审核语义):当前用户创建的全部入口一览——
+ * 状态 tabs(全部/生效/已停用;PENDING 待审入口在「全部」可见并标「待审核」,裁决走审核中心)+
+ * 入口表(名称/类型/所属卡/范围/状态/试运行次数)+ 详情抽屉简版(全字段只读)。
+ * 入口的创建/试运行/送审在探索端四步流完成;PUBLIC 入口 PENDING 态对他人不可见,approve 后生效。
  */
 type StatusTab = 'ALL' | 'ACTIVE' | 'DISABLED';
 
@@ -78,6 +79,17 @@ function relationText(entry: WorkbenchEntry): string {
 
 function scopeText(entry: WorkbenchEntry): string {
   return entry.scope === 'PUBLIC' ? '公共区' : '个人空间';
+}
+
+/** 状态文案(P6-28 前置审核):PENDING=待审核(approve 后对他人可见),走审核中心裁决 */
+function statusText(entry: WorkbenchEntry): string {
+  if (entry.status === 'PENDING') return '待审核';
+  return entry.status === 'ACTIVE' ? '生效中' : '已停用';
+}
+
+function statusChipClass(entry: WorkbenchEntry): string {
+  if (entry.status === 'PENDING') return 'chip-pending';
+  return entry.status === 'ACTIVE' ? 'chip-active' : 'chip-off';
 }
 
 onMounted(() => {
@@ -168,8 +180,8 @@ onMounted(() => {
             <td>
               <span
                 class="chip"
-                :class="entry.status === 'ACTIVE' ? 'chip-active' : 'chip-off'"
-              >{{ entry.status === 'ACTIVE' ? '生效中' : '已停用' }}</span>
+                :class="statusChipClass(entry)"
+              >{{ statusText(entry) }}</span>
             </td>
             <td class="num">
               {{ entry.testTotal }}
@@ -219,7 +231,7 @@ onMounted(() => {
         <dt>范围</dt>
         <dd>{{ scopeText(detail) }}</dd>
         <dt>状态</dt>
-        <dd>{{ detail.status === 'ACTIVE' ? '生效中' : '已停用' }}</dd>
+        <dd>{{ detail ? statusText(detail) : '' }}</dd>
         <dt>试运行次数</dt>
         <dd>{{ detail.testTotal }}</dd>
         <dt>入口 ID</dt>
@@ -252,6 +264,7 @@ onMounted(() => {
 .chip-public { background: var(--ke-primary-soft); color: var(--ke-primary); }
 .chip-private { background: var(--ke-private-soft); color: var(--ke-private); }
 .chip-active { background: var(--ke-success-soft); color: var(--ke-success); }
+.chip-pending { background: var(--ke-warn-soft); color: var(--ke-warn); }
 .chip-off { background: var(--ke-bg); color: var(--ke-sub); }
 
 .empty { margin: 0; padding: 40px 0; text-align: center; color: var(--ke-sub); font-size: 13px; }

@@ -19,8 +19,8 @@ import TopBar from '../components/TopBar.vue';
  * 400 清单都以红字列在表单顶部。③试运行：保存为私人入口后 POST test 真实执行一次（配额内），
  * 页内简版轮询（2s/终态停/卸载清），DONE=合格、FAILED/TIMEOUT=不合格带原因；链接入口显示
  * 「链接类入口无需试运行」直接下一步。④保存确认双通道：「保存到个人空间」（PRIVATE 已存，
- * 完成回卡页）+「提交至公共区审核」（PUBLIC：PUT scope 挂审核队列，通过前公共区即生效——
- * 后端决策：创建即 ACTIVE，审核维持/驳回下架）。
+ * 完成回卡页）+「提交至公共区审核」（PUBLIC：PUT scope 挂审核队列——前置审核语义，
+ * PENDING 待审态对他人不可见，通过后 ACTIVE 才发布可见，驳回 DISABLED）。
  */
 const POLL_MS = 2000;
 

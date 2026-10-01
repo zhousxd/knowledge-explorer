@@ -74,7 +74,7 @@ export function nlDraft(cardId: number, text: string): Promise<EntryDraftResult>
   return http.post<EntryDraftResult>('/entries/nl-draft', { cardId, text });
 }
 
-/** 保存入口 → 201:PRIVATE 直接 ACTIVE;PUBLIC 创建即 ACTIVE 但挂审核(后端决策) */
+/** 保存入口 → 201:PRIVATE 直接 ACTIVE;PUBLIC 前置审核(status=PENDING,通过后对他人可见) */
 export function createEntry(cardId: number, config: EntryConfig, scope: EntryScope): Promise<EntryWritten> {
   return http.post<EntryWritten>('/entries', { cardId, config, scope });
 }
@@ -89,7 +89,7 @@ export function fetchMyEntries(): Promise<MineEntryItem[]> {
   return http.get<MineEntryItem[]>('/entries/mine');
 }
 
-/** scope 双通道切换:PRIVATE→PUBLIC 挂审核;PUBLIC→PRIVATE 直接(仅作者,403 由 http 层抛) */
+/** scope 双通道切换:PRIVATE→PUBLIC 挂审核(前置审核,PENDING 对他人不可见);PUBLIC→PRIVATE 直接(仅作者) */
 export function changeEntryScope(entryId: number, scope: EntryScope): Promise<EntryWritten> {
   return http.put<EntryWritten>(`/entries/${entryId}/scope`, { scope });
 }

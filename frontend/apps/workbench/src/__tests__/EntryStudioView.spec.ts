@@ -35,11 +35,13 @@ describe('EntryStudioView(入口编排,Task 28)', () => {
     mockedFetch.mockResolvedValue([
       entry({ id: 1 }),
       entry({ id: 2, name: '学规下篇', type: 'LINK_CARD', serviceType: null, targetCardId: 9,
-        relationLabel: '深入了解', scope: 'PUBLIC', status: 'DISABLED', testTotal: 3 })
+        relationLabel: '深入了解', scope: 'PUBLIC', status: 'DISABLED', testTotal: 3 }),
+      // P6-28 前置审核:PUBLIC 待审入口状态列显示「待审核」
+      entry({ id: 3, name: '送审讲岳麓', scope: 'PUBLIC', status: 'PENDING' })
     ]);
     const wrapper = await mountView();
     const rows = wrapper.findAll('tbody tr');
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
     expect(rows[0]!.text()).toContain('讲讲岳麓书院');
     expect(rows[0]!.text()).toContain('智能体服务 · EXPLAIN');
     expect(rows[0]!.text()).toContain('岳麓书院卡');
@@ -50,6 +52,7 @@ describe('EntryStudioView(入口编排,Task 28)', () => {
     expect(rows[1]!.text()).toContain('公共区');
     expect(rows[1]!.text()).toContain('已停用');
     expect(rows[1]!.text()).toContain('3');
+    expect(rows[2]!.text()).toContain('待审核');
   });
 
   it('状态 tabs 过滤:已停用只留 DISABLED 行,计数联动', async () => {
