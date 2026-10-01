@@ -27,6 +27,8 @@ public class StubLlmGateway implements LlmGateway {
     public static final AtomicInteger CALLS = new AtomicInteger();
     private static final Queue<String> RESPONSES = new ConcurrentLinkedQueue<>();
     private static final AtomicReference<String> LAST = new AtomicReference<>();
+    /** 最近一次 complete 收到的命令（NlIntentIT 断言档位/提示词面/输入截断用） */
+    private static final AtomicReference<ChatCommand> LAST_COMMAND = new AtomicReference<>();
     /** 每次 complete 前的模拟耗时（Task 20 超时护栏 IT 用：delay > 超时阈值 → 触发 TIMEOUT） */
     private static final AtomicLong DELAY_MS = new AtomicLong();
 
@@ -35,8 +37,14 @@ public class StubLlmGateway implements LlmGateway {
         CALLS.set(0);
         RESPONSES.clear();
         LAST.set(null);
+        LAST_COMMAND.set(null);
         DELAY_MS.set(0);
         Collections.addAll(RESPONSES, responses);
+    }
+
+    /** 最近一次 complete 收到的命令；本测试内未调用过则为 null */
+    public static ChatCommand lastCommand() {
+        return LAST_COMMAND.get();
     }
 
     /** 静态配置模拟耗时（毫秒）；0 = 立即返回 */
@@ -65,6 +73,7 @@ public class StubLlmGateway implements LlmGateway {
 
     @Override
     public String complete(ChatCommand command) {
+        LAST_COMMAND.set(command);
         CALLS.incrementAndGet();
         long delay = DELAY_MS.get();
         if (delay > 0) {
