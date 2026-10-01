@@ -375,14 +375,26 @@ class AssetImportIT {
         assertThat((int) JsonPath.read(byQ.getBody(), "$.data.total")).isEqualTo(1);
         assertThat((String) JsonPath.read(byQ.getBody(), "$.data.items[0].title")).isEqualTo("《分页乙书》");
 
-        // 分页 page/size（q 圈定本方法数据集，按 id 升序）
-        ResponseEntity<String> page0 = http.exchange("/api/wb/assets?q={q}&page={p}&size={s}", HttpMethod.GET,
-                bearer(editor), String.class, "分页", 0, 2);
-        assertThat((int) JsonPath.read(page0.getBody(), "$.data.items.length()")).isEqualTo(2);
-        assertThat((int) JsonPath.read(page0.getBody(), "$.data.total")).isEqualTo(3);
+        // 分页 page/size（q 圈定本方法数据集，按 id 升序）：1 基契约（与卡片/审核端点统一）
         ResponseEntity<String> page1 = http.exchange("/api/wb/assets?q={q}&page={p}&size={s}", HttpMethod.GET,
                 bearer(editor), String.class, "分页", 1, 2);
-        assertThat((int) JsonPath.read(page1.getBody(), "$.data.items.length()")).isEqualTo(1);
+        assertThat((int) JsonPath.read(page1.getBody(), "$.data.items.length()")).isEqualTo(2);
+        assertThat((int) JsonPath.read(page1.getBody(), "$.data.total")).isEqualTo(3);
+        assertThat((int) JsonPath.read(page1.getBody(), "$.data.page")).isEqualTo(1);
+        ResponseEntity<String> page2 = http.exchange("/api/wb/assets?q={q}&page={p}&size={s}", HttpMethod.GET,
+                bearer(editor), String.class, "分页", 2, 2);
+        assertThat((int) JsonPath.read(page2.getBody(), "$.data.items.length()")).isEqualTo(1);
+        assertThat((int) JsonPath.read(page2.getBody(), "$.data.page")).isEqualTo(2);
+
+        // page 省略 → 默认 1（首页），page<1 同样夹取为 1
+        ResponseEntity<String> omitted = http.exchange("/api/wb/assets?q={q}&size={s}", HttpMethod.GET,
+                bearer(editor), String.class, "分页", 2);
+        assertThat((int) JsonPath.read(omitted.getBody(), "$.data.page")).isEqualTo(1);
+        assertThat((int) JsonPath.read(omitted.getBody(), "$.data.items.length()")).isEqualTo(2);
+        ResponseEntity<String> clamped = http.exchange("/api/wb/assets?q={q}&page={p}&size={s}", HttpMethod.GET,
+                bearer(editor), String.class, "分页", 0, 2);
+        assertThat((int) JsonPath.read(clamped.getBody(), "$.data.page")).isEqualTo(1);
+        assertThat((int) JsonPath.read(clamped.getBody(), "$.data.items.length()")).isEqualTo(2);
 
         // citationCount 批量回填：全量拉取后按本方法 id 集合逐个断言（被引=1，其余=0）
         ResponseEntity<String> all = http.exchange("/api/wb/assets?size={s}", HttpMethod.GET,

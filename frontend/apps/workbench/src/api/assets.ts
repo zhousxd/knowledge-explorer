@@ -16,12 +16,12 @@ export interface ListAssetsParams {
   size?: number;
 }
 
-/** GET /api/wb/assets:id 升序;后端 offset 分页 page 从 0 计,发送前 -1 换算 */
+/** GET /api/wb/assets:id 升序;后端 offset 分页 1 基(三端点分页契约已统一 1 基:cards/reviews/assets) */
 export async function listAssets(params: ListAssetsParams): Promise<AssetListResp> {
   const search = new URLSearchParams();
   if (params.kind) search.set('kind', params.kind);
   if (params.q) search.set('q', params.q);
-  search.set('page', String(Math.max((params.page ?? 1) - 1, 0)));
+  search.set('page', String(Math.max(params.page ?? 1, 1)));
   search.set('size', String(params.size ?? 20));
   return http.get<AssetListResp>(`/wb/assets?${search.toString()}`);
 }

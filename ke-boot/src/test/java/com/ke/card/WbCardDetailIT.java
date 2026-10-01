@@ -18,9 +18,10 @@ import com.jayway.jsonpath.JsonPath;
 import com.ke.support.ItDb;
 
 /**
- * 工作台单卡读取（编辑器回填用）：GET /api/wb/cards/{id}。
+ * 工作台单卡读取（编辑器回填用）：GET /api/wb/cards/{id} 与版本历史 GET /api/wb/cards/{id}/versions。
  * 归属与四模板编辑器前置契约：CREATOR 仅可读自己维护的卡（他人卡 403，不泄露存在性）；
  * EDITOR 可读任何卡；DRAFT 卡返回完整 content（内嵌 JSON 对象）与 sources。
+ * 版本历史与单卡详情同则：CREATOR 读他人卡版本 → 403 envelope，EDITOR → 200。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -137,5 +138,42 @@ class WbCardDetailIT {
                 bearer(editor), String.class, 999999);
         assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(404);
         assertThat((Integer) JsonPath.read(res.getBody(), "$.code")).isEqualTo(404);
+    }
+
+    // ---------- 版本历史归属（/versions 与详情同则） ----------
+
+    @Test
+    void creatorReadingOthersCardVersionsForbidden() {
+        String owner = newUserToken("13800003007", "版本卡主", "CREATOR");
+        String stranger = newUserToken("13800003008", "版本路人", "CREATOR");
+        long cardId = createTextCard(owner, "湖湘文化", "版本归属卡");
+
+        // 非维护者的 CREATOR → 403 envelope（版本历史不绕过归属校验）
+        ResponseEntity<String> denied = http.exchange("/api/wb/cards/{id}/versions", HttpMethod.GET,
+                bearer(stranger), String.class, cardId);
+        assertThat(denied.getStatusCode().value()).as("body=%s", denied.getBody()).isEqualTo(403);
+        assertThat((Integer) JsonPath.read(denied.getBody(), "$.code")).isEqualTo(403);
+        assertThat((String) JsonPath.read(denied.getBody(), "$.traceId")).isNotBlank();
+    }
+
+    @Test
+    void editorCanReadAnyCardVersionsAndOwnerSelfAllowed() {
+        String creator = newUserToken("13800003009", "版本创作者", "CREATOR");
+        String editor = newUserToken("13800003010", "版本编辑", "EDITOR");
+        long cardId = createTextCard(creator, "湖湘文化", "版本可读卡");
+
+        // EDITOR → 200：首版 1 条，versionNo 倒序，含创建人昵称
+        ResponseEntity<String> res = http.exchange("/api/wb/cards/{id}/versions", HttpMethod.GET,
+                bearer(editor), String.class, cardId);
+        assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(200);
+        assertThat((int) JsonPath.read(res.getBody(), "$.data.length()")).isEqualTo(1);
+        assertThat((int) JsonPath.read(res.getBody(), "$.data[0].versionNo")).isEqualTo(1);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data[0].createdByNickname")).isEqualTo("版本创作者");
+
+        // 维护者本人（CREATOR 自己读自己卡）→ 200
+        ResponseEntity<String> own = http.exchange("/api/wb/cards/{id}/versions", HttpMethod.GET,
+                bearer(creator), String.class, cardId);
+        assertThat(own.getStatusCode().value()).as("body=%s", own.getBody()).isEqualTo(200);
+        assertThat((int) JsonPath.read(own.getBody(), "$.data.length()")).isEqualTo(1);
     }
 }

@@ -55,10 +55,11 @@ public class AssetController {
         return ApiResponse.ok(assets.importCsv(bytes));
     }
 
+    /** 列表：1 基 offset 分页（page 缺省 1，与卡片/审核端点契约统一），size 缺省 20 ≤100 */
     @GetMapping
     public ApiResponse<AssetPage> list(@RequestParam(required = false) String kind,
                                        @RequestParam(required = false) String q,
-                                       @RequestParam(required = false) Integer page,
+                                       @RequestParam(defaultValue = "1") Integer page,
                                        @RequestParam(required = false) Integer size) {
         return ApiResponse.ok(assets.list(kind, q, page, size));
     }

@@ -146,7 +146,7 @@ export interface AssetItem {
   citationCount: number;
 }
 
-/** GET /api/wb/assets 响应 data(后端 offset 分页 page 从 0 起) */
+/** GET /api/wb/assets 响应 data(后端 offset 分页 page 从 1 起,三端点分页契约已统一 1 基) */
 export type AssetListResp = PageResp<AssetItem>;
 
 /** POST /api/wb/assets/import 的失败行(部分成功语义:按物理行号回报) */

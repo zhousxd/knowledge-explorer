@@ -31,7 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   source_meta 可空但给则须为 JSON 对象、license_expire 可空 yyyy-MM-dd），
  *   合法行入库；非法行与结构坏行（引号未闭合等，只作废该行）均跳过并按物理行号回报原因
  *   （部分成功语义，不做整文件回滚）；
- * - 列表查询：kind 精确过滤 + title ILIKE，分页（size ≤100 默认 20），
+ * - 列表查询：kind 精确过滤 + title ILIKE，分页（1 基，与卡片/审核端点契约统一；size ≤100 默认 20），
  *   expired = license_expire 非空且早于今日；citationCount 一条 GROUP BY 批量回填；
  * - citation：统一引用结构 = 资产 + 定位器 + 原文摘录（02 §4.2），
  *   objectType 白名单 {card_version, agent_run}（agent_run 为 Phase 5 预留，白名单先放行）。
@@ -183,11 +183,12 @@ public class AssetImportService {
     @Transactional(readOnly = true)
     public AssetPage list(String kind, String q, Integer page, Integer size) {
         int safeSize = size == null ? DEFAULT_SIZE : Math.min(Math.max(size, 1), MAX_SIZE);
-        int safePage = page == null ? 0 : Math.max(page, 0);
+        // 1 基（与 /wb/cards、/wb/reviews 三端点分页契约统一）：page 缺省 1，<1 夹取为 1
+        int safePage = page == null ? 1 : Math.max(page, 1);
         long total = assets.selectCount(baseWhere(kind, q));
         QueryWrapper<KnowledgeAssetEntity> rowsWrapper = baseWhere(kind, q)
                 .orderByAsc("id")
-                .last("LIMIT " + safeSize + " OFFSET " + (long) safePage * safeSize);
+                .last("LIMIT " + safeSize + " OFFSET " + (long) (safePage - 1) * safeSize);
         List<KnowledgeAssetEntity> rows = assets.selectList(rowsWrapper);
 
         // citationCount 批量回填（一条 GROUP BY，避免 N+1）

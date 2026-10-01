@@ -98,10 +98,10 @@ public class CardAdminController {
         return ApiResponse.ok(Map.of("cardId", card.getId(), "status", card.getStatus()));
     }
 
-    /** 版本历史：versionNo 倒序，含创建人昵称与时间 */
+    /** 版本历史：versionNo 倒序，含创建人昵称与时间；归属与写路径同则（CREATOR 仅自己的卡） */
     @GetMapping("/{id}/versions")
     public ApiResponse<List<CardService.VersionItem>> versions(@PathVariable long id) {
-        return ApiResponse.ok(cards.versionsOf(id));
+        return ApiResponse.ok(cards.versionsOf(id, currentUserId(), editorOrAbove()));
     }
 
     /**

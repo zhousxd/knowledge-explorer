@@ -80,7 +80,7 @@ const CITATIONS: CitationItem[] = [
 ];
 
 function mockList(items: AssetItem[] = ROWS) {
-  listAssetsMock.mockResolvedValue({ items, total: 3, page: 0, size: 20 });
+  listAssetsMock.mockResolvedValue({ items, total: 3, page: 1, size: 20 });
 }
 
 async function mountView() {
@@ -257,8 +257,7 @@ describe('AssetsView', () => {
   });
 
   it('空列表时展示导入引导文案', async () => {
-    mockList([]);
-    listAssetsMock.mockResolvedValue({ items: [], total: 0, page: 0, size: 20 });
+    listAssetsMock.mockResolvedValue({ items: [], total: 0, page: 1, size: 20 });
     const wrapper = await mountView();
     expect(wrapper.find('.el-table__empty-text').text()).toContain('通过上方按钮导入知识单元 CSV');
   });

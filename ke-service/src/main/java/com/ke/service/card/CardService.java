@@ -293,10 +293,15 @@ public class CardService {
         }
     }
 
-    /** 版本历史（工作台）：versionNo 倒序，created_by 关联 ke_user.nickname */
+    /**
+     * 版本历史（工作台）：versionNo 倒序，created_by 关联 ke_user.nickname。
+     * 归属规则与 detailForWorkbench 同则（assertWritable：EDITOR/OPERATOR 全量，
+     * CREATOR 仅自己维护的卡，否则 403）——版本内容与单卡详情同属写路径元数据，不单列规则。
+     */
     @Transactional(readOnly = true)
-    public List<VersionItem> versionsOf(long cardId) {
-        requireCard(cardId);
+    public List<VersionItem> versionsOf(long cardId, long userId, boolean editorOrAbove) {
+        CardEntity card = requireCard(cardId);
+        assertWritable(card, userId, editorOrAbove);
         List<CardVersionEntity> rows = versions.selectList(new LambdaQueryWrapper<CardVersionEntity>()
                 .eq(CardVersionEntity::getCardId, cardId)
                 .orderByDesc(CardVersionEntity::getVersionNo));
