@@ -11,6 +11,7 @@ import com.ke.infra.mapper.CardVersionMapper;
 import com.ke.infra.mapper.EntryMapper;
 import com.ke.infra.mapper.PathNodeMapper;
 import com.ke.infra.mapper.SessionMapper;
+import com.ke.service.agent.OpenQuestionService;
 import com.ke.service.common.BadRequestException;
 import com.ke.service.common.NotFoundException;
 import org.springframework.security.access.AccessDeniedException;
@@ -51,14 +52,18 @@ public class SessionService {
     private final CardVersionMapper cardVersions;
     private final CardMapper cards;
     private final EntryMapper entries;
+    /** 未决疑问聚合（FR-E09，Task 24）：断点续探 openQuestionCount 的真实数据源（P4-16 遗留兑现） */
+    private final OpenQuestionService openQuestions;
 
     public SessionService(SessionMapper sessions, PathNodeMapper pathNodes,
-                          CardVersionMapper cardVersions, CardMapper cards, EntryMapper entries) {
+                          CardVersionMapper cardVersions, CardMapper cards, EntryMapper entries,
+                          OpenQuestionService openQuestions) {
         this.sessions = sessions;
         this.pathNodes = pathNodes;
         this.cardVersions = cardVersions;
         this.cards = cards;
         this.entries = entries;
+        this.openQuestions = openQuestions;
     }
 
     // ---------- DTO ----------
@@ -171,13 +176,16 @@ public class SessionService {
                     .get(latest.getCardVersionId());
         }
         SessionMapper.SessionStatsRow stat = statsByUser(userId).get(session.getId());
+        // openQuestionCount=该会话全部讲解 run 的未决疑问真实条数（Task 24 聚合，P4-16 恒 0 的遗留兑现；
+        // latest 本身按 userId 查询，collect 无需再校验属主）
+        long openQuestionCount = openQuestions.collect(session.getId()).size();
         return new ResumeSession(
                 session.getId(),
                 titleOf(session, latestTitle),
                 latest == null ? session.getUpdatedAt() : latest.getVisitedAt(),
                 stat == null || stat.getNodeCount() == null ? 0 : stat.getNodeCount(),
                 stat == null || stat.getBranchCount() == null ? 0 : stat.getBranchCount(),
-                0L);
+                openQuestionCount);
     }
 
     /** 会话 + 完整树（selectTree 从根递归），每节点附卡题（批量 join，防 N+1）。三分语义见类注释。 */

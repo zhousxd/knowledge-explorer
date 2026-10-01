@@ -1,5 +1,6 @@
 package com.ke.service.explore;
 
+import com.ke.service.agent.OpenQuestionService;
 import com.ke.service.common.ApiResponse;
 import com.ke.service.common.NotFoundException;
 import org.springframework.http.HttpStatus;
@@ -18,14 +19,19 @@ import java.util.Map;
 /**
  * 探索会话端点族（/api/sessions，02 §7）。恒需认证（匿名 401 由 SecurityConfig 兜底，
  * 勿加 permitAll）：POST 创建 201、GET 列表、GET latest（404=无会话，P3-13 冻结契约）、
- * GET {id}（会话+树，401/403/404 三分）、POST {id}/nodes、PUT {id}/explain-level。
+ * GET {id}（会话+树，401/403/404 三分）、POST {id}/nodes、PUT {id}/explain-level、
+ * GET {id}/open-questions（未决疑问清单，FR-E09 / Task 24）。
  */
 @RestController
 public class SessionController {
 
     private final SessionService sessions;
+    private final OpenQuestionService openQuestions;
 
-    public SessionController(SessionService sessions) { this.sessions = sessions; }
+    public SessionController(SessionService sessions, OpenQuestionService openQuestions) {
+        this.sessions = sessions;
+        this.openQuestions = openQuestions;
+    }
 
     public record CreateSessionRequest(String theme, String goal) {
     }
@@ -83,6 +89,16 @@ public class SessionController {
                                                          @RequestBody ExplainLevelRequest req) {
         String level = sessions.updateExplainLevel(currentUserId(), id, req.level());
         return ApiResponse.ok(Map.of("explainLevel", level));
+    }
+
+    /**
+     * 未决疑问清单（FR-E09 / Task 24）：聚合本会话全部讲解 run 的 openQuestions（扁平、逆时序）。
+     * 先会话属主校验（三分语义与 detail 相同），聚合本身不再校验（OpenQuestionService.collect）。
+     */
+    @GetMapping("/api/sessions/{id}/open-questions")
+    public ApiResponse<Map<String, Object>> openQuestions(@PathVariable long id) {
+        sessions.ownedSession(currentUserId(), id);
+        return ApiResponse.ok(Map.of("questions", openQuestions.collect(id)));
     }
 
     private static long currentUserId() {
