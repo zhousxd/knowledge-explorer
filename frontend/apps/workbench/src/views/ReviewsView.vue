@@ -7,6 +7,7 @@ import type { ReviewItem, ReviewObjectType } from '../api/types';
 import { TEMPLATE_LABELS } from '../cardMeta';
 import { formatDateTime } from '../format';
 import { useReviewStore } from '../stores/review';
+import WbDenied from '../components/WbDenied.vue';
 
 /**
  * 审核中心(FR-O03):卡片/入口两队列,每项一张审核卡(对象 + 机器预检标签 + 内容预览 +
@@ -201,17 +202,9 @@ onMounted(() => {
       </span>
     </div>
 
-    <div
-      v-if="denied"
-      class="denied"
-    >
-      <p class="denied-title">
-        无审核权限
-      </p>
-      <p class="denied-sub">
-        审核中心仅对编辑/运营角色开放,如需权限请联系运营开通
-      </p>
-    </div>
+    <WbDenied v-if="denied">
+      审核中心仅对编辑/运营角色开放,如需权限请联系运营开通
+    </WbDenied>
 
     <template v-else>
       <p
@@ -288,6 +281,7 @@ onMounted(() => {
               class="act-reject"
               type="danger"
               plain
+              :disabled="busyId !== null"
               @click="openReject(item)"
             >
               驳回
@@ -357,10 +351,6 @@ onMounted(() => {
 .queue-tab.is-disabled { color: var(--ke-sub); background: var(--ke-bg); cursor: not-allowed; opacity: 0.6; }
 .queue-tab.is-disabled:hover { border-color: var(--ke-line-strong); color: var(--ke-sub); }
 .entry-hint { color: var(--ke-sub); font-size: 12px; }
-
-.denied { padding: 48px 0; text-align: center; }
-.denied-title { margin: 0 0 8px; color: var(--ke-ink); font-size: 16px; font-weight: 600; }
-.denied-sub { margin: 0; color: var(--ke-sub); font-size: 13px; }
 
 .load-error { margin: 0; padding: 8px 12px; border-radius: var(--ke-radius-s); background: var(--ke-danger-soft); color: var(--ke-danger); font-size: 13px; }
 .card-list { display: flex; flex-direction: column; gap: 12px; min-height: 120px; }

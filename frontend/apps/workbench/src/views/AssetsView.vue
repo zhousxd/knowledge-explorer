@@ -6,6 +6,7 @@ import { importAssets, listAssets, listCitations } from '../api/assets';
 import { ApiError } from '../api/http';
 import type { AssetImportError, AssetItem, AssetKind, CitationItem } from '../api/types';
 import { useAuthStore } from '../stores/auth';
+import WbDenied from '../components/WbDenied.vue';
 
 /**
  * 知识资源管理页(FR-O01/O02):
@@ -276,121 +277,119 @@ onMounted(() => {
       </el-collapse-item>
     </el-collapse>
 
-    <p
-      v-if="denied"
-      class="denied-tip"
-    >
+    <WbDenied v-if="denied">
       当前角色无权查看知识资源(需创作者/编辑/运营)。
-    </p>
+    </WbDenied>
 
-    <el-table
-      v-else
-      v-loading="loading"
-      class="assets-table"
-      :data="rows"
-      :empty-text="canImport ? '暂无数据,通过上方按钮导入知识单元 CSV' : '暂无知识资源'"
-    >
-      <el-table-column
-        prop="title"
-        label="标题"
-        min-width="200"
-        show-overflow-tooltip
-      />
-      <el-table-column
-        label="类型"
-        width="80"
+    <template v-else>
+      <el-table
+        v-loading="loading"
+        class="assets-table"
+        :data="rows"
+        :empty-text="canImport ? '暂无数据,通过上方按钮导入知识单元 CSV' : '暂无知识资源'"
       >
-        <template #default="{ row }">
-          <el-tag
-            class="kind-tag"
-            :type="KIND_META[row.kind as AssetKind]?.tagType ?? 'info'"
-            size="small"
-            disable-transitions
-          >
-            {{ KIND_META[row.kind as AssetKind]?.label ?? row.kind }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="来源"
-        min-width="180"
-        show-overflow-tooltip
-      >
-        <template #default="{ row }">
-          {{ jsonSummary(row.sourceMeta) }}
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="定位"
-        min-width="150"
-        show-overflow-tooltip
-      >
-        <template #default="{ row }">
-          {{ locatorSummary(row.locator) }}
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="授权"
-        width="200"
-      >
-        <template #default="{ row }">
-          <span class="license-cell">
-            <template v-if="row.license">
-              {{ row.license }}<template v-if="row.licenseExpire"> · {{ row.licenseExpire }}</template>
-            </template>
-            <template v-else>
-              —
-            </template>
+        <el-table-column
+          prop="title"
+          label="标题"
+          min-width="200"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          label="类型"
+          width="80"
+        >
+          <template #default="{ row }">
             <el-tag
-              v-if="row.expired"
-              class="expire-tag"
-              type="danger"
+              class="kind-tag"
+              :type="KIND_META[row.kind as AssetKind]?.tagType ?? 'info'"
               size="small"
               disable-transitions
             >
-              已到期
+              {{ KIND_META[row.kind as AssetKind]?.label ?? row.kind }}
             </el-tag>
-          </span>
-        </template>
-      </el-table-column>
-      <el-table-column
-        width="110"
-      >
-        <template #header>
-          <span class="cite-head">
-            被引次数
-            <el-tooltip
-              content="该知识单元被卡片版本/智能体运行引用的次数;点击数字查看引用明细"
-              placement="top"
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="来源"
+          min-width="180"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">
+            {{ jsonSummary(row.sourceMeta) }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="定位"
+          min-width="150"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">
+            {{ locatorSummary(row.locator) }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="授权"
+          width="200"
+        >
+          <template #default="{ row }">
+            <span class="license-cell">
+              <template v-if="row.license">
+                {{ row.license }}<template v-if="row.licenseExpire"> · {{ row.licenseExpire }}</template>
+              </template>
+              <template v-else>
+                —
+              </template>
+              <el-tag
+                v-if="row.expired"
+                class="expire-tag"
+                type="danger"
+                size="small"
+                disable-transitions
+              >
+                已到期
+              </el-tag>
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          width="110"
+        >
+          <template #header>
+            <span class="cite-head">
+              被引次数
+              <el-tooltip
+                content="该知识单元被卡片版本/智能体运行引用的次数;点击数字查看引用明细"
+                placement="top"
+              >
+                <KeIcon
+                  name="share"
+                  class="cite-help"
+                />
+              </el-tooltip>
+            </span>
+          </template>
+          <template #default="{ row }">
+            <button
+              class="cite-count num"
+              type="button"
+              @click="openCitations(row)"
             >
-              <KeIcon
-                name="share"
-                class="cite-help"
-              />
-            </el-tooltip>
-          </span>
-        </template>
-        <template #default="{ row }">
-          <button
-            class="cite-count num"
-            type="button"
-            @click="openCitations(row)"
-          >
-            {{ row.citationCount }}
-          </button>
-        </template>
-      </el-table-column>
-    </el-table>
+              {{ row.citationCount }}
+            </button>
+          </template>
+        </el-table-column>
+      </el-table>
 
-    <footer class="page-foot">
-      <el-pagination
-        layout="total, prev, pager, next"
-        :total="total"
-        :page-size="PAGE_SIZE"
-        :current-page="page"
-        @current-change="onPageChange"
-      />
-    </footer>
+      <footer class="page-foot">
+        <el-pagination
+          layout="total, prev, pager, next"
+          :total="total"
+          :page-size="PAGE_SIZE"
+          :current-page="page"
+          @current-change="onPageChange"
+        />
+      </footer>
+    </template>
 
     <el-drawer
       v-model="citeOpen"
@@ -453,7 +452,6 @@ onMounted(() => {
 .kind-select { width: 130px; }
 .search { width: 220px; }
 .load-error { margin: 0; padding: 8px 12px; border-radius: var(--ke-radius-s); background: var(--ke-danger-soft); color: var(--ke-danger); font-size: 13px; }
-.denied-tip { margin: 0; padding: 16px; border-radius: var(--ke-radius-s); background: var(--ke-surface); color: var(--ke-sub); font-size: 13px; }
 .import-errors { border-radius: var(--ke-radius-s); }
 .import-error-list { margin: 0; padding-left: 18px; color: var(--ke-danger); font-size: 12px; line-height: 1.9; }
 .license-cell { display: inline-flex; align-items: center; gap: 6px; }

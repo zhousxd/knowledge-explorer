@@ -109,35 +109,54 @@ function openDrawer(row: CardListItem): void {
   drawerOpen.value = true;
 }
 
+/** 行操作进行中的卡 id:期间操作按钮禁用、重复触发早退,防双击重复送审/停用 */
+const busyId = ref<number | null>(null);
+
 async function onSubmit(row: CardListItem): Promise<void> {
-  try {
-    await submitCard(row.id);
-    ElMessage.success(`已送审「${row.title}」`);
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '送审失败');
+  if (busyId.value !== null) {
     return;
   }
-  await load();
+  busyId.value = row.id;
+  try {
+    try {
+      await submitCard(row.id);
+      ElMessage.success(`已送审「${row.title}」`);
+    } catch (e) {
+      ElMessage.error(e instanceof Error ? e.message : '送审失败');
+      return;
+    }
+    await load();
+  } finally {
+    busyId.value = null;
+  }
 }
 
 async function onDisable(row: CardListItem): Promise<void> {
-  try {
-    await ElMessageBox.confirm(`停用后探索端将不再展示「${row.title}」,确定停用?`, '停用卡片', {
-      type: 'warning',
-      confirmButtonText: '停用',
-      cancelButtonText: '取消'
-    });
-  } catch {
-    return; // 用户取消
-  }
-  try {
-    await disableCard(row.id);
-    ElMessage.success(`已停用「${row.title}」`);
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '停用失败');
+  if (busyId.value !== null) {
     return;
   }
-  await load();
+  busyId.value = row.id;
+  try {
+    try {
+      await ElMessageBox.confirm(`停用后探索端将不再展示「${row.title}」,确定停用?`, '停用卡片', {
+        type: 'warning',
+        confirmButtonText: '停用',
+        cancelButtonText: '取消'
+      });
+    } catch {
+      return; // 用户取消
+    }
+    try {
+      await disableCard(row.id);
+      ElMessage.success(`已停用「${row.title}」`);
+    } catch (e) {
+      ElMessage.error(e instanceof Error ? e.message : '停用失败');
+      return;
+    }
+    await load();
+  } finally {
+    busyId.value = null;
+  }
 }
 
 /** 编辑走独立路由页(四模板编辑器):非 DISABLED 行均可进入,PUBLISHED 保存即新版本 */
@@ -297,6 +316,7 @@ onMounted(() => {
             class="act-submit"
             link
             type="primary"
+            :disabled="busyId !== null"
             @click.stop="onSubmit(row)"
           >
             送审
@@ -306,6 +326,7 @@ onMounted(() => {
             class="act-disable"
             link
             type="danger"
+            :disabled="busyId !== null"
             @click.stop="onDisable(row)"
           >
             停用

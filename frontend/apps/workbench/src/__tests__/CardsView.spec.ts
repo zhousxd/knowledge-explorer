@@ -157,6 +157,52 @@ describe('CardsView', () => {
     expect(listCardsMock).toHaveBeenCalledTimes(1);
   });
 
+  it('送审防双击:pending 期间操作按钮禁用,重复触发不重复调用,settle 后恢复', async () => {
+    let resolveSubmit: (v: unknown) => void = () => {};
+    submitCardMock.mockImplementationOnce(() => new Promise((resolve) => { resolveSubmit = resolve; }));
+    const wrapper = await mountView();
+    listCardsMock.mockClear();
+    const row = wrapper.findAll('.el-table__row')[2];
+    const submitBtn = row?.find('.act-submit');
+
+    await submitBtn?.trigger('click');
+    // 请求未 settle:submitCard 已调用 1 次,送审/停用按钮均禁用
+    expect(submitCardMock).toHaveBeenCalledTimes(1);
+    expect(submitBtn?.attributes('disabled')).toBeDefined();
+    expect(wrapper.find('.act-disable').attributes('disabled')).toBeDefined();
+
+    // 双击/点击他行按钮:busy 守卫早退,不重复调用
+    await submitBtn?.trigger('click');
+    await wrapper.find('.act-disable').trigger('click');
+    expect(submitCardMock).toHaveBeenCalledTimes(1);
+    expect(disableCardMock).not.toHaveBeenCalled();
+
+    // settle(含列表重拉)后守卫释放,按钮恢复可用
+    resolveSubmit({ cardId: 3, status: 'PENDING' });
+    await flushPromises();
+    expect(wrapper.findAll('.el-table__row')[2]?.find('.act-submit').attributes('disabled')).toBeUndefined();
+  });
+
+  it('停用防双击:确认框挂起期间重复点击不叠加弹框', async () => {
+    let resolveConfirm: (v: string) => void = () => {};
+    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm')
+      .mockImplementation(() => new Promise((resolve) => { resolveConfirm = resolve; }));
+    const wrapper = await mountView();
+    const disableBtn = wrapper.findAll('.el-table__row')[0]?.find('.act-disable');
+
+    await disableBtn?.trigger('click');
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(disableBtn?.attributes('disabled')).toBeDefined();
+
+    // 确认框还开着再点:busy 守卫早退,不叠加第二次确认框
+    await disableBtn?.trigger('click');
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+
+    resolveConfirm('confirm');
+    await flushPromises();
+    expect(disableCardMock).toHaveBeenCalledTimes(1);
+  });
+
   it('已发布行「停用」确认后调用 disableCard,取消则不调用', async () => {
     const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm');
     const wrapper = await mountView();

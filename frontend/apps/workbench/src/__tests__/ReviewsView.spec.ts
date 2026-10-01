@@ -39,7 +39,7 @@ const ITEM_BAD_CONTENT: ReviewItem = {
   status: 'PENDING',
   createdAt: '2026-09-29T09:00:00+08:00',
   summary: '书院对比 · COMPARE · 创作者乙',
-  precheck: { contentValid: false, hasSources: true },
+  precheck: { contentValid: false, hasSources: false },
   contentPreview: '岳麓书院 vs 石鼓书院 · 始建年代'
 };
 
@@ -92,11 +92,12 @@ describe('ReviewsView', () => {
     expect(first.find('.kv').text()).toContain('创作者甲');
     expect(first.find('.kv').text()).toContain('2026-09-30 10:00');
 
-    // contentValid=false → 「内容可解析」灰态(info),hasSources=true 仍绿
+    // contentValid=false → 「内容可解析」灰态(info);hasSources=false → 「来源齐备」警示(warning)
     const secondTags = cards[1].findAll('.precheck .el-tag');
     expect(secondTags[0]?.classes()).toContain('el-tag--info');
     expect(secondTags[0]?.text()).toBe('内容可解析');
-    expect(secondTags[1]?.classes()).toContain('el-tag--success');
+    expect(secondTags[1]?.classes()).toContain('el-tag--warning');
+    expect(secondTags[1]?.text()).toBe('来源齐备');
   });
 
   it('两队列 tabs:入口 tab 禁用并注明后续版本开放,点击不切换', async () => {
@@ -129,30 +130,31 @@ describe('ReviewsView', () => {
     let resolveApprove: (v: unknown) => void = () => {};
     approveMock.mockImplementationOnce(() => new Promise((resolve) => { resolveApprove = resolve; }));
     const wrapper = await mountView();
-    const approveBtn = wrapper.findAll('.review-card')[0]?.find('.act-approve');
-
-    await approveBtn?.trigger('click');
-    // 请求未 settle:approve 已调用 1 次,通过钮禁用
-    expect(approveMock).toHaveBeenCalledTimes(1);
-    expect(approveBtn?.attributes('disabled')).toBeDefined();
-
-    // 打开另一卡的驳回框并填好意见:确认驳回仍被 busy 守卫禁用
+    // busy 前先打开卡 2 的驳回框并填好意见(入口可用)
     const card2 = wrapper.findAll('.review-card')[1];
     await card2?.find('.act-reject').trigger('click');
     await card2?.find('.reject-box textarea').setValue('意见');
+
+    const approveBtn = wrapper.findAll('.review-card')[0]?.find('.act-approve');
+    await approveBtn?.trigger('click');
+    // 请求未 settle:approve 已调用 1 次,通过钮/驳回入口/确认驳回均禁用
+    expect(approveMock).toHaveBeenCalledTimes(1);
+    expect(approveBtn?.attributes('disabled')).toBeDefined();
+    expect(card2?.find('.act-reject').attributes('disabled')).toBeDefined();
     const confirmBtn = card2?.find('.confirm-reject');
     expect(confirmBtn?.attributes('disabled')).toBeDefined();
 
-    // 双击/切到他卡确认:不再发第二次请求(approve 与 reject 均不重放)
+    // 双击/确认:disabled 拦截 + busy 守卫早退,approve 与 reject 均不重放
     await approveBtn?.trigger('click');
     await confirmBtn?.trigger('click');
     expect(approveMock).toHaveBeenCalledTimes(1);
     expect(rejectMock).not.toHaveBeenCalled();
 
-    // settle(含队列重拉)后守卫释放,按钮恢复可用
+    // settle(含队列重拉)后守卫释放,通过/驳回两钮恢复可用
     resolveApprove({});
     await flushPromises();
     expect(wrapper.findAll('.review-card')[0]?.find('.act-approve').attributes('disabled')).toBeUndefined();
+    expect(wrapper.findAll('.review-card')[0]?.find('.act-reject').attributes('disabled')).toBeUndefined();
   });
 
   it('驳回三步:意见为空确认禁用,填写后确认调 reject 带 notes 并刷新', async () => {
@@ -178,18 +180,19 @@ describe('ReviewsView', () => {
     expect(listReviewsMock).toHaveBeenCalledWith({ status: 'PENDING', objectType: 'CARD', page: 1, size: 20 });
   });
 
-  it('403 无审核权限:渲染权限空态,不渲染审核卡', async () => {
+  it('403 无审核权限:渲染共用权限空态(WbDenied),不渲染审核卡', async () => {
     listReviewsMock.mockRejectedValue(new ApiError(403, '禁止访问', 't-403'));
     const wrapper = await mountView();
-    expect(wrapper.find('.denied').exists()).toBe(true);
-    expect(wrapper.text()).toContain('无审核权限');
+    expect(wrapper.find('.wb-denied').exists()).toBe(true);
+    expect(wrapper.text()).toContain('无访问权限');
+    expect(wrapper.text()).toContain('审核中心仅对编辑/运营角色开放');
     expect(wrapper.findAll('.review-card')).toHaveLength(0);
   });
 
   it('加载失败(非 403)显示错误行内提示', async () => {
     listReviewsMock.mockRejectedValue(new ApiError(500, '服务异常', 't-5'));
     const wrapper = await mountView();
-    expect(wrapper.find('.denied').exists()).toBe(false);
+    expect(wrapper.find('.wb-denied').exists()).toBe(false);
     expect(wrapper.find('.load-error').text()).toContain('服务异常');
   });
 });

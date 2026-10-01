@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import ElementPlus from 'element-plus';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AssetsView from '../views/AssetsView.vue';
+import { ApiError } from '../api/http';
 import type { AssetItem, CitationItem, MeResp } from '../api/types';
 
 const {
@@ -260,5 +261,15 @@ describe('AssetsView', () => {
     listAssetsMock.mockResolvedValue({ items: [], total: 0, page: 1, size: 20 });
     const wrapper = await mountView();
     expect(wrapper.find('.el-table__empty-text').text()).toContain('通过上方按钮导入知识单元 CSV');
+  });
+
+  it('403 无权限:渲染共用权限空态(WbDenied),表格与分页器不残留', async () => {
+    listAssetsMock.mockRejectedValue(new ApiError(403, '禁止访问', 't-403'));
+    const wrapper = await mountView();
+    expect(wrapper.find('.wb-denied').exists()).toBe(true);
+    expect(wrapper.text()).toContain('无访问权限');
+    expect(wrapper.text()).toContain('当前角色无权查看知识资源');
+    expect(wrapper.find('.assets-table').exists()).toBe(false);
+    expect(wrapper.find('.page-foot').exists()).toBe(false);
   });
 });
