@@ -85,8 +85,8 @@ function onResume() {}
       今日推荐入口 <span class="ln" />
     </div>
     <button
-      v-for="(entry, index) in HOME_ENTRIES"
-      :key="index"
+      v-for="entry in HOME_ENTRIES"
+      :key="entry.name"
       type="button"
       class="entry"
       @click="openEntry"
@@ -117,7 +117,7 @@ function onResume() {}
 .search { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-l); background: var(--ke-surface); transition: border-color var(--ke-dur-fast) var(--ke-ease), box-shadow var(--ke-dur-fast) var(--ke-ease); }
 .search:focus-within { border-color: var(--ke-primary); box-shadow: var(--ke-focus); }
 .s-icon { width: 18px; height: 18px; color: var(--ke-sub-2); }
-.s-input { flex: 1; min-width: 0; height: 100%; border: none; outline: none; background: transparent; color: var(--ke-ink); font-size: 13.5px; }
+.s-input { flex: 1; min-width: 0; height: 100%; border: none; outline: none; background: transparent; color: var(--ke-ink); font-size: 14px; }
 .s-input::placeholder { color: var(--ke-sub-2); }
 .sec-title { display: flex; align-items: center; gap: 6px; margin: 16px 0 6px; font-size: 13px; font-weight: 700; color: var(--ke-ink); }
 .sec-title .ln { flex: 1; height: 1px; background: var(--ke-line); }

@@ -123,12 +123,33 @@ describe('Home(经真实路由宿主)', () => {
     expect(wrapper.text()).toContain('岳麓书院'); // 占位页透传展示
   });
 
-  it('无 token 访问受保护路由跳转登录页', async () => {
+  it('未登录访问公开页 /home 放行,并渲染登录引导细条', async () => {
+    // beforeEach 已清 token;/home 标记 meta.public,守卫应放行
     const pinia = createPinia();
     setActivePinia(pinia);
-    // beforeEach 已清 token,守卫应把 /home 拦回 /login
     await router.push('/login');
     await router.push('/home');
-    expect(router.currentRoute.value.path).toBe('/login');
+    const wrapper = mount(App, { global: { plugins: [pinia, router] } });
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe('/home');
+    expect(wrapper.find('.login-hint').text()).toBe('登录后记录你的探索路径');
+  });
+
+  it('无 token 访问受保护路由(未标 public)跳转登录页', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    // 全部现存路由均已公开:临时挂一条未标 public 的路由,模拟 Phase 4 的 /path 等个性化页
+    const removeRoute = router.addRoute({
+      path: '/tmp-protected',
+      component: { render: () => null },
+      meta: { title: '受保护' }
+    });
+    try {
+      await router.push('/login');
+      await router.push('/tmp-protected');
+      expect(router.currentRoute.value.path).toBe('/login');
+    } finally {
+      removeRoute();
+    }
   });
 });
