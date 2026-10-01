@@ -30,7 +30,8 @@ import java.util.Map;
 /**
  * 智能体运行端点族（/api/agent/runs，FR-S02/S04）。恒需认证（匿名 401 由 SecurityConfig 兜底）：
  * POST 提交讲解（202 {runId}，异步执行）、GET {id} 轮询（属主校验：有会话走会话属主，
- * 无会话 run 解析 input_json.userId 对比——不冗余建列，钉子②决策）、GET ?nodeId= 节点 run
+ * 无会话 run 解析 input_json.userId 对比——不冗余建列，钉子②决策；DONE 响应附 submitContext
+ * =input_json 白名单投影，供前端刷新后重建追问/重试，review P5-FIX）、GET ?nodeId= 节点 run
  * 简版列表（Task 22 结果页消费）。属主不符 403，不存在 404。
  */
 @RestController
@@ -63,7 +64,7 @@ public class RunController {
 
     /** serviceType 随响应带出（Task 23：前端 DONE 态按 EXPLAIN/COMPARE 分流结果渲染） */
     public record RunView(long runId, String status, String serviceType, String model, Integer latencyMs,
-                          String error, JsonNode artifact) {
+                          String error, JsonNode artifact, JsonNode submitContext) {
     }
 
     /** 节点 run 简版行（Task 22 结果页列表） */
@@ -79,7 +80,7 @@ public class RunController {
         return ApiResponse.ok(Map.of("runId", runId));
     }
 
-    /** 运行详情（轮询）：终态 DONE 时带 artifact.content_json 对象 */
+    /** 运行详情（轮询）：终态 DONE 时带 artifact.content_json 对象；submitContext 供前端刷新后重建追问/重试 */
     @GetMapping("/api/agent/runs/{id}")
     public ApiResponse<RunView> get(@PathVariable long id) {
         AgentRunEntity run = runs.selectById(id);
@@ -88,7 +89,7 @@ public class RunController {
         }
         requireRunOwner(currentUserId(), run);
         return ApiResponse.ok(new RunView(run.getId(), run.getStatus(), run.getServiceType(), run.getModel(),
-                run.getLatencyMs(), run.getError(), artifactOf(run)));
+                run.getLatencyMs(), run.getError(), artifactOf(run), submitContextOf(run)));
     }
 
     /** 该节点的讲解 run 列表（id 升序；节点不存在 404、非属主 403） */
@@ -110,6 +111,33 @@ public class RunController {
     }
 
     // ---------- 内部 ----------
+
+    /**
+     * 提交上下文读模型（review P5-FIX：结果页刷新丢路由 state 后重建追问/重试用）。
+     * 从 input_json 投影白名单字段——不回显整个 input_json（userId 冗余其中，最小暴露面）；
+     * 仅属主可达（GET 已过 {@link #requireRunOwner}），非属主场景不可见。
+     * 解析失败（旧行/损坏 JSON）或缺关键字段 → null（jackson non_null 整键省略）。
+     */
+    public record SubmitContext(Long cardVersionId, Long sessionId, Long nodeId,
+                                String serviceType, Long parentRunId, String question) {
+    }
+
+    private JsonNode submitContextOf(AgentRunEntity run) {
+        if (run.getInputJson() == null || run.getInputJson().isBlank()) {
+            return null;
+        }
+        try {
+            ExplainService.ExplainInput input =
+                    objectMapper.readValue(run.getInputJson(), ExplainService.ExplainInput.class);
+            if (input.cardVersionId() == null) {
+                return null; // 无 cardVersionId 的上下文不足以重建提交，视同无效
+            }
+            return objectMapper.valueToTree(new SubmitContext(input.cardVersionId(), input.sessionId(),
+                    input.nodeId(), input.serviceType(), input.parentRunId(), input.question()));
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     /**
      * 属主三分：有会话 → 会话属主（会话被删/非属主一律 403 不区分泄露）；

@@ -173,6 +173,18 @@ class ExplainPipelineIT {
                 "select count(*) from citation where object_type='agent_run' and object_id=? and asset_id=?",
                 Integer.class, runId, assetId);
         assertThat(citationRows).isEqualTo(1);
+
+        // review P5-FIX:submitContext = input_json 白名单投影（属主可见），刷新后前端重建追问/重试
+        assertThat((Integer) JsonPath.read(res.getBody(), "$.data.submitContext.cardVersionId"))
+                .isEqualTo((int) versionId);
+        assertThat(((Number) JsonPath.read(res.getBody(), "$.data.submitContext.sessionId")).longValue())
+                .isEqualTo(ids[0]);
+        assertThat(((Number) JsonPath.read(res.getBody(), "$.data.submitContext.nodeId")).longValue())
+                .isEqualTo(ids[1]);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.submitContext.serviceType")).isEqualTo("EXPLAIN");
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.submitContext.question")).isEqualTo("岳麓书院的历史？");
+        // 投影白名单外字段不回显（userId 冗余在 input_json，最小暴露面）
+        assertThat(res.getBody()).doesNotContain("\"userId\"");
     }
 
     @Test
@@ -202,6 +214,24 @@ class ExplainPipelineIT {
         ResponseEntity<String> res = awaitTerminal(token, runId);
         assertThat((String) JsonPath.read(res.getBody(), "$.data.status")).isEqualTo("FAILED");
         assertThat((String) JsonPath.read(res.getBody(), "$.data.error")).isNotBlank();
+        assertThat(StubLlmGateway.CALLS.get()).isEqualTo(2);
+    }
+
+    @Test
+    void emptySectionsStructureGuardFailsAfterRetry() {
+        // review P5-FIX 最小结构守卫：绑定成功但 sections 空数组（LLM 返回合法 JSON 却没有正文形状）
+        // → 结构非法与绑定失败同路：重试 1 次（共 2 调），仍非法 → FAILED 且 error 含「讲解结构不完整」，
+        // 不再落 DONE 空结果页
+        long versionId = insertPublishedCard("空段守卫卡", null);
+        String token = newUserToken("13811100017", "午", "EXPLORER");
+        long[] ids = newSessionWithNode(token, versionId);
+
+        StubLlmGateway.reset("{\"summary\":\"x\",\"sections\":[]}");
+        long runId = submitRun(token, versionId, ids[0], ids[1], "结构非法怎么算？", "SIMPLE");
+
+        ResponseEntity<String> res = awaitTerminal(token, runId);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.status")).isEqualTo("FAILED");
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.error")).contains("讲解结构不完整");
         assertThat(StubLlmGateway.CALLS.get()).isEqualTo(2);
     }
 
@@ -379,6 +409,12 @@ class ExplainPipelineIT {
         // input_json 是缩进美化 JSON：用 JsonPath 取键断言，不锚定序列化排版
         String inputJson = jdbc.queryForObject("select input_json::text from agent_run where id=?", String.class, followId);
         assertThat((Integer) JsonPath.read(inputJson, "$.parentRunId")).isEqualTo((int) parentId);
+
+        // review P5-FIX:追问 run 的 submitContext 投影含追问链字段
+        ResponseEntity<String> followDetail = http.exchange("/api/agent/runs/" + followId,
+                HttpMethod.GET, bearer(token), String.class);
+        assertThat((Integer) JsonPath.read(followDetail.getBody(), "$.data.submitContext.parentRunId"))
+                .isEqualTo((int) parentId);
     }
 
     @Test

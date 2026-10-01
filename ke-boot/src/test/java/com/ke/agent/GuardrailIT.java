@@ -210,19 +210,23 @@ class GuardrailIT {
     @Test
     void sensitiveWordFiltered() {
         // Stub 输出含词表词（「毒品交易」摘要 + 「枪支买卖」正文）→ 等长 '*' 替换；
-        // 审计旁注 artifact.audit.filtered = 命中总次数（2）
+        // review P5-FIX 补洞：openQuestions/evidenceGaps 同为 LLM 自由文本（结果页渲染 +
+        // open-questions 聚合），一并过滤；审计旁注 artifact.audit.filtered = 命中总次数（4）
         long versionId = insertPublishedCard("敏感词卡", null);
         String token = newUserToken("13833300005", "戊");
         long[] ids = newSessionWithNode(token, versionId);
 
-        StubLlmGateway.reset("{\"summary\":\"摘要提到毒品交易\",\"sections\":[{\"body\":\"正文含枪支买卖线索\",\"claimType\":\"GEN\",\"citations\":[]}],\"openQuestions\":[],\"evidenceGaps\":[]}");
+        StubLlmGateway.reset("{\"summary\":\"摘要提到毒品交易\",\"sections\":[{\"body\":\"正文含枪支买卖线索\",\"claimType\":\"GEN\",\"citations\":[]}],"
+                + "\"openQuestions\":[\"毒品交易如何稽查?\"],\"evidenceGaps\":[\"缺少枪支买卖案卷\"]}");
         long runId = submitOk(token, versionId, ids, "会输出敏感词吗？");
 
         ResponseEntity<String> res = awaitTerminal(token, runId);
         assertThat((String) JsonPath.read(res.getBody(), "$.data.status")).isEqualTo("DONE");
         assertThat((String) JsonPath.read(res.getBody(), "$.data.artifact.output.summary")).isEqualTo("摘要提到****");
         assertThat((String) JsonPath.read(res.getBody(), "$.data.artifact.output.sections[0].body")).isEqualTo("正文含****线索");
-        assertThat((Integer) JsonPath.read(res.getBody(), "$.data.artifact.audit.filtered")).isEqualTo(2);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.artifact.output.openQuestions[0]")).isEqualTo("****如何稽查?");
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.artifact.output.evidenceGaps[0]")).isEqualTo("缺少****案卷");
+        assertThat((Integer) JsonPath.read(res.getBody(), "$.data.artifact.audit.filtered")).isEqualTo(4);
     }
 
     @Test

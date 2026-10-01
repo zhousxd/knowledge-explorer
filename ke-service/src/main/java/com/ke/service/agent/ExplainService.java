@@ -60,8 +60,10 @@ import java.util.concurrent.TimeoutException;
 
 /**
  * 讲解服务流水线（FR-S02 / 02 §5.2）：受限检索 → 提示词组装 → LLM（{@code ke.agent.llm-timeout-seconds}
- * 超时护栏，超时置 TIMEOUT 不重试）→ Jackson 绑定 {@link ExplainOutput}（失败自动重试 1 次）→
- * 后处理链（Task 20）：敏感词过滤（FR-S10，summary+各段 body 命中替换等长 *）→ 引用校验
+ * 超时护栏，超时置 TIMEOUT 不重试）→ Jackson 绑定 {@link ExplainOutput} + 最小结构守卫
+ * （summary 必填、sections 非空，非法走重试 1 次 → FAILED）→
+ * 后处理链（Task 20）：敏感词过滤（FR-S10，summary/各段 body/openQuestions/evidenceGaps
+ * 命中替换等长 *）→ 引用校验
  * （FR-S05，{@link CitationSanitizer}：越界引用剔除 + FACT 空引用降级）→ 生成标识 disclaimer（R8）+
  * 审计旁注 audit 落 artifact → citation(object_type=agent_run) 落库 → 回写 agent_run(DONE, artifact_ids)。
  * 任何异常置 FAILED(error=消息)。提交前置配额（FR-S04，{@link QuotaService#tryConsume}，
@@ -302,7 +304,7 @@ public class ExplainService {
                     if (compare) {
                         compareOutput = readCompareOutput(raw);
                     } else {
-                        output = objectMapper.readValue(stripFences(raw), ExplainOutput.class);
+                        output = readExplainOutput(raw);
                     }
                 } catch (LlmTimeoutException e) {
                     // 超时不重试：LLM 已耗满时间预算，重试只会把等待翻倍；置 TIMEOUT 终态（用户可重新提交新 run）
@@ -326,6 +328,21 @@ public class ExplainService {
             log.warn("explain run {} failed: {}", runId, e.getMessage());
             fail(runId, e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
         }
+    }
+
+    /**
+     * 讲解输出绑定 + 最小结构守卫（review P5-FIX，与 {@link #readCompareOutput} 同则）：
+     * 绑定成功 ≠ 结构可用——summary null / sections null 或空会让 DONE 落出无可渲染正文的结果页
+     * （前端空页）。断言非法抛 IllegalArgumentException，与 JSON 绑定失败同路：重试 1 次，
+     * 仍非法 → FAILED「讲解输出解析失败…:讲解结构不完整…」。无资料路径共用公共提示词的
+     * sections 格式要求（GEN 段也必须给），故同样受此守卫。
+     */
+    private ExplainOutput readExplainOutput(String raw) throws JsonProcessingException {
+        ExplainOutput output = objectMapper.readValue(stripFences(raw), ExplainOutput.class);
+        if (output.summary() == null || output.sections() == null || output.sections().isEmpty()) {
+            throw new IllegalArgumentException("讲解结构不完整:summary 必填且 sections 至少 1 段");
+        }
+        return output;
     }
 
     /**
@@ -359,7 +376,9 @@ public class ExplainService {
     /** 终态回写：artifact(EXPLAIN, content_json={output,sources,disclaimer,audit}) + citation 落表 + DONE/artifact_ids */
     private void finish(long runId, long start, ExplainInput input,
                         ExplainOutput output, Map<Long, String> materials) {
-        // Task 20 后处理链 ①敏感词过滤（FR-S10）：summary + 各段 body 命中词表 → 等长 '*' 替换，命中数留审计
+        // Task 20 后处理链 ①敏感词过滤（FR-S10）：summary + 各段 body 命中词表 → 等长 '*' 替换，命中数留审计；
+        // review P5-FIX 补洞：openQuestions/evidenceGaps 同为 LLM 自由文本（RunView 渲染 + open-questions
+        // 聚合复用），一并过滤，命中数计入 audit.filtered
         SensitiveWordFilter.FilterResult summary = sensitiveWords.filter(output.summary());
         List<ExplainOutput.Section> cleanedSections = new ArrayList<>();
         int filtered = summary.hits();
@@ -373,8 +392,12 @@ public class ExplainService {
                 cleanedSections.add(new ExplainOutput.Section(body.text(), section.claimType(), section.citations()));
             }
         }
+        List<String> cleanedQuestions = new ArrayList<>();
+        filtered += filterTexts(output.openQuestions(), cleanedQuestions);
+        List<String> cleanedGaps = new ArrayList<>();
+        filtered += filterTexts(output.evidenceGaps(), cleanedGaps);
         ExplainOutput cleaned = new ExplainOutput(summary.text(), cleanedSections,
-                output.openQuestions(), output.evidenceGaps());
+                cleanedQuestions, cleanedGaps);
 
         // ②引用校验（FR-S05，Task 19）：LLM 绑定成功后、落 artifact/citation 之前——
         // 越界引用剔除（只剩本次检索资料内的 id），FACT 空引用降级 SYNTHESIS（段落档位自表达，不加顶层标志）
