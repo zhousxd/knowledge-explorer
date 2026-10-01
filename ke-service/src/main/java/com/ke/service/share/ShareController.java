@@ -1,6 +1,9 @@
 package com.ke.service.share;
 
 import com.ke.service.common.ApiResponse;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -28,15 +31,20 @@ public class ShareController {
         this.shares = shares;
     }
 
-    /** 创建分享请求：objectType MVP 仅 'SESSION'；nodeIds=勾选入快照的会话节点；title/summary 可选 */
+    /**
+     * 创建分享请求：objectType MVP 仅 'SESSION'；nodeIds=勾选入快照的会话节点。
+     * title 必填 ≤60、summary 可选 ≤200（P7 复审 FIX-NOW：对齐前端 maxlength 60/200，
+     * 卡住「认证用户 POST MB 级标题 → 匿名 GET /s/* 无限读取」的放大面；校验失败 400 envelope）。
+     */
     public record CreateShareRequest(String objectType, Long objectId, List<Long> nodeIds,
-                                     String title, String summary) {
+                                     @NotBlank @Size(max = 60) String title,
+                                     @Size(max = 200) String summary) {
     }
 
     /** 创建：201 {token, url:/s/{token}}（校验失败 400 / 非属主 403 / 会话不存在 404，见 ShareService） */
     @PostMapping("/api/shares")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<Map<String, Object>> create(@RequestBody CreateShareRequest req) {
+    public ApiResponse<Map<String, Object>> create(@Valid @RequestBody CreateShareRequest req) {
         ShareService.ShareCreated created = shares.create(currentUserId(),
                 new ShareService.CreateCommand(req.objectType(), req.objectId(), req.nodeIds(),
                         req.title(), req.summary()));

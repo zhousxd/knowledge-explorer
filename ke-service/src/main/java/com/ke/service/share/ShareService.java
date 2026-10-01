@@ -108,7 +108,11 @@ public class ShareService {
 
     // ---------- DTO ----------
 
-    /** 创建命令（objectType MVP 仅 'SESSION'；title/summary 可选，空白视同未提供） */
+    /**
+     * 创建命令（objectType MVP 仅 'SESSION'）。必填/长度卡口在 controller 层
+     * （{@code @NotBlank @Size(max=60)} title / {@code @Size(max=200)} summary，P7 复审 FIX），
+     * 本层保持防御性宽松（空白视同未提供 → 快照标题走 goal/默认回退）。
+     */
     public record CreateCommand(String objectType, Long objectId, List<Long> nodeIds, String title, String summary) {
     }
 

@@ -265,7 +265,7 @@ class ShareIT {
 
         long sid = createSession(reader, "academy", "撤销探索");
         long n1 = addNode(reader, sid, versionId, null, "撤销前问一句");
-        String token = createShare(reader, sid, "[" + n1 + "]", null, null);
+        String token = createShare(reader, sid, "[" + n1 + "]", "撤销分享", null);
         assertThat(anonView(token).getStatusCode().value()).isEqualTo(200);
 
         ResponseEntity<String> revoked = revoke(reader, token);
@@ -294,7 +294,7 @@ class ShareIT {
         long n2 = addNode(reader, sid, versionId, n1, "不想分享的中间一问");
         long n3 = addNode(reader, sid, null, n2, "第三问");
 
-        String token = createShare(reader, sid, "[" + n1 + "," + n3 + "]", null, null);
+        String token = createShare(reader, sid, "[" + n1 + "," + n3 + "]", "裁剪分享", null);
         ResponseEntity<String> view = anonView(token);
         assertThat(view.getStatusCode().value()).isEqualTo(200);
         assertThat(((java.util.List<Object>) JsonPath.read(view.getBody(), "$.data.snapshot.nodes")).size()).isEqualTo(2);
@@ -324,7 +324,7 @@ class ShareIT {
                 "select id from card_version where card_id=? order by id limit 1", Long.class, draftCardId);
         long n2 = insertNodeRaw(sid, draftVersionId, "草稿卡的追问");
 
-        String token = createShare(reader, sid, "[" + n1 + "," + n2 + "]", null, null);
+        String token = createShare(reader, sid, "[" + n1 + "," + n2 + "]", "占位分享", null);
         ResponseEntity<String> view = anonView(token);
         assertThat(view.getStatusCode().value()).as("draft view body=%s", view.getBody()).isEqualTo(200);
         assertThat(((java.util.List<Object>) JsonPath.read(view.getBody(), "$.data.snapshot.nodes")).size()).isEqualTo(2);
@@ -367,14 +367,15 @@ class ShareIT {
                 "{\"objectType\":\"SESSION\",\"objectId\":" + sidB + ",\"nodeIds\":[999999]}", userB), String.class);
         assertThat(ghost.getStatusCode().value()).as("ghost body=%s", ghost.getBody()).isEqualTo(400);
 
-        // 空选择集 → 400「请至少选择一个节点」
+        // 空选择集 → 400「请至少选择一个节点」（带合规 title，让校验穿过 bean 层到达勾选集规则）
         ResponseEntity<String> empty = http.postForEntity("/api/shares", jsonWithToken(
-                "{\"objectType\":\"SESSION\",\"objectId\":" + sidB + ",\"nodeIds\":[]}", userB), String.class);
+                "{\"objectType\":\"SESSION\",\"objectId\":" + sidB + ",\"nodeIds\":[],\"title\":\"空选分享\"}",
+                userB), String.class);
         assertThat(empty.getStatusCode().value()).as("empty body=%s", empty.getBody()).isEqualTo(400);
         assertThat((String) JsonPath.read(empty.getBody(), "$.message")).contains("请至少选择一个节点");
 
         // 同一节点由其会话属主分享 → 放行（400 判定按会话归属，不是节点形状）
-        assertThat(createShare(userA, sidA, "[" + nodeA + "]", null, null)).hasSize(21);
+        assertThat(createShare(userA, sidA, "[" + nodeA + "]", "外节分享", null)).hasSize(21);
     }
 
     /** 撤销属主校验：他人 DELETE → 403（不泄露可操作性）；属主撤销成功；匿名 DELETE → 401 */
@@ -388,7 +389,7 @@ class ShareIT {
 
         long sid = createSession(owner, "academy", "越权探索");
         long n1 = addNode(owner, sid, versionId, null, "越权问一句");
-        String token = createShare(owner, sid, "[" + n1 + "]", null, null);
+        String token = createShare(owner, sid, "[" + n1 + "]", "越权分享", null);
 
         ResponseEntity<String> other = revoke(stranger, token);
         assertThat(other.getStatusCode().value()).as("other revoke body=%s", other.getBody()).isEqualTo(403);
@@ -402,6 +403,42 @@ class ShareIT {
         assertThat(anonView(token).getStatusCode().value()).isEqualTo(404);
     }
 
+    /** P7 复审 FIX-NOW：title 必填 ≤60、summary ≤200（对齐前端 maxlength 60/200）——超长/缺失 → 400 envelope，
+     *  卡住「认证用户 POST MB 级标题 → 匿名 GET /s/* 无限读取」的放大面 */
+    @Test
+    void shareTitleLengthValidated() {
+        String creator = newUserToken("13800170045", "长度卡创作", "CREATOR");
+        String editor = newUserToken("13800170046", "长度卡编辑", "EDITOR");
+        String reader = newUserToken("13800170047", "长度分享者", "EXPLORER");
+        long versionId = publishCard(creator, editor, "长度卡", "长度摘要")[1];
+
+        long sid = createSession(reader, "academy", "长度探索");
+        long n1 = addNode(reader, sid, versionId, null, "长度问一句");
+
+        // 61 字标题 → 400（@Size(max=60)）
+        ResponseEntity<String> longTitle = http.postForEntity("/api/shares", jsonWithToken(
+                "{\"objectType\":\"SESSION\",\"objectId\":" + sid + ",\"nodeIds\":[" + n1 + "],\"title\":\""
+                        + "长".repeat(61) + "\"}", reader), String.class);
+        assertThat(longTitle.getStatusCode().value()).as("61字title body=%s", longTitle.getBody()).isEqualTo(400);
+        assertThat((Integer) JsonPath.read(longTitle.getBody(), "$.code")).isEqualTo(400);
+
+        // 缺 title → 400（@NotBlank）
+        ResponseEntity<String> noTitle = http.postForEntity("/api/shares", jsonWithToken(
+                "{\"objectType\":\"SESSION\",\"objectId\":" + sid + ",\"nodeIds\":[" + n1 + "]}", reader),
+                String.class);
+        assertThat(noTitle.getStatusCode().value()).as("无title body=%s", noTitle.getBody()).isEqualTo(400);
+        assertThat((Integer) JsonPath.read(noTitle.getBody(), "$.code")).isEqualTo(400);
+
+        // 201 字 summary → 400（@Size(max=200)）
+        ResponseEntity<String> longSummary = http.postForEntity("/api/shares", jsonWithToken(
+                "{\"objectType\":\"SESSION\",\"objectId\":" + sid + ",\"nodeIds\":[" + n1 + "],\"title\":\"合规标题\","
+                        + "\"summary\":\"" + "摘".repeat(201) + "\"}", reader), String.class);
+        assertThat(longSummary.getStatusCode().value()).as("201字summary body=%s", longSummary.getBody()).isEqualTo(400);
+
+        // 边界内照常创建：60 字 title + 200 字 summary → 201
+        assertThat(createShare(reader, sid, "[" + n1 + "]", "标".repeat(60), "摘".repeat(200))).hasSize(21);
+    }
+
     /** token 形状：21 位 Base62 不可枚举，两次生成不同 */
     @Test
     void tokenShape() {
@@ -412,8 +449,8 @@ class ShareIT {
 
         long sid = createSession(reader, "academy", "token探索");
         long n1 = addNode(reader, sid, versionId, null, "token问一句");
-        String t1 = createShare(reader, sid, "[" + n1 + "]", null, null);
-        String t2 = createShare(reader, sid, "[" + n1 + "]", null, null);
+        String t1 = createShare(reader, sid, "[" + n1 + "]", "token分享一", null);
+        String t2 = createShare(reader, sid, "[" + n1 + "]", "token分享二", null);
 
         assertThat(t1).hasSize(21).matches("[0-9A-Za-z]{21}");
         assertThat(t2).hasSize(21).matches("[0-9A-Za-z]{21}");
@@ -445,7 +482,7 @@ class ShareIT {
 
         long sid = createSession(reader, "academy", "同形探索");
         long n1 = addNode(reader, sid, versionId, null, "同形问一句");
-        String token = createShare(reader, sid, "[" + n1 + "]", null, null);
+        String token = createShare(reader, sid, "[" + n1 + "]", "同形分享", null);
         assertThat(revoke(reader, token).getStatusCode().value()).isEqualTo(200);
 
         ResponseEntity<String> revokedView = anonView(token);
@@ -461,7 +498,7 @@ class ShareIT {
     // ---------- Task 31：接续副本（FR-H05，A5） ----------
 
     /**
-     * 主案：B 接续分享 → 新会话归 B（status=ACTIVE、theme 同源、goal=「接续自分享:{title}」截 100、
+     * 主案：B 接续分享 → 新会话归 B（status=ACTIVE、theme 同源、goal=「接续自分享:{title}」、
      * origin_share_id 记源），节点按快照复制且树结构一致（根/父子关系、card_version_id 保留）；
      * 原会话零写入（A5）：updated_at 与节点数不变。
      */
@@ -477,9 +514,10 @@ class ShareIT {
         long sid = createSession(sharer, "academy", "接续探索");
         long n1 = addNode(sharer, sid, versionId, null, "书院根问");
         long n2 = addNode(sharer, sid, null, n1, "书院子问");
-        // 150 字标题 → goal「接续自分享:{title}」须截断到 100
-        String longTitle = "湖".repeat(150);
-        String token = createShare(sharer, sid, "[" + n1 + "," + n2 + "]", longTitle, null);
+        // 60 字标题（API 上限，P7 复审 FIX：title ≤60）→ goal=「接续自分享:{title}」恰好 66 字
+        // （服务层截 100 保留为防御，API 路径下 title 已被 @Size(max=60) 卡住不再触发）
+        String maxTitle = "湖".repeat(60);
+        String token = createShare(sharer, sid, "[" + n1 + "," + n2 + "]", maxTitle, null);
 
         // 零写入断言基线：原会话 updated_at + 节点数
         Object updatedAtBefore = jdbc.queryForObject(
@@ -498,7 +536,7 @@ class ShareIT {
                 "select user_id, theme, goal, status, origin_share_id from exploration_session where id=?", newSid);
         assertThat(((Number) row.get("user_id")).longValue()).isEqualTo(receiverId);
         assertThat((String) row.get("theme")).isEqualTo("academy");
-        assertThat((String) row.get("goal")).startsWith("接续自分享:").hasSize(100);
+        assertThat((String) row.get("goal")).isEqualTo("接续自分享:" + maxTitle).hasSize(66);
         assertThat((String) row.get("status")).isEqualTo("ACTIVE");
         assertThat(row.get("origin_share_id")).as("origin_share_id 记源").isNotNull();
 
@@ -544,7 +582,7 @@ class ShareIT {
         long n2 = insertNodeRaw(sid, draftVersionId, "草稿占位问");
         long n3 = addNode(sharer, sid, null, n2, "占位下的子问");
 
-        String token = createShare(sharer, sid, "[" + n1 + "," + n2 + "," + n3 + "]", null, null);
+        String token = createShare(sharer, sid, "[" + n1 + "," + n2 + "," + n3 + "]", "跳过分享", null);
         ResponseEntity<String> view = anonView(token);
         assertThat((java.util.List<Boolean>) JsonPath.read(view.getBody(),
                 "$.data.snapshot.nodes[?(@.question=='草稿占位问')].removed")).containsExactly(true);
@@ -575,7 +613,7 @@ class ShareIT {
 
         long sid = createSession(sharer, "academy", "接续401探索");
         long n1 = addNode(sharer, sid, versionId, null, "接续401问");
-        String token = createShare(sharer, sid, "[" + n1 + "]", null, null);
+        String token = createShare(sharer, sid, "[" + n1 + "]", "接续401分享", null);
 
         // 匿名（无 Authorization）→ 401（SecurityConfig 仅 GET /s/* permitAll，POST 走 authenticated 兜底）
         ResponseEntity<String> anon = http.postForEntity("/s/" + token + "/continue",
