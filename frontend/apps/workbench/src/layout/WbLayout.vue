@@ -90,7 +90,7 @@ onMounted(() => {
 .nav-item:hover { background: var(--ke-side-2); color: var(--ke-white); }
 .nav-item.router-link-active { background: var(--ke-primary); color: var(--ke-white); }
 .nav-text { flex: 1; }
-.badge { min-width: 8px; height: 8px; padding: 0; border-radius: var(--ke-radius-full); background: var(--ke-side-line); color: var(--ke-white); font-size: 10px; line-height: 8px; text-align: center; }
+.badge { min-width: 8px; height: 8px; padding: 0; border-radius: var(--ke-radius-full); background: var(--ke-side-line); color: var(--ke-white); font-size: 11px; line-height: 8px; text-align: center; }
 .badge.is-active { min-width: 16px; height: 16px; padding: 0 4px; background: var(--el-color-danger); line-height: 16px; }
 .main-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .topbar { height: 56px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; background: var(--ke-surface); border-bottom: 1px solid var(--ke-line); }

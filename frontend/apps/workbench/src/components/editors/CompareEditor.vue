@@ -61,6 +61,11 @@ function removeDimension(index: number): void {
   cells.splice(index, 1);
 }
 
+/** 行名空串/纯空白判定(行内红字 + 保存门禁共用) */
+function isBlank(value: string | undefined): boolean {
+  return (value ?? '').trim().length === 0;
+}
+
 const errors = computed<string[]>(() => {
   const list: string[] = [];
   if (objects.length === 0) {
@@ -68,6 +73,12 @@ const errors = computed<string[]>(() => {
   }
   if (dimensions.length === 0) {
     list.push('dimensions: 至少填写一个对比维度');
+  }
+  if (objects.some((name) => isBlank(name))) {
+    list.push('objects: 对象名称不能为空');
+  }
+  if (dimensions.some((name) => isBlank(name))) {
+    list.push('dimensions: 维度名称不能为空');
   }
   const citationError = citationsError(citationsRaw.value, props.sourcesCount);
   if (citationError) {
@@ -112,6 +123,13 @@ defineExpose({ errors });
             :placeholder="`对象 ${objectIndex + 1}`"
             :aria-label="`对象 ${objectIndex + 1} 名称`"
           >
+          <p
+            v-if="isBlank(objects[objectIndex])"
+            class="name-error"
+            role="alert"
+          >
+            名称不能为空
+          </p>
           <button
             class="del-btn obj-del"
             type="button"
@@ -135,13 +153,22 @@ defineExpose({ errors });
         class="grid-row dim-row"
       >
         <div class="dim-cell">
-          <input
-            v-model="dimensions[dimensionIndex]"
-            class="input dim-input"
-            type="text"
-            :placeholder="`维度 ${dimensionIndex + 1}`"
-            :aria-label="`维度 ${dimensionIndex + 1} 名称`"
-          >
+          <div class="dim-field">
+            <input
+              v-model="dimensions[dimensionIndex]"
+              class="input dim-input"
+              type="text"
+              :placeholder="`维度 ${dimensionIndex + 1}`"
+              :aria-label="`维度 ${dimensionIndex + 1} 名称`"
+            >
+            <p
+              v-if="isBlank(dimensions[dimensionIndex])"
+              class="name-error"
+              role="alert"
+            >
+              名称不能为空
+            </p>
+          </div>
           <button
             class="del-btn dim-del"
             type="button"
@@ -195,6 +222,8 @@ defineExpose({ errors });
 .grid-corner { width: 150px; flex-shrink: 0; color: var(--ke-sub-2); font-size: 11px; }
 .head-cell { display: flex; flex-direction: column; gap: 4px; width: 150px; flex-shrink: 0; }
 .dim-cell { display: flex; align-items: center; gap: 4px; width: 150px; flex-shrink: 0; }
+.dim-field { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.dim-input { width: 100%; box-sizing: border-box; }
 .cell { width: 150px; flex-shrink: 0; }
 .input { padding: 7px 10px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-s); background: var(--ke-surface); color: var(--ke-ink); font-size: 13px; box-sizing: border-box; }
 .input:focus { outline: none; border-color: var(--ke-primary); box-shadow: var(--ke-focus); }
@@ -205,4 +234,5 @@ defineExpose({ errors });
 .field { display: block; }
 .field-label { display: block; margin-bottom: 6px; color: var(--ke-ink-2); font-size: 12px; }
 .field-error { margin: 0; color: var(--ke-danger); font-size: 12px; }
+.name-error { margin: 0; color: var(--ke-danger); font-size: 11px; line-height: 1.4; }
 </style>

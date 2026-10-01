@@ -56,7 +56,7 @@ const ROWS: AssetItem[] = [
     id: 2,
     kind: 'article',
     title: '《岳麓书院学规探析》',
-    sourceMeta: { journal: '湖湘文化研究', year: '2023' },
+    sourceMeta: { journal: '湖湘文化研究', year: '2023', impact: { factor: 2.1 } },
     locator: { pages: '45-52' },
     license: '已授权',
     licenseExpire: null,
@@ -136,9 +136,10 @@ describe('AssetsView', () => {
     expect(rows[1]?.find('.expire-tag').exists()).toBe(false);
     expect(rows[2]?.find('.expire-tag').exists()).toBe(false);
 
-    // 来源摘要(k:v 空格连接)与定位摘要(chapter/t 优先)
+    // 来源摘要(k:v 空格连接;非标量值显示省略)与定位摘要(chapter/t 优先)
     expect(rows[0]?.text()).toContain('author:杨慎初');
     expect(rows[0]?.text()).toContain('第一章');
+    expect(rows[1]?.text()).toContain('impact:…');
     expect(rows[2]?.text()).toContain('00:03:10-00:05:45');
 
     // 被引次数列(tabular-nums),初始请求不带筛选
@@ -200,14 +201,30 @@ describe('AssetsView', () => {
 
     expect(importAssetsMock).toHaveBeenCalledTimes(1);
     expect(importAssetsMock).toHaveBeenCalledWith(file);
-    // 部分成功:已导入行提示不被错误阻塞
-    expect(successMock).toHaveBeenCalledWith('导入 2 条');
+    // 部分成功:已导入行提示不被错误阻塞;skipped>0 文案带「跳过 M 行」
+    expect(successMock).toHaveBeenCalledWith('导入 2 条,跳过 1 行');
+    // 导入结果区同时展示 skipped 汇总
+    expect(wrapper.find('.import-summary').text()).toContain('成功 2 条');
+    expect(wrapper.find('.import-summary').text()).toContain('跳过 1 行');
     const errArea = wrapper.find('.import-errors');
     expect(errArea.exists()).toBe(true);
     expect(errArea.text()).toContain('第 3 行');
     expect(errArea.text()).toContain('locator 非 JSON');
     // 导入后刷新列表
     expect(listAssetsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('上传全部成功(skipped=0):成功文案不带「跳过」后半段,汇总区只显示成功数', async () => {
+    importAssetsMock.mockResolvedValue({ imported: 3, skipped: 0, errors: [] });
+    const wrapper = await mountView();
+    const { input } = pickFile(wrapper, 'ok.csv', 'kind,title,locator');
+    await input.trigger('change');
+    await flushPromises();
+
+    expect(successMock).toHaveBeenCalledWith('导入 3 条');
+    expect(wrapper.find('.import-summary').text()).toContain('成功 3 条');
+    expect(wrapper.find('.import-summary').text()).not.toContain('跳过');
+    expect(wrapper.find('.import-errors').exists()).toBe(false);
   });
 
   it('上传全部失败:不弹成功消息,提示警告并渲染错误列表', async () => {

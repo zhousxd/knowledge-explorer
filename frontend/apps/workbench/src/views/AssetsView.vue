@@ -109,6 +109,8 @@ function onPageChange(value: number): void {
 
 const fileInput = ref<HTMLInputElement | null>(null);
 const importing = ref(false);
+/** 最近一次导入结果(部分成功语义:结果区汇总 imported/skipped) */
+const lastImport = ref<{ imported: number; skipped: number } | null>(null);
 /** 最近一次导入的失败行(部分成功语义:不影响已导入行的成功提示) */
 const importErrors = ref<AssetImportError[]>([]);
 /** 错误折叠面板默认展开,导入完即可见 */
@@ -128,10 +130,14 @@ async function onFileChange(event: Event): Promise<void> {
   importing.value = true;
   try {
     const result = await importAssets(file);
+    lastImport.value = { imported: result.imported, skipped: result.skipped };
     importErrors.value = result.errors ?? [];
     openErrorPanel.value = importErrors.value.length > 0 ? ['errors'] : [];
     if (result.imported > 0) {
-      ElMessage.success(`导入 ${result.imported} 条`);
+      // skipped=0 不显示后半段
+      ElMessage.success(result.skipped > 0
+        ? `导入 ${result.imported} 条,跳过 ${result.skipped} 行`
+        : `导入 ${result.imported} 条`);
     } else if (importErrors.value.length > 0) {
       ElMessage.warning(`没有可导入的行,${importErrors.value.length} 行校验失败`);
     }
@@ -146,13 +152,15 @@ async function onFileChange(event: Event): Promise<void> {
 
 // ---------- 摘要与引用明细(FR-O02) ----------
 
-/** 对象 JSON → 「k:v k:v」摘要;空值兜底 — */
+/** 对象 JSON → 「k:v k:v」摘要;空值兜底 —;非标量值(对象/数组)不展开,显示省略号 */
 function jsonSummary(value: Record<string, unknown> | null): string {
   const entries = Object.entries(value ?? {});
   if (entries.length === 0) {
     return '—';
   }
-  return entries.map(([k, v]) => `${k}:${String(v)}`).join(' ');
+  return entries
+    .map(([k, v]) => `${k}:${v !== null && typeof v === 'object' ? '…' : String(v)}`)
+    .join(' ');
 }
 
 /** 定位器摘要:chapter 或 t 优先,其余整体摘要 */
@@ -255,6 +263,15 @@ onMounted(() => {
       role="alert"
     >
       {{ errorMsg }}
+    </p>
+
+    <p
+      v-if="lastImport"
+      class="import-summary"
+    >
+      本次导入成功 {{ lastImport.imported }} 条<template v-if="lastImport.skipped">
+        ,跳过 {{ lastImport.skipped }} 行
+      </template>
     </p>
 
     <el-collapse
@@ -395,7 +412,7 @@ onMounted(() => {
       v-model="citeOpen"
       class="cite-drawer"
       :title="`引用明细 · ${citeAsset?.title ?? ''}`"
-      size="420px"
+      size="460px"
     >
       <p
         v-if="citeLoading"
@@ -453,6 +470,7 @@ onMounted(() => {
 .search { width: 220px; }
 .load-error { margin: 0; padding: 8px 12px; border-radius: var(--ke-radius-s); background: var(--ke-danger-soft); color: var(--ke-danger); font-size: 13px; }
 .import-errors { border-radius: var(--ke-radius-s); }
+.import-summary { margin: 0; padding: 8px 12px; border-radius: var(--ke-radius-s); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 13px; }
 .import-error-list { margin: 0; padding-left: 18px; color: var(--ke-danger); font-size: 12px; line-height: 1.9; }
 .license-cell { display: inline-flex; align-items: center; gap: 6px; }
 .expire-tag { flex-shrink: 0; }
