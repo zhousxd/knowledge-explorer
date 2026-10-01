@@ -268,6 +268,43 @@ public class SessionService {
         return level;
     }
 
+    // ---------- Task 18 讲解流水线支撑 ----------
+
+    /**
+     * 会话属主校验（讲解提交的前置同步校验用，钉子①）：三分语义与 detail 相同——
+     * 不存在 404「会话不存在」、非属主 403「无权访问该会话」，返回会话供流水线复用。
+     */
+    @Transactional(readOnly = true)
+    public SessionEntity ownedSession(long userId, long sessionId) {
+        return requireOwned(userId, sessionId);
+    }
+
+    /**
+     * 会话上下文摘要（讲解提示词用，异步线程内调用、已过属主校验）：
+     * 主题/目标/讲解度 + 最近 5 条提问文本（按访问时间正序拼接）；无会话给空串。
+     */
+    @Transactional(readOnly = true)
+    public String contextSummary(long sessionId) {
+        SessionEntity session = sessions.selectById(sessionId);
+        if (session == null) {
+            return "";
+        }
+        List<String> questions = pathNodes.selectList(new LambdaQueryWrapper<PathNodeEntity>()
+                        .eq(PathNodeEntity::getSessionId, sessionId)
+                        .isNotNull(PathNodeEntity::getQuestionText)
+                        .orderByDesc(PathNodeEntity::getVisitedAt)
+                        .orderByDesc(PathNodeEntity::getId)
+                        .last("LIMIT 5"))
+                .stream().map(PathNodeEntity::getQuestionText).toList();
+        StringBuilder sb = new StringBuilder("主题:").append(session.getTheme() == null ? "未设定" : session.getTheme())
+                .append(";目标:").append(session.getGoal() == null ? "未设定" : session.getGoal())
+                .append(";讲解度:").append(session.getExplainLevel());
+        if (!questions.isEmpty()) {
+            sb.append(";最近提问:").append(String.join(" / ", questions));
+        }
+        return sb.toString();
+    }
+
     // ---------- 内部 ----------
 
     /** 三分语义核心：不存在 → 404「会话不存在」；非属主 → 403「无权访问该会话」（不泄露细节） */
