@@ -93,6 +93,8 @@ describe('ShareView(免登录分享页/接收者视角,FR-H04)', () => {
     expect(wrapper.find('.sv-source').text()).toBe('来源:探索分享');
     expect(wrapper.find('.sv-notice').exists()).toBe(true);
     expect(wrapper.find('.sv-notice').text()).toContain('来源与模型可能已更新，接续后的结果或有差异');
+    // P8-36 合规硬门槛:页脚 AI 生成标识(逐字)
+    expect(wrapper.find('.ai-note').text()).toBe('本页内容由人工智能辅助生成，仅供参考');
   });
 
   it('路径时间线按快照顺序渲染:正常行=题/问+时间+entries 关系列(name · relationLabel)', async () => {
@@ -121,13 +123,14 @@ describe('ShareView(免登录分享页/接收者视角,FR-H04)', () => {
     expect(removed.find('.tl-entry').exists()).toBe(false);
   });
 
-  it('404(撤销/不存在):空态「链接不存在或已被撤销」,无时间线无接续条', async () => {
+  it('404(撤销/不存在):空态「链接不存在或已被撤销」,无时间线无接续条,AI 标识页级常驻', async () => {
     mockedFetch.mockRejectedValue(new ApiError(404, '分享不存在'));
     const { wrapper } = await mountShare();
     expect(wrapper.find('.miss').exists()).toBe(true);
     expect(wrapper.find('.miss-t').text()).toBe('链接不存在或已被撤销');
     expect(wrapper.find('.tl').exists()).toBe(false);
     expect(wrapper.find('.sv-bar').exists()).toBe(false);
+    expect(wrapper.find('.ai-note').exists()).toBe(true);
   });
 
   it('已登录:按钮「沿此路径继续」,点击 continueShare(token) 成功跳 /path?sessionId=9', async () => {

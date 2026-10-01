@@ -226,6 +226,11 @@ onBeforeUnmount(() => {
     >
       {{ toastMsg }}
     </div>
+
+    <!-- AI 生成标识(P8-36 合规硬门槛,页级常驻:加载/空态/正常态均显示) -->
+    <footer class="ai-note">
+      本页内容由人工智能辅助生成，仅供参考
+    </footer>
   </div>
 </template>
 
@@ -271,4 +276,7 @@ onBeforeUnmount(() => {
 
 /* 页内轻 toast(替代 Vant showToast) */
 .sv-toast { position: fixed; left: 50%; bottom: 90px; z-index: var(--ke-z-toast); transform: translateX(-50%); max-width: 80vw; padding: 8px 16px; border-radius: var(--ke-radius-full); background: var(--ke-toast); color: var(--ke-white); font-size: 12px; line-height: 1.6; text-align: center; }
+
+/* AI 生成标识(P8-36 合规硬门槛):页脚居中小字,页级常驻 */
+.ai-note { margin: 24px 0 0; font-size: 11px; color: var(--ke-sub-2); text-align: center; }
 </style>

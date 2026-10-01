@@ -57,8 +57,6 @@ GitHub Actions（`.github/workflows/ci.yml`）双 job：后端 job 用 services 
 
 ## 快速查看原型
 
-## 快速查看原型
-
 两个原型均为**单文件、零依赖**的 HTML，直接用浏览器打开即可（无需构建、可离线）：
 
 ```bash

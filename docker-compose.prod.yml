@@ -141,8 +141,9 @@ services:
     networks: [ke-net]
 
   # 图片存储预留(02 §10.1);一期 MVP 未接,需用时 --profile minio 启用
+  # 镜像 pin 具体版本(不用 latest):生产可复现升级
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
     profiles: ["minio"]
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
