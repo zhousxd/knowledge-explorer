@@ -14,7 +14,7 @@ import WbDenied from '../components/WbDenied.vue';
  * 内容预览(仅卡片) + 提交人/时间),通过一击、驳回三步(点开 + 填意见 + 确认,意见必填)。
  * 裁决成功后重拉队列并联动侧栏待审计数徽标(reviewStore)。
  * 入口队列(Task 28):公共入口送审进同一队列——ENTRY 无卡片内容语义,precheck/contentPreview
- * 恒 null(渲染需容错),摘要「入口名 · 所属卡题 · 提交人」;通过=维持生效,驳回=下架。
+ * 恒 null(渲染需容错),摘要「入口名 · 所属卡题 · 提交人」;前置审核:通过=发布生效(PENDING→ACTIVE),驳回=下架。
  */
 const reviewStore = useReviewStore();
 
@@ -98,7 +98,7 @@ async function onApprove(item: ReviewItem): Promise<void> {
   try {
     try {
       await approveReview(item.id);
-      // 卡片通过即发布;入口通过=维持生效(Task 28:公共入口创建即 ACTIVE,审核维持)
+      // 卡片通过即发布;入口前置审核:通过=发布生效(PENDING→ACTIVE 对他人可见,Task 28)
       const verb = item.objectType === 'ENTRY' ? '已通过' : '已通过并发布';
       ElMessage.success(`${verb}「${parseSummary(item).title}」`);
     } catch (e) {

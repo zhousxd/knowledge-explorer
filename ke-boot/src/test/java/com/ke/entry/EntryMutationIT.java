@@ -273,6 +273,31 @@ class EntryMutationIT {
     }
 
     @Test
+    void authorCannotApproveOwnEntryReview() {
+        long assetId = insertAsset("《自审岳麓志》", "书院创建于唐开宝年间。");
+        long card = publishedCard("自审公共岳麓卡", "academy",
+                "[{\"assetId\":" + assetId + ",\"title\":\"《自审岳麓志》\",\"locator\":\"第1页\"}]");
+        // 作者提权为 EDITOR：角色能过审核端点门槛，但 guardNotSelf 禁止审核自己提交的 ENTRY
+        String author = newUserToken("13800008018", "自审者甲", "EDITOR");
+
+        long entryId = ((Number) JsonPath.read(
+                save(author, card, serviceConfig("自审讲岳麓", "EXPLAIN", assetId), "PUBLIC").getBody(),
+                "$.data.entryId")).longValue();
+        long reviewId = pendingEntryReviewId(author, entryId);
+
+        ResponseEntity<String> approve = http.postForEntity("/api/wb/reviews/" + reviewId + "/approve",
+                json("{}", author), String.class);
+        // 403 envelope（自审禁绝），任务与入口都保持 PENDING（未被裁决消费）
+        assertThat(approve.getStatusCode().value()).as("body=%s", approve.getBody()).isEqualTo(403);
+        assertThat((int) JsonPath.read(approve.getBody(), "$.code")).isEqualTo(403);
+        assertThat((String) JsonPath.read(approve.getBody(), "$.message")).contains("不能审核自己提交的内容");
+        assertThat(jdbc.queryForObject("select status from review_task where id=?", String.class, reviewId))
+                .isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("select status from entry where id=?", String.class, entryId))
+                .isEqualTo("PENDING");
+    }
+
+    @Test
     void saveRejectsOverreachAssetScopeWithViolationList() {
         long assetId = insertAsset("《拦截岳麓志》", "书院创建于唐开宝年间。");
         long card = publishedCard("拦截岳麓卡", "academy",

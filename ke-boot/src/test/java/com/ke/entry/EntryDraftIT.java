@@ -30,8 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 第一次 classify（ROUTER 档）、第二次生成档抽取（GENERATOR 档）。直连 WSL ke_test（@ItDb）；
  * 类前 RedisFlush flushdb（注册/登录/频控共享 db15 键空间，跨类残留一并清零）。
  * 钉住：EXPLAIN 合法抽取全通过；OUT_OF_SCOPE 替代建议；越权 assetScope 自动收窄（FR-N06：
- * 行为与文档一致——过滤越权 id 后返回收窄配置）；LINK_CARD 站内检索命中目标卡（跳过自身）；
- * text 超 200 字 400。
+ * 行为与文档一致——过滤越权 id 后返回收窄配置）；LINK_CARD 站内检索命中目标卡（跳过自身），
+ * 跨主题命中 violations 三要件缺失但 config 仍带目标卡（保存不死路）；text 超 200 字 400。
  * 造数据注意：@ItDb 按类清库，类内各用例的卡/资料标题唯一（select by title 断言唯一行）。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -206,6 +206,33 @@ class EntryDraftIT {
         assertThat((String) JsonPath.read(res.getBody(), "$.data.config.name"))
                 .startsWith("关于").hasSizeLessThanOrEqualTo(30);
         assertThat((int) JsonPath.read(res.getBody(), "$.data.violations.length()")).isEqualTo(0);
+    }
+
+    @Test
+    void linkCardCrossThemeCarriesTargetCardWithViolations() {
+        // 跨主题命中（目标卡 theme=cuisine ≠ 所属卡 academy）→ Validator 三要件缺失 violations，
+        // 但 config 仍携带 name/type/targetCardId（检索发现的事实）：前端回填目标卡后补齐三要件
+        // 可保存——否则丢目标卡的草稿保存必 400「链接入口必须指定目标卡片」，死路不可恢复
+        long source = publishedCard("草稿跨题白鹿洞学规（上）", "academy", null);
+        long target = publishedCard("草稿跨题白鹿洞学规（下）", "cuisine", null);
+        String token = newUserToken("13800007007", "起草者庚");
+        StubLlmGateway.reset("LINK_CARD");
+
+        ResponseEntity<String> res = draft(token, source, "草稿跨题白鹿洞学规");
+        assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(200);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.intent")).isEqualTo("LINK_CARD");
+        assertThat(data(res.getBody()).has("config")).isTrue();
+        assertThat(((Number) JsonPath.read(res.getBody(), "$.data.config.targetCardId")).longValue())
+                .isEqualTo(target);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.config.type")).isEqualTo("LINK_CARD");
+        // 三要件缺失（关系词/why/source），草稿不代填出处
+        assertThat((int) JsonPath.read(res.getBody(), "$.data.violations.length()")).isEqualTo(3);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.violations[0]")).contains("关系词");
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.violations[1]")).contains("why");
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.violations[2]")).contains("source");
+        // 不代填：config 不含 why/source（non_null 序列化下整个字段缺席）
+        assertThat(data(res.getBody()).path("config").has("why")).isFalse();
+        assertThat(data(res.getBody()).path("config").has("source")).isFalse();
     }
 
     @Test

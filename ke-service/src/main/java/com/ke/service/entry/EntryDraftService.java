@@ -25,6 +25,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -41,9 +48,15 @@ import java.util.stream.Collectors;
  *   <li>LINK_CARD：站内检索（{@link CardService#list}，q=text 截 20 字）取 top 1 已发布卡
  *       （跳过入口所属卡自身，自链无意义）；无匹配给替代建议。跨主题（目标卡 theme ≠ 所属卡）
  *       时 Validator 要求三要件，草稿不代填出处（RelationGuard 键约定：出处须可查证，由保存端
- *       UI 采集）→ 跨主题命中会返回缺失要件的 violations，引导用户补齐后保存。</li>
+ *       UI 采集）→ 跨主题命中返回缺失要件的 violations 引导用户补齐，但 DraftResult 仍携带
+ *       config（只填 name/type/targetCardId——目标卡是检索发现的事实，回填避免前端丢目标卡
+ *       后保存必 400 的死路；why/source 留空不代填）。</li>
  * </ul>
  * 前置校验：text 非空 ≤200 字（HTTP 400）；卡存在（否则 404）且 PUBLISHED（否则 400）。
+ * 超时护栏：nl-draft 是同步 HTTP 请求（A3 交互 30s 保障），两次 LLM 调用分别以
+ * {@code ke.agent.draft-classify-timeout-seconds}（默认 8s）/ {@code ke.agent.draft-extract-timeout-seconds}
+ * （默认 15s）封顶（与讲解流水线同一手写 future.get 等价实现）——分类超时安全侧兜底
+ * OUT_OF_SCOPE（礼貌拒绝），抽取超时不重试、转 FAILED 语义（violations「配置生成超时」+config=null）。
  * 网关异常（分类/生成）不在此吞掉——向上传播由全局兜底 500（与讲解流水线同语义）。
  * 本任务只产出草稿不落库；userId 预留给 Task 28 保存链路（草稿归属人）。
  */
@@ -67,6 +80,11 @@ public class EntryDraftService {
     static final String NO_MATCH_ADVICE = "未找到相关卡片,可直接浏览专题选择";
     /** 钉子④（P6-27 移交）：卡无挂接知识单元时 EXPLAIN/COMPARE 草稿的短路 violations 文案 */
     static final String NO_ASSET_ADVICE = "该卡暂无挂接知识单元,请先在知识资源挂接";
+    /** 抽取超时的 FAILED 语义 violations 文案（config=null，提示用户重试而非 500） */
+    static final String DRAFT_TIMEOUT_VIOLATION = "配置生成超时,请重试";
+
+    /** 超时护栏专用执行器：虚拟线程每任务一线，无池化开销（守护线程，JVM 退出无需 shutdown） */
+    private final ExecutorService llmExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     private final CardMapper cards;
     private final EntryAuthorizedAssets authorizedAssets;
@@ -77,6 +95,14 @@ public class EntryDraftService {
 
     @Value("${draft.prompt.system}")
     private String draftSystemPrompt;
+
+    /** 意图分类（路由档）单次调用超时秒数（真实 8s，IT 压到 2s） */
+    @Value("${ke.agent.draft-classify-timeout-seconds:8}")
+    private int classifyTimeoutSeconds;
+
+    /** 生成档抽取单次调用超时秒数（真实 15s，IT 压到 1s） */
+    @Value("${ke.agent.draft-extract-timeout-seconds:15}")
+    private int extractTimeoutSeconds;
 
     public EntryDraftService(CardMapper cards, EntryAuthorizedAssets authorizedAssets,
                              CardService cardService, NlIntentClassifier classifier, LlmGateway llm,
@@ -119,7 +145,14 @@ public class EntryDraftService {
             throw new BadRequestException("卡片未发布,暂不能起草入口");
         }
 
-        NlIntent intent = classifier.classify(input);
+        // 分类超时 → 安全侧兜底 OUT_OF_SCOPE（礼貌拒绝给替代建议），与解析失败同侧；
+        // 网关自身异常仍向上传播 500（分类器同语义）
+        NlIntent intent;
+        try {
+            intent = completeWithinTimeout(() -> classifier.classify(input), classifyTimeoutSeconds);
+        } catch (DraftTimeoutException e) {
+            return new DraftResult(NlIntent.OUT_OF_SCOPE, null, List.of(), OUT_OF_SCOPE_ADVICE);
+        }
         return switch (intent) {
             case EXPLAIN, COMPARE -> agentServiceDraft(intent, card, input);
             case LINK_CARD -> linkCardDraft(card, input);
@@ -145,8 +178,14 @@ public class EntryDraftService {
         Exception last = null;
         for (int attempt = 0; attempt < MAX_LLM_ATTEMPTS && output == null; attempt++) {
             try {
-                String raw = llm.complete(new ChatCommand(draftSystemPrompt, user, ModelTier.GENERATOR));
+                String raw = completeWithinTimeout(
+                        () -> llm.complete(new ChatCommand(draftSystemPrompt, user, ModelTier.GENERATOR)),
+                        extractTimeoutSeconds);
                 output = objectMapper.readValue(stripFences(raw), DraftOutput.class);
+            } catch (DraftTimeoutException e) {
+                // 超时不重试（时间预算已耗满，重试只会翻倍等待）：FAILED 语义——violations 提示
+                // 重试 + config=null，由前端引导，而非 IllegalStateException 500
+                return new DraftResult(intent, null, List.of(DRAFT_TIMEOUT_VIOLATION), null);
             } catch (Exception e) {
                 last = e; // JSON 绑定失败 → 重试一次（共 2 次），与讲解流水线同则
             }
@@ -208,8 +247,44 @@ public class EntryDraftService {
         if (violations.isEmpty()) {
             return new DraftResult(NlIntent.LINK_CARD, config, List.of(), null);
         }
-        // 跨主题命中但草稿不代填 why/source（出处须可查证，RelationGuard 键约定）→ 返回缺失要件
-        return new DraftResult(NlIntent.LINK_CARD, null, violations, null);
+        // 跨主题命中但草稿不代填 why/source（出处须可查证，RelationGuard 键约定）→ 返回缺失要件；
+        // config 仍携带 name/type/targetCardId（目标卡是检索发现的事实，非捏造）——前端回填后
+        // 用户补齐三要件即可保存，避免丢失目标卡导致的「必须指定目标卡片」400 死路
+        return new DraftResult(NlIntent.LINK_CARD, config, violations, null);
+    }
+
+    // ---------- LLM 超时护栏 ----------
+
+    /**
+     * LLM 调用超时护栏（与 {@code ExplainService.completeWithinTimeout} 同一手写等价实现，
+     * 单为一处超时不引 resilience4j）：调用跑在独立虚拟线程，当前（虚拟）线程
+     * {@code future.get(timeout)} 等待，超时 {@code cancel(true)} 尽力中断底层任务。
+     * 阈值分类/抽取分开配置（{@code ke.agent.draft-classify/extract-timeout-seconds}），
+     * 同步 HTTP 请求不被挂起的网关连接无限占用（A3 30s 交互保障）。
+     * {@link LlmGateway#complete} 只抛非受检异常，故解包后原样重抛（全局兜底 500 同旧语义）。
+     */
+    private <T> T completeWithinTimeout(Callable<T> call, int timeoutSeconds) {
+        Future<T> future = llmExecutor.submit(call);
+        try {
+            return future.get(timeoutSeconds, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            throw new DraftTimeoutException();
+        } catch (ExecutionException e) {
+            // 解包网关真实异常（如 Stub 未配置应答），消息与直调一致
+            throw e.getCause() instanceof RuntimeException ex ? ex
+                    : new IllegalStateException("入口草稿调用失败: " + e.getCause(), e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("入口草稿处理被中断", e);
+        }
+    }
+
+    /** 草稿超时信号（不进重试循环）：分类兜底安全侧 OUT_OF_SCOPE、抽取转 FAILED 语义 violations */
+    private static final class DraftTimeoutException extends RuntimeException {
+        DraftTimeoutException() {
+            super(DRAFT_TIMEOUT_VIOLATION);
+        }
     }
 
     // ---------- 授权资料清单（id→标题） ----------

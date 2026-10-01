@@ -226,4 +226,30 @@ describe('EntryCreateView(用一句话新增入口四步流,FR-N01–N05)', () =
     expect(mockedScope).toHaveBeenCalledWith(201, 'PUBLIC');
     expect(wrapper.find('[data-test="channel-panel"]').text()).toContain('已提交审核');
   });
+
+  it('LINK_CARD 跨主题 violations 态:config 回填目标卡只读位,补齐三要件保存不再死路', async () => {
+    const wrapper = await mountCreate();
+    // 跨主题命中(草稿不代填 why/source):violations 三要件缺失,但 config 仍携带目标卡
+    await gotoStep2(wrapper, {
+      intent: 'LINK_CARD',
+      config: { name: '关于对比两院学规', type: 'LINK_CARD', targetCardId: 9 },
+      violations: ['跨主题入口必须说明关系原因(why)', '跨主题入口必须注明出处(source)'],
+      advice: null
+    });
+    // 目标卡回填只读位(id:9),violations 红字随行
+    expect(wrapper.find('[data-test="target-card"]').text()).toContain('id:9');
+    expect(wrapper.find('[data-test="violations"]').text()).toContain('跨主题入口必须说明关系原因(why)');
+
+    // 补齐三要件后保存:载荷携带 targetCardId,不再触发「链接入口必须指定目标卡片」400
+    await wrapper.find('select.fi').setValue('相关联');
+    const tas = wrapper.findAll('textarea.fi');
+    await tas[0]!.setValue('两地学规同源,对照可读');
+    await tas[1]!.setValue('{"assetId":11,"quote":"学规原文"}');
+    await wrapper.find('[data-test="save-and-test"]').trigger('click');
+    await flushPromises();
+    expect(mockedCreate).toHaveBeenCalledWith(7, expect.objectContaining({
+      type: 'LINK_CARD', targetCardId: 9, relationLabel: '相关联'
+    }), 'PRIVATE');
+    expect(mockedTest).not.toHaveBeenCalled();
+  });
 });
