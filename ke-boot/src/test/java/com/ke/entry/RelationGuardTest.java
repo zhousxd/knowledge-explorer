@@ -17,8 +17,10 @@ import com.ke.service.entry.RelationGuard;
 /**
  * 跨主题链接入口守卫单测（C09 / Task 23，直接构造实体，不起 Spring/DB）：
  * entry.target_card_id 非空且目标卡 theme ≠ 入口所属卡 theme（跨主题）时，
- * 必须 relationLabel 非空且 config_json.why 非空，否则 IllegalArgumentException
- * （Phase 6 Task 28 入口保存接线后映射 400 envelope；本任务交付 Guard + 单测，不接线）。
+ * 必须 relationLabel 非空、config_json.why 非空且 config_json.source 非空（出处键约定：
+ * 非空字符串描述或非空对象 {assetId,quote}，Task 28 接线时 UI 采集），缺任一要件
+ * IllegalArgumentException（Phase 6 Task 28 入口保存接线后映射 400 envelope；本任务
+ * 交付 Guard + 单测，不接线）。
  */
 class RelationGuardTest {
 
@@ -67,9 +69,48 @@ class RelationGuardTest {
                 .isThrownBy(() -> guard.validateCrossTheme(entry(1L, 9L, "相比较", "not-json{{{")))
                 .withMessageContaining("关系原因");
 
-        // 齐备（标签 + 非空 why）→ 放行
+        // 齐备（标签 + 非空 why + 非空 source）→ 放行
         assertThatCode(() -> guard.validateCrossTheme(
-                entry(1L, 9L, "相比较", "{\"why\":\"书院民俗与民间信仰互为印证\"}")))
+                entry(1L, 9L, "相比较", "{\"why\":\"书院民俗与民间信仰互为印证\",\"source\":\"《岳麓书院志》卷一\"}")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void crossThemeRequiresSource() {
+        when(cards.selectById(1L)).thenReturn(card(1L, "academy"));
+        when(cards.selectById(9L)).thenReturn(card(9L, "folklore"));
+
+        // 有标签与 why 但缺出处（source 缺键 / 空白串 / 空对象）→ 拒绝（C09 第三要件）
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> guard.validateCrossTheme(entry(1L, 9L, "相关联", "{\"why\":\"民俗对照\"}")))
+                .withMessageContaining("出处");
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> guard.validateCrossTheme(entry(1L, 9L, "相关联", "{\"why\":\"w\",\"source\":\"   \"}")))
+                .withMessageContaining("出处");
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> guard.validateCrossTheme(entry(1L, 9L, "相关联", "{\"why\":\"w\",\"source\":{}}")))
+                .withMessageContaining("出处");
+        // 约定外形态（数字/数组）不视为有效出处
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> guard.validateCrossTheme(entry(1L, 9L, "相关联", "{\"why\":\"w\",\"source\":11}")))
+                .withMessageContaining("出处");
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> guard.validateCrossTheme(entry(1L, 9L, "相关联", "{\"why\":\"w\",\"source\":[\"a\"]}")))
+                .withMessageContaining("出处");
+    }
+
+    @Test
+    void crossThemeWithSourcePasses() {
+        when(cards.selectById(1L)).thenReturn(card(1L, "academy"));
+        when(cards.selectById(9L)).thenReturn(card(9L, "folklore"));
+
+        // 字符串形态出处（出处描述）
+        assertThatCode(() -> guard.validateCrossTheme(
+                entry(1L, 9L, "相关联", "{\"why\":\"w\",\"source\":\"《湖湘民俗志》第二章\"}")))
+                .doesNotThrowAnyException();
+        // 对象形态出处（{assetId,quote}）
+        assertThatCode(() -> guard.validateCrossTheme(
+                entry(1L, 9L, "相比较", "{\"why\":\"w\",\"source\":{\"assetId\":11,\"quote\":\"书院建于唐\"}}")))
                 .doesNotThrowAnyException();
     }
 

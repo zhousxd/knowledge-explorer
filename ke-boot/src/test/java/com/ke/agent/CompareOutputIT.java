@@ -232,6 +232,25 @@ class CompareOutputIT {
     }
 
     @Test
+    void sensitiveWordInCellsFiltered() {
+        // review P5-23 补：比较矩阵与讲解段落同源敏感词过滤（FR-S10）——cell 含词表词「赌博网站」
+        // → DONE 后等长 '*' 替换，命中计入 audit.filtered
+        long versionId = insertPublishedCard("比较敏感词卡", null);
+        String token = newUserToken("13811200005", "比五比");
+        long[] ids = newSessionWithNode(token, versionId);
+
+        StubLlmGateway.reset("{\"objects\":[\"甲\",\"乙\"],\"dimensions\":[\"风险\"],"
+                + "\"cells\":[[\"平稳\",\"涉赌博网站线索\"]],\"citations\":[]}");
+        long runId = submitRun(token, versionId, ids[0], ids[1], "比较:甲与乙", "COMPARE");
+
+        ResponseEntity<String> res = awaitTerminal(token, runId);
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.status")).isEqualTo("DONE");
+        assertThat((String) JsonPath.read(res.getBody(), "$.data.artifact.data.cells[0][1]"))
+                .isEqualTo("涉****线索");
+        assertThat((Integer) JsonPath.read(res.getBody(), "$.data.artifact.audit.filtered")).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
     void explainDefaultUnaffected() {
         // 不带 serviceType 的既有提交语义不变：默认 EXPLAIN，artifact 仍为讲解形状
         long versionId = insertPublishedCard("默认讲解卡", null);

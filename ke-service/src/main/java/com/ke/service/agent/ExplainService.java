@@ -70,7 +70,8 @@ import java.util.concurrent.TimeoutException;
  * <p>比较通道（FR-S06 一期 / Task 23）：input_json.serviceType=COMPARE 时 system 提示词整体切换
  * （compare-prompts），输出绑定 {@link CompareOutput} + 落库前结构校验（cells 矩阵形状，非法重试
  * 1 次仍非法 → FAILED），产出 artifact(type=COMPARE_CARD, content_json={type,data,sources,
- * disclaimer,audit})；citations=assetId 过 {@link CitationSanitizer} 同规则。
+ * disclaimer,audit})；后处理链与讲解同源——敏感词过滤逐格替换（objects/dimensions/cells，review
+ * P5-23 补）+ citations=assetId 过 {@link CitationSanitizer} 同规则。
  *
  * 线程模型：submit 前置校验（会话属主/卡已发布/配额）在 controller 线程（userId 在 submit 时
  * 捕获进 input_json，虚拟线程不再依赖 SecurityContext）；执行走 agentExecutor 虚拟线程（自代理
@@ -412,12 +413,29 @@ public class ExplainService {
 
     /**
      * 比较终态回写（Task 23）：artifact(COMPARE_CARD, content_json={type,data,sources,disclaimer,audit})
-     * + citation(object_type=agent_run) + DONE/artifact_ids。citations=assetId 沿用讲解的
-     * {@link CitationSanitizer} 同规则（allowed=materials.keySet()，越界剔除旁路留痕）；
-     * 比较矩阵无段落档位与敏感词段落链，audit.filtered 恒 0（矩阵过滤随二期扩展）。
+     * + citation(object_type=agent_run) + DONE/artifact_ids。后处理链与讲解同源：
+     * ①敏感词过滤（FR-S10，review P5-23 补）：objects/dimensions/cells 逐格等长 '*' 替换，
+     * 命中数入 audit.filtered；②citations=assetId 沿用 {@link CitationSanitizer} 同规则
+     * （allowed=materials.keySet()，越界剔除旁路留痕 stripped）。
      */
     private void finishCompare(long runId, long start, ExplainInput input,
                                CompareOutput output, Map<Long, String> materials) {
+        // ①敏感词过滤（FR-S10）：矩阵三件逐格过滤，null 格原样保留（展示层职责，与讲解 null 段同则）
+        int filtered = 0;
+        List<String> objects = new ArrayList<>(output.objects() == null ? 0 : output.objects().size());
+        filtered += filterTexts(output.objects(), objects);
+        List<String> dimensions = new ArrayList<>(output.dimensions() == null ? 0 : output.dimensions().size());
+        filtered += filterTexts(output.dimensions(), dimensions);
+        List<List<String>> cells = new ArrayList<>(output.cells() == null ? 0 : output.cells().size());
+        if (output.cells() != null) {
+            for (List<String> row : output.cells()) {
+                List<String> cleanRow = new ArrayList<>(row == null ? 0 : row.size());
+                filtered += filterTexts(row, cleanRow);
+                cells.add(cleanRow);
+            }
+        }
+
+        // ②引用校验（FR-S05 同规则）：越界 assetId 剔除、去重，只剩检索资料集合内的 id
         List<Long> kept = new ArrayList<>();
         Set<Long> stripped = new LinkedHashSet<>();
         if (output.citations() != null) {
@@ -435,8 +453,8 @@ public class ExplainService {
             }
         }
         CompareResult result = new CompareResult(COMPARE_ARTIFACT_TYPE,
-                new CompareOutput(output.objects(), output.dimensions(), output.cells(), kept),
-                materials, AgentLabels.DISCLAIMER, new RunMetrics.Audit(stripped.size(), 0));
+                new CompareOutput(objects, dimensions, cells, kept),
+                materials, AgentLabels.DISCLAIMER, new RunMetrics.Audit(stripped.size(), filtered));
 
         Long artifactId = null;
         if (input.sessionId() != null) {
@@ -460,6 +478,22 @@ public class ExplainService {
             done.setError("引用校验:剥离 " + stripped.size() + " 个越界引用");
         }
         runs.updateById(done);
+    }
+
+    /**
+     * 文本列表逐条过敏感词（FR-S10，讲解段落链与比较矩阵共用 {@link SensitiveWordFilter}）：
+     * 等长 '*' 替换，命中数累加返回；清洗结果按序写入 into（null 条目原样保留）。
+     */
+    private int filterTexts(List<String> texts, List<String> into) {
+        int hits = 0;
+        if (texts != null) {
+            for (String text : texts) {
+                SensitiveWordFilter.FilterResult cleaned = sensitiveWords.filter(text);
+                hits += cleaned.hits();
+                into.add(cleaned.text());
+            }
+        }
+        return hits;
     }
 
     /**
