@@ -196,20 +196,14 @@ function openCard(cardId: number): void {
   void router.push(`/cards/${cardId}`);
 }
 
-/** 入口点击:链接入口跳目标卡;服务/比较入口由 Phase 5 接线 */
-function onEntry(e: CardEntryItem): void {
-  if (e.type === 'LINK_CARD' && e.targetCardId != null) {
-    openCard(e.targetCardId);
-    return;
-  }
-  console.info(`入口「${e.name}」由 Phase 5 服务接线`);
-}
-
-// —— 服务栏接线(P5-21):讲解/整理提交讲解 run(EXPLAIN),「帮我比较」走 COMPARE 通道
-// (Task 23:payload.serviceType='COMPARE',结果页渲染对比卡;整理的专属模板由 Task 25 接管)。
-// 链路:匿名先引导登录 → ensureForCard(无会话建、有则复用)→ addNode 挂根节点(纯 MVP,
-// 完整挂接后续接)→ submitRun(带 nodeId/sessionId,后端 P5-18 冻结约束)→ 跳执行态页,
-// question/重试 payload 经路由 state(keRun)随行。429 留在卡页 toast envelope 文案。
+// —— 服务栏/探索入口接线(P5-21 + A1③ 数据面):讲解/整理提交讲解 run(EXPLAIN),
+// 「帮我比较」走 COMPARE 通道(Task 23:payload.serviceType='COMPARE',结果页渲染对比卡;
+// 整理的专属模板由 Task 25 接管)。链路:匿名先引导登录 → ensureForCard(无会话建、有则复用)→
+// addNode 挂根节点 → submitRun(带 nodeId/sessionId,后端 P5-18 冻结约束)→ 跳执行态页,
+// question/重试 payload 经路由 state(keRun)随行;429 留在卡页 toast envelope 文案。
+// 入口点击(review P5-FIX,A1③ 数据面):三类入口都先挂节点(带 entryId 溯源)——
+// 链接入口挂节点后跳目标卡(挂节点失败只 toast,不阻断导航);智能体服务/比较入口挂节点后
+// 复用同一服务链发起 run(question=入口名)。
 
 type ServiceKind = 'explain' | 'compare' | 'organize';
 
@@ -222,6 +216,32 @@ const SERVICE_QUESTIONS: Record<ServiceKind, (title: string) => string> = {
 
 const svcBusy = ref(false);
 
+/** 提交讲解/比较 run 的公共链(服务键与入口点击共用):question 由调用方给
+ *  (服务键=冻结文案合成;入口=入口名),entryId 仅入口点击携带(A1③ 溯源)。 */
+async function launchRun(kind: ServiceKind, question: string, entryId?: number): Promise<void> {
+  if (!card.value) return;
+  const sessionId = await sessionStore.ensureForCard(card.value);
+  // 挂根(parentNodeId 缺省):MVP 授权决策,后续任务接完整路径挂接
+  const node = await addNode(sessionId, {
+    cardVersionId: card.value.cardVersionId,
+    questionText: question,
+    ...(entryId != null ? { entryId } : {})
+  });
+  const payload: RunSubmitPayload = {
+    cardVersionId: card.value.cardVersionId,
+    sessionId,
+    nodeId: node.nodeId,
+    question,
+    // FR-E10 档位随讲解生效:读会话档位记忆(结果页/路径页切换后,下一次提交即新档)
+    level: sessionStore.explainLevel,
+    // FR-S06(Task 23):「帮我比较」走 COMPARE 通道(后端切比较提示词,产出对比卡 artifact);
+    // 讲解/整理不传 → 后端默认 EXPLAIN。追问恒走讲解(RunView.sendAsk 不带本字段)
+    ...(kind === 'compare' ? { serviceType: 'COMPARE' as const } : {})
+  };
+  const { runId } = await submitRun(payload);
+  await router.push({ path: `/runs/${runId}`, state: { keRun: JSON.stringify(payload) } });
+}
+
 async function onService(kind: ServiceKind): Promise<void> {
   if (svcBusy.value || !card.value) return;
   if (!auth.token) {
@@ -230,30 +250,52 @@ async function onService(kind: ServiceKind): Promise<void> {
   }
   svcBusy.value = true;
   try {
-    const sessionId = await sessionStore.ensureForCard(card.value);
-    const question = SERVICE_QUESTIONS[kind](card.value.title);
-    // 挂根(parentNodeId 缺省):MVP 授权决策,后续任务接完整路径挂接
-    const node = await addNode(sessionId, {
-      cardVersionId: card.value.cardVersionId,
-      questionText: question
-    });
-    const payload: RunSubmitPayload = {
-      cardVersionId: card.value.cardVersionId,
-      sessionId,
-      nodeId: node.nodeId,
-      question,
-      // FR-E10 档位随讲解生效:读会话档位记忆(结果页/路径页切换后,下一次提交即新档)
-      level: sessionStore.explainLevel,
-      // FR-S06(Task 23):「帮我比较」走 COMPARE 通道(后端切比较提示词,产出对比卡 artifact);
-      // 讲解/整理不传 → 后端默认 EXPLAIN。追问恒走讲解(RunView.sendAsk 不带本字段)
-      ...(kind === 'compare' ? { serviceType: 'COMPARE' as const } : {})
-    };
-    const { runId } = await submitRun(payload);
-    await router.push({ path: `/runs/${runId}`, state: { keRun: JSON.stringify(payload) } });
+    await launchRun(kind, SERVICE_QUESTIONS[kind](card.value.title));
   } catch (e) {
     showToast(e instanceof ApiError ? e.message : '操作失败,请稍后重试');
   } finally {
     svcBusy.value = false;
+  }
+}
+
+/**
+ * 入口点击(A1③ 数据面,review P5-FIX 接线):入口只在登录态渲染,守卫兜底。
+ * 三类入口都先挂节点(addNode 带 entryId,questionText=入口名)记入路径——
+ * 链接入口(LINK_CARD):挂节点后跳目标卡,挂节点失败只 toast 不阻断导航;
+ * 智能体服务(AGENT_SERVICE):挂节点后以入口名为 question 发起讲解 run(复用 launchRun);
+ * 比较(COMPARE):同链走 COMPARE 通道。服务链中途失败(addNode/submitRun)toast 留在卡页。
+ */
+async function onEntry(e: CardEntryItem): Promise<void> {
+  if (!card.value) return;
+  if (!auth.token) {
+    void router.push({ path: '/login', query: { redirect: route.fullPath } });
+    return;
+  }
+  if (e.type === 'LINK_CARD' && e.targetCardId != null) {
+    try {
+      const sessionId = await sessionStore.ensureForCard(card.value);
+      await addNode(sessionId, {
+        cardVersionId: card.value.cardVersionId,
+        entryId: e.id,
+        questionText: e.name
+      });
+    } catch (err) {
+      // 节点是路径侧记录:失败不阻断跳转主行为
+      showToast(err instanceof ApiError ? err.message : '操作失败,请稍后重试');
+    }
+    openCard(e.targetCardId);
+    return;
+  }
+  if (e.type === 'AGENT_SERVICE' || e.type === 'COMPARE') {
+    if (svcBusy.value) return;
+    svcBusy.value = true;
+    try {
+      await launchRun(e.type === 'COMPARE' ? 'compare' : 'explain', e.name, e.id);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : '操作失败,请稍后重试');
+    } finally {
+      svcBusy.value = false;
+    }
   }
 }
 

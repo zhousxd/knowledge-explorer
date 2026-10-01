@@ -408,3 +408,78 @@ describe('CardView 服务栏接线(P5-21)', () => {
     expect(local.currentRoute.value.query.redirect).toBe('/cards/1');
   });
 });
+
+// —— 探索入口接线(A1③ 数据面,review P5-FIX):三类入口都先挂节点(entryId 溯源) ——
+
+describe('CardView 探索入口接线(A1③ 数据面)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mockedGet.mockResolvedValue(TEXT_CARD);
+    mockedEntries.mockResolvedValue(ENTRIES);
+    mockedCreateSession.mockResolvedValue({ sessionId: 3 });
+    mockedAddNode.mockResolvedValue(NEW_NODE);
+    mockedSubmitRun.mockResolvedValue({ runId: 42 });
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('链接入口:addNode(当前卡版本+entryId)后跳目标卡;挂节点失败 toast 不阻断跳转', async () => {
+    const { wrapper, local } = await mountCard('1', { authed: true });
+    // defaultEntries[1] = LINK_CARD「哪些人物与这里有关」→ 卡 9
+    await wrapper.findAll('.entry')[1]!.trigger('click');
+    await flushPromises();
+    expect(mockedAddNode).toHaveBeenCalledWith(3, {
+      cardVersionId: 11, entryId: 2, questionText: '哪些人物与这里有关'
+    });
+    expect(local.currentRoute.value.path).toBe('/cards/9');
+    expect(mockedSubmitRun).not.toHaveBeenCalled();
+
+    // 挂节点失败:toast 提示但导航照常(节点是路径侧记录,不阻断主行为)
+    mockedAddNode.mockRejectedValueOnce(new ApiError(500, '挂节点失败'));
+    await wrapper.findAll('.entry')[1]!.trigger('click');
+    await flushPromises();
+    expect(showToast).toHaveBeenCalledWith('挂节点失败');
+    expect(local.currentRoute.value.path).toBe('/cards/9');
+  });
+
+  it('智能体服务入口:addNode(entryId)后以入口名为 question 发起讲解 run', async () => {
+    const { wrapper, local } = await mountCard('1', { authed: true });
+    // defaultEntries[0] = AGENT_SERVICE「为什么建在这里」
+    await wrapper.findAll('.entry')[0]!.trigger('click');
+    await flushPromises();
+    expect(mockedAddNode).toHaveBeenCalledWith(3, {
+      cardVersionId: 11, entryId: 1, questionText: '为什么建在这里'
+    });
+    expect(mockedSubmitRun).toHaveBeenCalledWith({
+      cardVersionId: 11, sessionId: 3, nodeId: 6,
+      question: '为什么建在这里', level: 'SIMPLE'
+    });
+    expect(local.currentRoute.value.path).toBe('/runs/42');
+    // 路由 state 带提交上下文(结果页刷新回读依赖)
+    expect((local.options.history.state as Record<string, unknown>).keRun).toBeTruthy();
+  });
+
+  it('比较入口:addNode(entryId)后以入口名为 question 发起 COMPARE run', async () => {
+    mockedEntries.mockResolvedValue({
+      cardId: 1,
+      defaultEntries: [
+        {
+          id: 7, name: '书院与藏书楼', type: 'COMPARE', relationLabel: null,
+          targetCardId: null, serviceType: null, scope: 'PUBLIC', status: 'ACTIVE', mine: false
+        }
+      ],
+      folded: []
+    });
+    const { wrapper, local } = await mountCard('1', { authed: true });
+    await wrapper.find('.entry').trigger('click');
+    await flushPromises();
+    expect(mockedAddNode).toHaveBeenCalledWith(3, {
+      cardVersionId: 11, entryId: 7, questionText: '书院与藏书楼'
+    });
+    expect(mockedSubmitRun).toHaveBeenCalledWith({
+      cardVersionId: 11, sessionId: 3, nodeId: 6,
+      question: '书院与藏书楼', level: 'SIMPLE', serviceType: 'COMPARE'
+    });
+    expect(local.currentRoute.value.path).toBe('/runs/42');
+  });
+});
