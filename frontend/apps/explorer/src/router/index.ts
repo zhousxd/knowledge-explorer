@@ -9,6 +9,7 @@ import RunView from '../views/RunView.vue';
 import SummaryView from '../views/SummaryView.vue';
 import EntryCreateView from '../views/EntryCreateView.vue';
 import ShareSetupView from '../views/ShareSetupView.vue';
+import MeView from '../views/MeView.vue';
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -39,6 +40,9 @@ const router = createRouter({
     { path: '/cards/:id(\\d+)/entry/new', component: EntryCreateView, meta: { title: '新增入口' } },
     // 分享设置页(FR-H02/H03 界面,Task 32):个性化页,受保护;query.sessionId 必带(缺失回 /path)
     { path: '/share/new', component: ShareSetupView, meta: { title: '分享探索' } },
+    // 个人空间(FR-U02/U05,Task 34):收藏/路径/成果/私人入口四入口 + 今日配额;个性化页,受保护
+    // (匿名经首页「我的」图标进入 → 守卫带 redirect 回跳登录)
+    { path: '/me', component: MeView, meta: { title: '个人空间' } },
     // 免登录分享页(FR-H04/H05 界面,Task 32):meta.public 匿名可浏览;**懒加载独立 chunk**
     // (不引 Vant,自足 token 样式,体积门 chunk gzip ≤ 50KB,见 src/__tests__/share-size.spec.ts)
     { path: '/s/:token', component: () => import('../views/ShareView.vue'), meta: { title: '探索分享', public: true } },

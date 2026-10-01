@@ -49,7 +49,8 @@ async function mountHome(options: { loggedIn?: boolean } = {}) {
       { path: '/home', component: HomeView },
       { path: '/cards', component: CardsView },
       { path: '/path', component: { render: () => null } },
-      { path: '/login', component: { render: () => null } }
+      { path: '/login', component: { render: () => null } },
+      { path: '/me', component: { render: () => null } }
     ]
   });
   await local.push('/home');
@@ -115,6 +116,20 @@ describe('HomeView(直挂,登录态分支)', () => {
     const { wrapper } = await mountHome({ loggedIn: true });
     expect(wrapper.findComponent(ResumeCard).exists()).toBe(false);
     expect(wrapper.find('.mypath').exists()).toBe(true);
+  });
+
+  it('标题行右侧「我的」图标按钮(Task 34):登录/匿名都渲染,点击跳 /me', async () => {
+    const { wrapper, local } = await mountHome({ loggedIn: true });
+    const meBtn = wrapper.find('[data-testid="me-entry"]');
+    expect(meBtn.exists()).toBe(true);
+    expect(meBtn.attributes('aria-label')).toBe('个人空间');
+    await meBtn.trigger('click');
+    await flushPromises();
+    expect(local.currentRoute.value.path).toBe('/me');
+
+    // 匿名同样渲染(真实路由由 /me 守卫带 redirect 进登录)
+    const anon = await mountHome();
+    expect(anon.wrapper.find('[data-testid="me-entry"]').exists()).toBe(true);
   });
 });
 

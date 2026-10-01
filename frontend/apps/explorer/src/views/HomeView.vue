@@ -28,6 +28,11 @@ function goLogin() {
   void router.push('/login');
 }
 
+/** 个人空间入口(Task 34):标题行右侧「我的」图标按钮;匿名点击由 /me 守卫带 redirect 进登录 */
+function goMe() {
+  void router.push('/me');
+}
+
 function goMyPath() {
   void router.push('/path');
 }
@@ -64,9 +69,24 @@ function openEntry() {
     >
       登录后记录你的探索路径
     </button>
-    <h1 class="title">
-      知识探索
-    </h1>
+    <div class="title-row">
+      <h1 class="title">
+        知识探索
+      </h1>
+      <button
+        type="button"
+        class="my-entry"
+        aria-label="个人空间"
+        data-testid="me-entry"
+        @click="goMe"
+      >
+        <KeIcon
+          class="me-ic"
+          name="me"
+        />
+        我的
+      </button>
+    </div>
     <p class="sub">
       从一张卡片出发，逐层深入，随时回望
     </p>
@@ -140,7 +160,11 @@ function openEntry() {
 <style scoped>
 .page { min-height: 100vh; box-sizing: border-box; padding: 24px 16px 96px; background: var(--ke-bg); }
 .login-hint { display: flex; width: 100%; align-items: center; margin: 0 0 14px; padding: 9px 12px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-m); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 12px; text-align: left; cursor: pointer; box-sizing: border-box; }
+.title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .title { margin: 0; font-family: var(--ke-font-display); font-size: 20px; font-weight: 900; line-height: 1.3; color: var(--ke-ink); }
+.my-entry { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-full); background: var(--ke-surface); color: var(--ke-ink); font-size: 12px; font-weight: 600; font-family: var(--ke-font); cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); }
+.my-entry:active { background: var(--ke-primary-soft); }
+.me-ic { width: 14px; height: 14px; color: var(--ke-primary); }
 .sub { margin: 4px 0 14px; font-size: 12px; color: var(--ke-sub); }
 .mypath { display: inline-flex; align-items: center; gap: 5px; margin: -6px 0 12px; padding: 6px 12px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-full); background: var(--ke-surface); color: var(--ke-ink); font-size: 12px; font-weight: 600; font-family: var(--ke-font); cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); }
 .mypath:active { background: var(--ke-primary-soft); }
