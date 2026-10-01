@@ -10,5 +10,13 @@ export default defineConfig({
       { find: '@ke/shared', replacement: fileURLToPath(new URL('../../packages/shared/src/index.ts', import.meta.url)) }
     ]
   },
-  test: { environment: 'jsdom' }
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true
+      }
+    }
+  },
+  test: { environment: 'jsdom', setupFiles: ['./src/__tests__/setup.ts'] }
 });
