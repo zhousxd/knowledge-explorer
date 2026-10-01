@@ -7,10 +7,14 @@
  * 消费方(RunView/结果页)可放心按 null 分支。
  */
 import { http } from './http';
+import type { CompareContent } from './cards';
 import type { ExplainLevel } from './sessions';
 
 /** 运行状态(后端 AgentRunStatus;TIMEOUT=60s 护栏,02 §5.1) */
 export type RunStatus = 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED' | 'TIMEOUT';
+
+/** 服务类型(Task 23:EXPLAIN=讲解,COMPARE=帮我比较——后端白名单,缺省 EXPLAIN) */
+export type RunServiceType = 'EXPLAIN' | 'COMPARE';
 
 /** POST /api/agent/runs 请求体(nodeId 必随 sessionId —— 后端 P5-18 冻结校验) */
 export interface RunSubmitPayload {
@@ -23,6 +27,9 @@ export interface RunSubmitPayload {
   level: ExplainLevel;
   /** 追问链(FR-E08,Task 22):父 run id,后端校验存在且属主否则 400;首次讲解不传 */
   parentRunId?: number;
+  /** 服务类型(Task 23):「帮我比较」传 COMPARE(产出对比卡 artifact);缺省 EXPLAIN。
+   *  追问(parentRunId)恒走讲解,不传本字段。 */
+  serviceType?: RunServiceType;
 }
 
 /** artifact.output 形状(= ExplainOutput:结构化讲解输出) */
@@ -35,11 +42,17 @@ export interface RunArtifactOutput {
 }
 
 /**
- * artifact 形状(= ExplainResult content_json):output 嵌套结构化输出,sources 为检索快照
- * (assetId→检索文本,序列化为字符串键),disclaimer 为 AI 生成标识(R8),audit 为审计旁注。
+ * artifact 形状(DONE 分流,Task 23):type==='COMPARE_CARD' 时为比较结果
+ * {type, data: CompareContent, sources, disclaimer, audit};否则(无 type 键)为讲解形状
+ * (= ExplainResult content_json:output 嵌套)。sources 为检索快照(assetId→检索文本,字符串键),
+ * disclaimer 为 AI 生成标识(R8),audit 为审计旁注。
  * 全字段 optional:non_null 下空值整键省略(如无会话 run 不落 artifact 的空对象分支)。
  */
 export interface RunArtifact {
+  /** 结果类型:COMPARE_CARD=比较(配 data);缺省=讲解(配 output) */
+  type?: 'COMPARE_CARD';
+  /** 比较输出(= CompareOutput,与卡片 CompareContent 同构,CompareCard props 直传) */
+  data?: CompareContent;
   output?: RunArtifactOutput;
   sources?: Record<string, string>;
   disclaimer?: string;
@@ -50,6 +63,8 @@ export interface RunArtifact {
 export interface RunState {
   runId: number;
   status: RunStatus;
+  /** 服务类型(Task 23:DONE 态渲染分流),缺键为 null(旧行) */
+  serviceType: string | null;
   /** 生成模型(FR-S13 计量口径),非终态/缺键为 null */
   model: string | null;
   /** 服务端耗时 ms,缺键为 null */
@@ -66,11 +81,12 @@ export function submitRun(payload: RunSubmitPayload): Promise<{ runId: number }>
 }
 
 /** wire 层归一(non_null 缺键 → null):RunController.RunView 的单一消费面 */
-function normalizeRun(run: Omit<RunState, 'model' | 'latencyMs' | 'error' | 'artifact'> &
-  Partial<Pick<RunState, 'model' | 'latencyMs' | 'error' | 'artifact'>>): RunState {
+function normalizeRun(run: Omit<RunState, 'model' | 'latencyMs' | 'error' | 'artifact' | 'serviceType'> &
+  Partial<Pick<RunState, 'model' | 'latencyMs' | 'error' | 'artifact' | 'serviceType'>>): RunState {
   return {
     runId: run.runId,
     status: run.status,
+    serviceType: run.serviceType ?? null,
     model: run.model ?? null,
     latencyMs: run.latencyMs ?? null,
     error: run.error ?? null,

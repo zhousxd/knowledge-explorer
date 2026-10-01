@@ -343,15 +343,18 @@ describe('CardView 服务栏接线(P5-21)', () => {
     expect((local.options.history.state as Record<string, unknown>).keRun).toBeTruthy();
   });
 
-  it('另两键同走讲解通道:比较/整理的 question 按冻结文案合成', async () => {
+  it('另两键:比较走 COMPARE 通道(serviceType,Task 23),整理仍讲解;question 按冻结文案合成', async () => {
     const { wrapper } = await mountCard('1', { authed: true });
     await wrapper.findAll('.svc')[1]!.trigger('click');
     await flushPromises();
     expect(mockedSubmitRun.mock.calls[0]?.[0].question).toBe('比较:岳麓书院');
+    expect(mockedSubmitRun.mock.calls[0]?.[0].serviceType).toBe('COMPARE');
 
     await wrapper.findAll('.svc')[2]!.trigger('click');
     await flushPromises();
     expect(mockedSubmitRun.mock.calls[1]?.[0].question).toBe('整理关于 岳麓书院 的发现');
+    // 整理不传 serviceType → 后端默认 EXPLAIN(讲解通道)
+    expect(mockedSubmitRun.mock.calls[1]?.[0].serviceType).toBeUndefined();
   });
 
   it('二次点击复用已建会话,不再 createSession', async () => {

@@ -6,6 +6,7 @@ import { ApiError } from '../api/http';
 import { fetchRun, isTerminal, submitRun } from '../api/runs';
 import type { RunArtifact, RunState, RunSubmitPayload } from '../api/runs';
 import { updateExplainLevel } from '../api/sessions';
+import CompareCard from '../components/CardRenderer/CompareCard.vue';
 import RunView from '../views/RunView.vue';
 
 vi.mock('../api/runs', () => ({ fetchRun: vi.fn(), submitRun: vi.fn(), isTerminal: vi.fn() }));
@@ -41,9 +42,27 @@ const ARTIFACT: RunArtifact = {
   audit: { stripped: 2, filtered: 1 }
 };
 
+/** 比较结果 artifact(Task 23:= CompareResult content_json:type + data(CompareContent) + sources/disclaimer/audit) */
+const COMPARE_ARTIFACT: RunArtifact = {
+  type: 'COMPARE_CARD',
+  data: {
+    objects: ['岳麓书院', '白鹿洞书院'],
+    dimensions: ['创办时间', '所在地'],
+    cells: [
+      ['976 年（北宋）', '940 年（南唐）'],
+      ['湖南长沙', '江西庐山']
+    ],
+    citations: [11]
+  },
+  sources: { '11': '《书院比较资料》第一章,两书院创办年代对照' },
+  disclaimer: '本内容由 AI 生成,仅供参考',
+  audit: { stripped: 1, filtered: 0 }
+};
+
 function runState(patch: Partial<RunState>): RunState {
   return {
-    runId: 7, status: 'RUNNING', model: null, latencyMs: null, error: null, artifact: null, ...patch
+    runId: 7, status: 'RUNNING', serviceType: null, model: null, latencyMs: null, error: null,
+    artifact: null, ...patch
   };
 }
 
@@ -207,6 +226,43 @@ describe('RunView(执行态页,04 §7.2 RunProgress)', () => {
     });
     expect(local.currentRoute.value.path).toBe('/runs/42');
     expect(mockedFetchRun).toHaveBeenLastCalledWith(42);
+  });
+
+  // —— 比较结果页(Task 23:artifact.type==='COMPARE_CARD' 分流,FR-S06) ——
+
+  it('比较结果:对比卡 chip + CompareCard 表格(props 直传 data),无档位 chip 与讲解段落', async () => {
+    mockedFetchRun.mockResolvedValue(
+      runState({ status: 'DONE', serviceType: 'COMPARE', artifact: COMPARE_ARTIFACT }));
+    const { wrapper } = await mountRun('7', { state: { keRun: JSON.stringify(PAYLOAD) } });
+
+    expect(wrapper.find('.chip.gen-tag').text()).toBe('对比卡 · 由智能体生成');
+    expect(wrapper.find('.q-title').text()).toBe('讲清楚:岳麓书院');
+    const cmp = wrapper.findComponent(CompareCard);
+    expect(cmp.exists()).toBe(true);
+    expect(cmp.props('content')).toEqual(COMPARE_ARTIFACT.data);
+    // 讲解形态不参与:无档位 chip、无 summary/段落正文、无「还可以继续问」
+    expect(wrapper.find('.chip.lvl').exists()).toBe(false);
+    expect(wrapper.find('.sum').exists()).toBe(false);
+    expect(wrapper.find('.para').exists()).toBe(false);
+    expect(wrapper.find('.more').exists()).toBe(false);
+  });
+
+  it('比较结果复用出处清单/脚注:citations(assetId)角标点击联动清单行高亮', async () => {
+    mockedFetchRun.mockResolvedValue(
+      runState({ status: 'DONE', serviceType: 'COMPARE', artifact: COMPARE_ARTIFACT }));
+    const { wrapper } = await mountRun('7', { state: { keRun: JSON.stringify(PAYLOAD) } });
+
+    // 出处清单与脚注与讲解同构(sources map + disclaimer)
+    const rows = wrapper.findAll('.src .row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.text()).toContain('《书院比较资料》');
+    expect(wrapper.find('.foot').text()).toBe('本内容由 AI 生成,仅供参考');
+    // 剥离警示行(audit.stripped>0)
+    expect(wrapper.find('.src .warn').text()).toContain('已剥离 1 个无效引用');
+
+    // CompareCard emit cite(11=assetId) → 换算出处清单序号 [1] → 行高亮
+    await wrapper.find('.cmp-cites sup').trigger('click');
+    expect(wrapper.find('.src .row.row-hl').exists()).toBe(true);
   });
 
   it('刷新丢 state:追问禁用(placeholder 说明原因),发送不触发提交', async () => {

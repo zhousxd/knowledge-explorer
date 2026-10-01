@@ -16,6 +16,7 @@ function jsonResp(status: number, body: unknown) {
 const DONE_RUN: RunState = {
   runId: 7,
   status: 'DONE',
+  serviceType: 'EXPLAIN',
   model: 'deepseek-chat',
   latencyMs: 4200,
   error: null,
@@ -95,13 +96,14 @@ describe('fetchRun 轮询契约', () => {
     const raw = {
       runId: 8,
       status: 'RUNNING'
-      // model/latencyMs/error/artifact 整键缺失
+      // model/latencyMs/error/artifact/serviceType(Task 23)整键缺失
     };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       jsonResp(200, { code: 0, message: 'ok', traceId: 't', data: raw })));
 
     const run = await fetchRun(8);
     expect(run.status).toBe('RUNNING');
+    expect(run.serviceType).toBeNull();
     expect(run.model).toBeNull();
     expect(run.latencyMs).toBeNull();
     expect(run.error).toBeNull();

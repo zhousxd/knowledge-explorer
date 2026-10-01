@@ -205,7 +205,8 @@ function onEntry(e: CardEntryItem): void {
   console.info(`入口「${e.name}」由 Phase 5 服务接线`);
 }
 
-// —— 服务栏接线(P5-21):三键均提交讲解 run(比较/整理的专属模板由 Task 23/25 接管)。
+// —— 服务栏接线(P5-21):讲解/整理提交讲解 run(EXPLAIN),「帮我比较」走 COMPARE 通道
+// (Task 23:payload.serviceType='COMPARE',结果页渲染对比卡;整理的专属模板由 Task 25 接管)。
 // 链路:匿名先引导登录 → ensureForCard(无会话建、有则复用)→ addNode 挂根节点(纯 MVP,
 // 完整挂接后续接)→ submitRun(带 nodeId/sessionId,后端 P5-18 冻结约束)→ 跳执行态页,
 // question/重试 payload 经路由 state(keRun)随行。429 留在卡页 toast envelope 文案。
@@ -242,7 +243,10 @@ async function onService(kind: ServiceKind): Promise<void> {
       nodeId: node.nodeId,
       question,
       // FR-E10 档位随讲解生效:读会话档位记忆(结果页/路径页切换后,下一次提交即新档)
-      level: sessionStore.explainLevel
+      level: sessionStore.explainLevel,
+      // FR-S06(Task 23):「帮我比较」走 COMPARE 通道(后端切比较提示词,产出对比卡 artifact);
+      // 讲解/整理不传 → 后端默认 EXPLAIN。追问恒走讲解(RunView.sendAsk 不带本字段)
+      ...(kind === 'compare' ? { serviceType: 'COMPARE' as const } : {})
     };
     const { runId } = await submitRun(payload);
     await router.push({ path: `/runs/${runId}`, state: { keRun: JSON.stringify(payload) } });

@@ -8,21 +8,24 @@ import { fetchRun, isTerminal, submitRun } from '../api/runs';
 import type { RunState, RunSubmitPayload } from '../api/runs';
 import type { ExplainLevel } from '../api/sessions';
 import AskBar from '../components/AskBar.vue';
+import CompareCard from '../components/CardRenderer/CompareCard.vue';
 import TopBar from '../components/TopBar.vue';
 import { useSessionStore } from '../stores/sessionStore';
 
 /**
- * 执行态页 + 讲解结果页(04 §7.2 RunProgress/ExplainResult,FR-S04/E08/E10/E11 界面):
+ * 执行态页 + 讲解/比较结果页(04 §7.2 RunProgress/ExplainResult,FR-S04/E08/E10/E11 界面):
  * 运行中为 spinner + 任务问题 + 三步清单 + 限时说明,2s 轮询 GET /runs/{id}(隐藏暂停、
- * 终态即停、404/403 终止);DONE 且有 artifact 时同路由原地渲染讲解结果页 ——
- * chips(讲解卡 · 由智能体生成 + 档位)→ 宋体问题标题 → summary 引言段 → 分段正文
- * (14/1.8 两端对齐,段尾 ClaimBadge 三档 + citations 角标)→ 出处清单(sources map,
- * audit.stripped/证据缺口警示行)→「还可以继续问」→ 受控生成声明脚注;底部 AskBar
- * 常驻追问(payload 从路由 state 继承提交上下文,parentRunId 记追问链,刷新丢失则禁用
- * ——§8.7 禁用带原因)。档位 chip 点击循环切换(PUT explain-level,下次讲解生效)。
- * 停顿三键不入结果页:经 TopBar 指南针去路径页(FR-E09「还有哪些疑问」=openQuestions,
- * 「换个方向」=路径页分叉,Task 22 授权决策)。question/重试 payload 经路由 state(keRun)
- * 携带;FAILED/TIMEOUT 按错误卡模板给「重试/换个问法」;429 以页内错误态展示 envelope 文案。
+ * 终态即停、404/403 终止);DONE 且有 artifact 时同路由原地渲染结果页 ——
+ * 讲解(EXPLAIN,artifact.output):chips(讲解卡 · 由智能体生成 + 档位)→ 宋体问题标题 →
+ * summary 引言段 → 分段正文(14/1.8 两端对齐,段尾 ClaimBadge 三档 + citations 角标)→
+ * 出处清单(sources map,audit.stripped/证据缺口警示行)→「还可以继续问」→ 受控生成声明脚注;
+ * 比较(COMPARE,Task 23:artifact.type==='COMPARE_CARD'):chips(对比卡 · 由智能体生成)→
+ * 问题标题 → CompareCard 维度×对象表格(citations 角标联动出处清单)→ 复用出处清单/脚注。
+ * 底部 AskBar 常驻追问(payload 从路由 state 继承提交上下文,parentRunId 记追问链,刷新丢失
+ * 则禁用——§8.7 禁用带原因;追问恒走讲解通道)。档位 chip 点击循环切换(PUT explain-level,
+ * 下次讲解生效)。停顿三键不入结果页:经 TopBar 指南针去路径页(FR-E09「还有哪些疑问」=
+ * openQuestions,「换个方向」=路径页分叉,Task 22 授权决策)。question/重试 payload 经路由
+ * state(keRun)携带;FAILED/TIMEOUT 按错误卡模板给「重试/换个问法」;429 以页内错误态展示 envelope 文案。
  */
 const POLL_MS = 2000;
 const STEPS = ['读取上下文', '检索资料', '生成讲解并校验出处'] as const;
@@ -94,11 +97,16 @@ const reasonLine = computed(() => {
   return r?.status === 'TIMEOUT' ? '任务超时,请稍后重试' : '服务繁忙,请稍后重试';
 });
 
-// —— 讲解结果页(artifact.output 包一层,P5-21 实测形状;全键 optional 容 non_null 缺省) ——
+// —— 讲解/比较结果页(P5-21 实测形状;全键 optional 容 non_null 缺省) ——
+// Task 23 分流:artifact.type==='COMPARE_CARD' → 比较结果(CompareCard 表格 + 复用出处清单/脚注);
+// 其余(output 存在)→ 讲解结果页。
 
 const output = computed(() => run.value?.artifact?.output ?? null);
-/** 结果页可渲染=DONE 且 artifact.output 存在(无 artifact 的 legacy DONE 走简单成功卡兜底) */
-const resultReady = computed(() => output.value !== null);
+/** 比较结果(artifact.type 分流,后端 COMPARE_CARD content_json 专属键) */
+const compareData = computed(() => run.value?.artifact?.data ?? null);
+const isCompare = computed(() => run.value?.artifact?.type === 'COMPARE_CARD' && compareData.value !== null);
+/** 结果页可渲染=DONE 且(讲解 output | 比较 data)存在(无 artifact 的 legacy DONE 走简单成功卡兜底) */
+const resultReady = computed(() => output.value !== null || compareData.value !== null);
 
 const disclaimer = computed(() => run.value?.artifact?.disclaimer ?? '');
 const strippedCount = computed(() => run.value?.artifact?.audit?.stripped ?? 0);
@@ -174,6 +182,13 @@ function onCite(no: number): void {
   void nextTick(() => {
     srcWrap.value?.querySelector('.row-hl')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   });
+}
+
+/** 比较结果角标(Task 23):CompareCard emit 的 citations 是 assetId → 换算出处清单序号后联动;
+ *  清单外的 id(理论上已被后端 sanitize 剥离)静默忽略 */
+function onCompareCite(assetId: number): void {
+  const no = citeNo(assetId);
+  if (no > 0) onCite(no);
 }
 
 /** 还可以继续问:点击预填追问输入框并聚焦 */
@@ -369,16 +384,17 @@ function goBack(): void {
       </p>
     </main>
 
-    <!-- DONE + artifact:讲解结果页(04 §7.2 讲解卡形态;同路由终态渲染) -->
+    <!-- DONE + artifact:结果页(04 §7.2;讲解=ExplainResult 卡形态,比较=对比卡表格,Task 23 分流) -->
     <main
       v-else-if="phase === 'done' && resultReady"
       class="wrap result-wrap"
     >
       <div class="chips">
         <span class="chip gen-tag">
-          讲解卡 · 由智能体生成
+          {{ isCompare ? '对比卡 · 由智能体生成' : '讲解卡 · 由智能体生成' }}
         </span>
         <button
+          v-if="!isCompare"
           type="button"
           class="chip lvl"
           aria-label="讲解档位,点击切换"
@@ -391,33 +407,41 @@ function goBack(): void {
       <h1 class="q-title">
         {{ question }}
       </h1>
-      <p
-        v-if="output?.summary"
-        class="sum"
-      >
-        {{ output.summary }}
-      </p>
-      <p
-        v-for="(s, i) in decorated"
-        :key="i"
-        class="para"
-      >
-        {{ s.body }}
-        <button
-          v-for="c in s.cites"
-          :key="c.assetId"
-          type="button"
-          class="cite"
-          :title="c.title"
-          @click="onCite(c.no)"
+      <!-- 比较:CompareCard 表格(citations 角标联动下方出处清单),Task 23 -->
+      <CompareCard
+        v-if="isCompare && compareData"
+        :content="compareData"
+        @cite="onCompareCite"
+      />
+      <template v-else>
+        <p
+          v-if="output?.summary"
+          class="sum"
         >
-          [{{ c.no }}]
-        </button>
-        <ClaimBadge
-          class="badge"
-          :type="s.claim"
-        />
-      </p>
+          {{ output.summary }}
+        </p>
+        <p
+          v-for="(s, i) in decorated"
+          :key="i"
+          class="para"
+        >
+          {{ s.body }}
+          <button
+            v-for="c in s.cites"
+            :key="c.assetId"
+            type="button"
+            class="cite"
+            :title="c.title"
+            @click="onCite(c.no)"
+          >
+            [{{ c.no }}]
+          </button>
+          <ClaimBadge
+            class="badge"
+            :type="s.claim"
+          />
+        </p>
+      </template>
       <section
         ref="srcWrap"
         class="src"
@@ -450,7 +474,7 @@ function goBack(): void {
         </p>
       </section>
       <section
-        v-if="openQuestions.length"
+        v-if="!isCompare && openQuestions.length"
         class="more"
       >
         <b class="more-t">
