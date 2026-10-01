@@ -222,6 +222,30 @@ class ExplainPipelineIT {
     }
 
     @Test
+    void nodeIdWithoutSessionRejected() {
+        // review P5-18 回归：nodeId 不带 sessionId 的 POST 会绕过属主校验块，
+        // 把 run 附着到任意人节点（跨租户污染 + 存在性泄露）→ 必须同步 400 且不产生 run
+        long versionId = insertPublishedCard("附着卡", null);
+        String victimToken = newUserToken("13811100007", "庚", "EXPLORER");
+        long[] victimIds = newSessionWithNode(victimToken, versionId);
+
+        String attackerToken = newUserToken("13811100008", "辛", "EXPLORER");
+        StubLlmGateway.reset(StubLlmGateway.validOutput(0));
+        ResponseEntity<String> res = http.postForEntity("/api/agent/runs",
+                json("{\"cardVersionId\":" + versionId + ",\"nodeId\":" + victimIds[1]
+                        + ",\"question\":\"?\",\"level\":\"SIMPLE\"}", attackerToken), String.class);
+        assertThat(res.getStatusCode().value()).as("body=%s", res.getBody()).isEqualTo(400);
+        assertThat((Integer) JsonPath.read(res.getBody(), "$.code")).isEqualTo(400);
+
+        // 受害者节点的 run 列表不含该提交（恶意请求未创建任何 run）
+        ResponseEntity<String> list = http.exchange("/api/agent/runs?nodeId=" + victimIds[1],
+                HttpMethod.GET, bearer(victimToken), String.class);
+        assertThat(list.getStatusCode().value()).isEqualTo(200);
+        List<Integer> runIds = JsonPath.read(list.getBody(), "$.data[*].runId");
+        assertThat(runIds).isEmpty();
+    }
+
+    @Test
     void retrievalEmptyStillWorks() {
         long versionId = insertPublishedCard("无资料卡", null); // sources 为空 → 检索空 map
         String token = newUserToken("13811100006", "己", "EXPLORER");

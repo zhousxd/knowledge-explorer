@@ -126,6 +126,11 @@ public class ExplainService {
         if (level == null || !LEVELS.contains(level)) {
             throw new BadRequestException("讲解度仅支持 SIMPLE/DEEP/CHILD");
         }
+        if (nodeId != null && sessionId == null) {
+            // nodeId 必随会话：否则下面的属主校验块整块被跳过，run 可附着到任意人的节点上
+            //（跨租户污染 + 存在性泄露，review P5-18）
+            throw new BadRequestException("nodeId 必须随会话提交");
+        }
         if (sessionId != null) {
             sessions.ownedSession(userId, sessionId);
             if (nodeId != null) {
