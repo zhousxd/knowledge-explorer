@@ -41,6 +41,9 @@ public class SecurityConfig {
                 // 入口列表（含 viewer 过滤）与全部写路径仍走 anyRequest().authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/cards").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/cards/{id:\\d+}").permitAll()
+                // 免登录分享页（FR-H04/H06）：仅 GET /s/{token} 读快照 permitAll；撤销/接续（POST）
+                // 不放行——TOKEN 是唯一凭证，泄露面只在「持有 token 可见快照」（02 §9）
+                .requestMatchers(HttpMethod.GET, "/s/*").permitAll()
                 .anyRequest().authenticated())
             .exceptionHandling(e -> e.authenticationEntryPoint(authenticationEntryPoint())
                                        .accessDeniedHandler(accessDeniedHandler()))

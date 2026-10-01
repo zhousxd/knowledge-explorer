@@ -43,7 +43,7 @@ public final class SnapshotFilter {
 
     /**
      * @param tree            会话树输入（可为 null，视为空树）
-     * @param selectedNodeIds 接收方勾选的节点 id 集合（null 视为空集 → 空快照）
+     * @param selectedNodeIds 分享者勾选入快照的节点 id 集合（勾选动作在分享设置页完成；null 视为空集 → 空快照）
      * @param cardVersions    versionId → 卡版本可见性视图（null 视为空表 → 全部占位剥离）
      * @param sharerUserId    分享者用户 id（null 时仅 PUBLIC 入口可见）
      * @param titleOverride   快照标题覆盖（空白视同未提供）
