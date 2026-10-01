@@ -215,6 +215,19 @@ describe('PathView(我的路径,FR-E03/E04/E05)', () => {
     expect(router.currentRoute.value.path).toBe('/summary');
     expect(router.currentRoute.value.query.sessionId).toBe('5');
   });
+
+  it('分享键(i-share):跳分享设置页并携带当前会话(/share/new?sessionId=5)', async () => {
+    mockedTree.mockResolvedValue(TREE);
+    // 目标页挂载时会拉树:给同一棵树避免悬空 promise
+    const wrapper = await gotoPath('?sessionId=5');
+
+    const share = wrapper.findAll('.pausebar .pb').find((b) => b.text().includes('分享'))!;
+    await share.trigger('click');
+    await flushPromises();
+
+    expect(router.currentRoute.value.path).toBe('/share/new');
+    expect(router.currentRoute.value.query.sessionId).toBe('5');
+  });
 });
 
 function mockedShowToast() {

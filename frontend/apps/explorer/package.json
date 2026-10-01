@@ -1,7 +1,7 @@
 {
   "name": "@ke/explorer",
   "private": true,
-  "scripts": { "build": "vite build", "test": "vitest run", "typecheck": "vue-tsc --noEmit" },
+  "scripts": { "build": "vite build", "test": "vitest run", "test:size": "vitest run share-size", "typecheck": "vue-tsc --noEmit" },
   "dependencies": {
     "@ke/shared": "workspace:*",
     "pinia": "^2.2.0",

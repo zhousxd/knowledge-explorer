@@ -118,10 +118,16 @@ async function onLevel(level: ExplainLevel): Promise<void> {
   }
 }
 
-// —— 底部三键停顿区:整理发现(成果整理页,FR-E07;需当前会话——路径页必有)/ 暂存(直接离开)/ 换个方向(确认回首页) ——
+// —— 底部停顿区:整理发现(成果整理页,FR-E07;需当前会话——路径页必有)/ 分享(分享设置页,FR-H02,
+//    Task 32;需当前会话)/ 暂存(直接离开)/ 换个方向(确认回首页) ——
 function onOrganize(): void {
   if (store.sessionId == null) return;
   void router.push({ path: '/summary', query: { sessionId: String(store.sessionId) } });
+}
+
+function onShare(): void {
+  if (store.sessionId == null) return;
+  void router.push({ path: '/share/new', query: { sessionId: String(store.sessionId) } });
 }
 
 /** 状态已随每次操作自动持久化,暂存=直接离开 */
@@ -301,6 +307,17 @@ function nodeTitle(n: PathNode): string {
           name="layers"
         />
         整理发现
+      </button>
+      <button
+        type="button"
+        class="pb"
+        @click="onShare"
+      >
+        <KeIcon
+          class="pb-ic"
+          name="share"
+        />
+        分享
       </button>
       <button
         type="button"

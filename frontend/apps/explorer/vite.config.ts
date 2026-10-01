@@ -15,6 +15,11 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true
+      },
+      // 免登录分享端点(不在 /api 前缀下):GET /s/{token} permitAll + POST /s/{token}/continue
+      '/s': {
+        target: 'http://localhost:8080',
+        changeOrigin: true
       }
     }
   },

@@ -8,6 +8,7 @@ import PathView from '../views/PathView.vue';
 import RunView from '../views/RunView.vue';
 import SummaryView from '../views/SummaryView.vue';
 import EntryCreateView from '../views/EntryCreateView.vue';
+import ShareSetupView from '../views/ShareSetupView.vue';
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -36,6 +37,11 @@ const router = createRouter({
     { path: '/summary', component: SummaryView, meta: { title: '整理发现' } },
     // 用一句话新增入口四步流(FR-N01–N05,Task 28):个性化页,受保护;卡 id 必为数字
     { path: '/cards/:id(\\d+)/entry/new', component: EntryCreateView, meta: { title: '新增入口' } },
+    // 分享设置页(FR-H02/H03 界面,Task 32):个性化页,受保护;query.sessionId 必带(缺失回 /path)
+    { path: '/share/new', component: ShareSetupView, meta: { title: '分享探索' } },
+    // 免登录分享页(FR-H04/H05 界面,Task 32):meta.public 匿名可浏览;**懒加载独立 chunk**
+    // (不引 Vant,自足 token 样式,体积门 chunk gzip ≤ 50KB,见 src/__tests__/share-size.spec.ts)
+    { path: '/s/:token', component: () => import('../views/ShareView.vue'), meta: { title: '探索分享', public: true } },
     { path: '/', redirect: '/home' },
     // catch-all:未知路径回首页(避免白屏)
     { path: '/:pathMatch(.*)*', redirect: '/home' }
