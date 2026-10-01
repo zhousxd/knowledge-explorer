@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { KeIcon } from '@ke/shared';
 import { createCard, getWbCard, saveCardContent } from '../api/cards';
-import type { CardTemplateType, SourceRef } from '../api/types';
+import type { CardStatus, CardTemplateType, SourceRef } from '../api/types';
 import { STATUS_META, TEMPLATE_LABELS } from '../cardMeta';
 import TextEditor from '../components/editors/TextEditor.vue';
 import CompareEditor from '../components/editors/CompareEditor.vue';
@@ -65,6 +65,10 @@ const loading = ref(false);
 const loadError = ref('');
 const saving = ref(false);
 const saveError = ref('');
+
+/** 回填状态 chip:loadedStatus 是自由串(接口回填),收窄到 CardStatus 后查 STATUS_META */
+const statusMeta = computed(() =>
+  (loadedStatus.value ? STATUS_META[loadedStatus.value as CardStatus] : null));
 
 /** 模板切换/回填后自增,强制重挂载编辑器(编辑器以挂载时的 modelValue 初始化) */
 const editorKey = ref(0);
@@ -244,9 +248,9 @@ async function onSave(): Promise<void> {
           <span class="head-theme-text">{{ theme }}</span>
           <span class="tpl-chip">{{ TEMPLATE_LABELS[templateType] ?? templateType }}</span>
           <span
-            v-if="loadedStatus"
+            v-if="statusMeta"
             class="status-chip"
-          >{{ STATUS_META[loadedStatus].label }}</span>
+          >{{ statusMeta.label }}</span>
         </p>
         <h3 class="head-title-text">
           {{ title }}

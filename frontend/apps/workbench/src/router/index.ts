@@ -34,7 +34,9 @@ const router = createRouter({
         { path: 'assets', component: AssetsView, meta: { title: '知识资源' } },
         { path: 'metrics', component: MetricsView, meta: { title: '数据看板' } }
       ]
-    }
+    },
+    // catch-all:未知路径回卡片管理(避免白屏;Phase 3 explorer 路由克隆此模式)
+    { path: '/:pathMatch(.*)*', redirect: '/cards' }
   ]
 });
 

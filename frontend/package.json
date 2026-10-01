@@ -6,6 +6,7 @@
   "scripts": {
     "lint": "eslint . && stylelint \"apps/**/*.{vue,css}\" \"packages/**/*.{vue,css}\"",
     "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
     "build": "pnpm -r --if-present build",
     "gen:api": "openapi-generator-cli generate -i http://localhost:8080/v3/api-docs -g typescript-fetch -o packages/shared/src/api --additional-properties=supportsES6=true,withoutRuntimeChecks=true"
   },

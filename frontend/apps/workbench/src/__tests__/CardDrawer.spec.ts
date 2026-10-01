@@ -15,6 +15,7 @@ const CARD: CardListItem = {
   title: '岳麓书院',
   status: 'PUBLISHED',
   currentVersionNo: 2,
+  maintainerId: 1,
   maintainerNickname: '阿创',
   updatedAt: '2026-09-30T10:00:00+08:00'
 };

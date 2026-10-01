@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import ElementPlus, { ElMessageBox } from 'element-plus';
+import type { MessageBoxData } from 'element-plus';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CardsView from '../views/CardsView.vue';
 import type { CardListItem, MeResp } from '../api/types';
@@ -184,7 +185,7 @@ describe('CardsView', () => {
   });
 
   it('停用防双击:确认框挂起期间重复点击不叠加弹框', async () => {
-    let resolveConfirm: (v: string) => void = () => {};
+    let resolveConfirm: (value: MessageBoxData) => void = () => {};
     const confirmSpy = vi.spyOn(ElMessageBox, 'confirm')
       .mockImplementation(() => new Promise((resolve) => { resolveConfirm = resolve; }));
     const wrapper = await mountView();
@@ -198,13 +199,13 @@ describe('CardsView', () => {
     await disableBtn?.trigger('click');
     expect(confirmSpy).toHaveBeenCalledTimes(1);
 
-    resolveConfirm('confirm');
+    resolveConfirm('confirm' as MessageBoxData);
     await flushPromises();
     expect(disableCardMock).toHaveBeenCalledTimes(1);
   });
 
   it('已发布行「停用」确认后调用 disableCard,取消则不调用', async () => {
-    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm');
+    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as MessageBoxData);
     const wrapper = await mountView();
     await wrapper.findAll('.el-table__row')[0]?.find('.act-disable').trigger('click');
     await flushPromises();
