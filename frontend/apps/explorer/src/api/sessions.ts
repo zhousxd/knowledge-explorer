@@ -126,3 +126,16 @@ export async function addNode(sessionId: number, payload: AddNodePayload): Promi
 export function updateExplainLevel(sessionId: number, level: ExplainLevel): Promise<{ explainLevel: string }> {
   return http.put<{ explainLevel: string }>(`/sessions/${sessionId}/explain-level`, { level });
 }
+
+/** 未决疑问行(后端 OpenQuestionService.OpenQuestion;collectedAt=来源 run 终态时间,ISO 串) */
+export interface OpenQuestionItem {
+  /** 来源讲解 run(去追问跳 /runs/{runId} 结果页) */
+  runId: number;
+  question: string;
+  collectedAt: string;
+}
+
+/** GET /api/sessions/{id}/open-questions → {questions:[…]}(FR-E09,Task 24 冻结契约;扁平逆时序) */
+export function fetchOpenQuestions(sessionId: number): Promise<{ questions: OpenQuestionItem[] }> {
+  return http.get<{ questions: OpenQuestionItem[] }>(`/sessions/${sessionId}/open-questions`);
+}

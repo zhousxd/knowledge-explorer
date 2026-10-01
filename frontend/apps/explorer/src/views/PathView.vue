@@ -118,9 +118,10 @@ async function onLevel(level: ExplainLevel): Promise<void> {
   }
 }
 
-// —— 底部三键停顿区:整理发现(Phase 5 成果整理)/ 暂存(直接离开)/ 换个方向(确认回首页) ——
+// —— 底部三键停顿区:整理发现(成果整理页,FR-E07;需当前会话——路径页必有)/ 暂存(直接离开)/ 换个方向(确认回首页) ——
 function onOrganize(): void {
-  console.info('整理发现由 Phase 5 接线(成果整理服务)');
+  if (store.sessionId == null) return;
+  void router.push({ path: '/summary', query: { sessionId: String(store.sessionId) } });
 }
 
 /** 状态已随每次操作自动持久化,暂存=直接离开 */

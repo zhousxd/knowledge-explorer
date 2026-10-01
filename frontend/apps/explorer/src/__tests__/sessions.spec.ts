@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { addNode, fetchLatestSession, fetchMySessions, fetchSessionTree } from '../api/sessions';
+import { addNode, fetchLatestSession, fetchMySessions, fetchOpenQuestions, fetchSessionTree } from '../api/sessions';
 import type { ResumeSession, SessionPage, SessionTree } from '../api/sessions';
 
 function jsonResp(status: number, body: unknown) {
@@ -110,5 +110,26 @@ describe('fetchLatestSession 契约', () => {
 
     const created = await addNode(9, { cardVersionId: 77 });
     expect(created.parentNodeId).toBeNull();
+  });
+});
+
+describe('fetchOpenQuestions 契约(FR-E09 / Task 24 冻结)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('GET /api/sessions/{id}/open-questions 解包信封得 {questions:[{runId,question,collectedAt}]}', async () => {
+    const QUESTIONS = {
+      questions: [
+        { runId: 42, question: '书院经费从何而来?', collectedAt: '2026-09-30T09:30:00Z' },
+        { runId: 41, question: '朱张会讲是谁主持的?', collectedAt: '2026-09-29T18:00:00Z' }
+      ]
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResp(200, { code: 0, message: 'ok', traceId: 't', data: QUESTIONS }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchOpenQuestions(5)).resolves.toEqual(QUESTIONS);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/sessions/5/open-questions');
   });
 });

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchRun, isTerminal, submitRun } from '../api/runs';
+import { fetchRun, isTerminal, submitRun, summarize } from '../api/runs';
 import type { RunState } from '../api/runs';
 
 /**
@@ -69,6 +69,64 @@ describe('submitRun 契约', () => {
     await expect(submitRun({
       cardVersionId: 11, sessionId: 3, nodeId: 6, question: '讲清楚:岳麓书院', level: 'SIMPLE'
     })).rejects.toMatchObject({ code: 429, message: '今日 30 次智能服务已用完,明早 8 点恢复' });
+  });
+});
+
+describe('summarize 契约(成果整理,Task 24 冻结)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('POST /api/agent/summarize 带 {sessionId,nodeIds} 并解包 202 信封得 {runId}', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResp(202, { code: 0, message: 'ok', traceId: 't', data: { runId: 88 } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(summarize({ sessionId: 5, nodeIds: [1, 3, 4] })).resolves.toEqual({ runId: 88 });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/agent/summarize');
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1].body)).toEqual({ sessionId: 5, nodeIds: [1, 3, 4] });
+  });
+
+  it('空选 400 / 越权 403 / 配额 429 envelope:ApiError code+message 原样抛出', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResp(400, { code: 400, message: 'nodeIds 不能为空', traceId: 't1', data: null }))
+      .mockResolvedValueOnce(jsonResp(403, { code: 403, message: '无权访问该会话', traceId: 't2', data: null }))
+      .mockResolvedValueOnce(jsonResp(429, { code: 429, message: '今日 30 次智能服务已用完,明早 8 点恢复', traceId: 't3', data: null })));
+
+    await expect(summarize({ sessionId: 5, nodeIds: [] })).rejects.toMatchObject({ code: 400, message: 'nodeIds 不能为空' });
+    await expect(summarize({ sessionId: 6, nodeIds: [1] })).rejects.toMatchObject({ code: 403, message: '无权访问该会话' });
+    await expect(summarize({ sessionId: 5, nodeIds: [1] })).rejects.toMatchObject({ code: 429, message: '今日 30 次智能服务已用完,明早 8 点恢复' });
+  });
+
+  /**
+   * REPORT artifact(Task 25):content_json 扁平键 {type:'REPORT', keyFindings, openQuestions,
+   * branchView, sources, disclaimer, audit} —— 与 COMPARE_CARD 同为 artifact.type 分流依据;
+   * fetchRun 的 null 家族归一不得吞掉这些键。
+   */
+  it('fetchRun 透传 REPORT artifact(type/keyFindings/branchView)供成果整理页分流渲染', async () => {
+    const raw = {
+      runId: 88,
+      status: 'DONE',
+      serviceType: 'SUMMARIZE',
+      latencyMs: 5200,
+      artifact: {
+        type: 'REPORT',
+        keyFindings: [{ body: '书院创建于北宋开宝九年。', claimType: 'FACT', citations: [11] }],
+        openQuestions: ['书院经费从何而来?'],
+        branchView: [{ rootNodeTitle: '岳麓书院', nodeTitles: ['为什么建在这里'] }],
+        sources: { '11': '《岳麓书院史略》第一章' },
+        disclaimer: '本内容由 AI 生成,仅供参考',
+        audit: { stripped: 0, filtered: 1 }
+      }
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      jsonResp(200, { code: 0, message: 'ok', traceId: 't', data: raw })));
+
+    const run = await fetchRun(88);
+    expect(run.artifact?.type).toBe('REPORT');
+    expect(run.artifact?.keyFindings?.[0]?.claimType).toBe('FACT');
+    expect(run.artifact?.branchView).toHaveLength(1);
+    expect(run.artifact?.openQuestions).toEqual(['书院经费从何而来?']);
   });
 });
 

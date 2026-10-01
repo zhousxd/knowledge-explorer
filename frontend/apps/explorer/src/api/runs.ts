@@ -13,8 +13,8 @@ import type { ExplainLevel } from './sessions';
 /** 运行状态(后端 AgentRunStatus;TIMEOUT=60s 护栏,02 §5.1) */
 export type RunStatus = 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED' | 'TIMEOUT';
 
-/** 服务类型(Task 23:EXPLAIN=讲解,COMPARE=帮我比较——后端白名单,缺省 EXPLAIN) */
-export type RunServiceType = 'EXPLAIN' | 'COMPARE';
+/** 服务类型(Task 23/24:EXPLAIN=讲解,COMPARE=帮我比较,SUMMARIZE=成果整理——后端白名单,缺省 EXPLAIN) */
+export type RunServiceType = 'EXPLAIN' | 'COMPARE' | 'SUMMARIZE';
 
 /** POST /api/agent/runs 请求体(nodeId 必随 sessionId —— 后端 P5-18 冻结校验) */
 export interface RunSubmitPayload {
@@ -32,6 +32,13 @@ export interface RunSubmitPayload {
   serviceType?: RunServiceType;
 }
 
+/** POST /api/agent/summarize 请求体(Task 24 冻结契约):nodeIds 非空且 ≤50,后端校验 */
+export interface SummarizePayload {
+  sessionId: number;
+  /** 勾选的路径节点(FR-E07 跨分支);后端去重保序 */
+  nodeIds: number[];
+}
+
 /** artifact.output 形状(= ExplainOutput:结构化讲解输出) */
 export interface RunArtifactOutput {
   summary?: string;
@@ -41,19 +48,41 @@ export interface RunArtifactOutput {
   evidenceGaps?: string[];
 }
 
+/** REPORT 的关键发现行(= SummaryOutput.KeyFinding:citations 直接引知识单元 assetId) */
+export interface RunKeyFinding {
+  body: string;
+  /** FACT/SYNTHESIS/GEN 三档可信(与讲解段同语义) */
+  claimType: string;
+  citations?: number[];
+}
+
+/** REPORT 的分支视图行(非 LLM,由 pathNode 树生成):rootNodeTitle=选中根标题,nodeTitles=子树内节点题 */
+export interface RunBranchView {
+  rootNodeTitle: string;
+  nodeTitles: string[];
+}
+
 /**
- * artifact 形状(DONE 分流,Task 23):type==='COMPARE_CARD' 时为比较结果
- * {type, data: CompareContent, sources, disclaimer, audit};否则(无 type 键)为讲解形状
- * (= ExplainResult content_json:output 嵌套)。sources 为检索快照(assetId→检索文本,字符串键),
- * disclaimer 为 AI 生成标识(R8),audit 为审计旁注。
+ * artifact 形状(DONE 分流,Task 23/24):type==='COMPARE_CARD' 时为比较结果
+ * {type, data: CompareContent, sources, disclaimer, audit};type==='REPORT' 时为探索报告
+ * (Task 24,content_json 扁平键:{type, keyFindings, openQuestions, branchView, sources,
+ * disclaimer, audit}——keyFindings/openQuestions/branchView 与 sources 同级,不嵌套);
+ * 否则(无 type 键)为讲解形状(= ExplainResult content_json:output 嵌套)。
+ * sources 为检索快照(assetId→检索文本,字符串键),disclaimer 为 AI 生成标识(R8),audit 为审计旁注。
  * 全字段 optional:non_null 下空值整键省略(如无会话 run 不落 artifact 的空对象分支)。
  */
 export interface RunArtifact {
-  /** 结果类型:COMPARE_CARD=比较(配 data);缺省=讲解(配 output) */
-  type?: 'COMPARE_CARD';
+  /** 结果类型:COMPARE_CARD=比较(配 data);REPORT=探索报告(Task 24,配 keyFindings 等);缺省=讲解(配 output) */
+  type?: 'COMPARE_CARD' | 'REPORT';
   /** 比较输出(= CompareOutput,与卡片 CompareContent 同构,CompareCard props 直传) */
   data?: CompareContent;
   output?: RunArtifactOutput;
+  /** 探索报告(Task 24):关键发现(citations 已过校验器,只剩材料资产集合内的 assetId) */
+  keyFindings?: RunKeyFinding[];
+  /** 探索报告:整理输出的未决疑问(LLM 对材料遗留疑问去重合并) */
+  openQuestions?: string[];
+  /** 探索报告:分支视图(每个选中根一行,非 LLM) */
+  branchView?: RunBranchView[];
   sources?: Record<string, string>;
   disclaimer?: string;
   audit?: { stripped?: number; filtered?: number };
@@ -78,6 +107,11 @@ export interface RunState {
 /** 提交讲解运行 → 202 {runId};429/400 等错误信封由 http 层抛 ApiError(code+message) */
 export function submitRun(payload: RunSubmitPayload): Promise<{ runId: number }> {
   return http.post<{ runId: number }>('/agent/runs', payload);
+}
+
+/** 提交成果整理运行(FR-S03/E07)→ 202 {runId};空选/越权 400/403、429 配额同由 http 层抛 ApiError */
+export function summarize(payload: SummarizePayload): Promise<{ runId: number }> {
+  return http.post<{ runId: number }>('/agent/summarize', payload);
 }
 
 /** wire 层归一(non_null 缺键 → null):RunController.RunView 的单一消费面 */

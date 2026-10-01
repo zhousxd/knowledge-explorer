@@ -5,7 +5,7 @@ import { showToast } from 'vant';
 import App from '../App.vue';
 import router from '../router';
 import { ApiError } from '../api/http';
-import { addNode, fetchLatestSession, fetchSessionTree, updateExplainLevel } from '../api/sessions';
+import { addNode, fetchLatestSession, fetchOpenQuestions, fetchSessionTree, updateExplainLevel } from '../api/sessions';
 import type { PathNode, SessionTree } from '../api/sessions';
 
 vi.mock('../api/sessions', () => ({
@@ -14,7 +14,9 @@ vi.mock('../api/sessions', () => ({
   addNode: vi.fn(),
   updateExplainLevel: vi.fn(),
   fetchMySessions: vi.fn(),
-  createSession: vi.fn()
+  createSession: vi.fn(),
+  // 成果整理页接线用例经真实路由进入 /summary,SummaryView 会拉未决疑问(空清单即可)
+  fetchOpenQuestions: vi.fn()
 }));
 vi.mock('vant', () => ({ showToast: vi.fn(), showConfirmDialog: vi.fn() }));
 const mockedLatest = vi.mocked(fetchLatestSession);
@@ -198,6 +200,20 @@ describe('PathView(我的路径,FR-E03/E04/E05)', () => {
 
     expect(mockedShowToast().mock.calls.at(-1)?.[0]).toBe('已暂存,可随时回来');
     expect(router.currentRoute.value.path).toBe('/home');
+  });
+
+  it('整理发现键:跳成果整理页并携带当前会话(/summary?sessionId=5)', async () => {
+    mockedTree.mockResolvedValue(TREE);
+    // 目标页挂载时会拉未决疑问(附属卡):给空清单避免悬空 promise
+    vi.mocked(fetchOpenQuestions).mockResolvedValue({ questions: [] });
+    const wrapper = await gotoPath('?sessionId=5');
+
+    const organize = wrapper.findAll('.pausebar .pb').find((b) => b.text().includes('整理发现'))!;
+    await organize.trigger('click');
+    await flushPromises();
+
+    expect(router.currentRoute.value.path).toBe('/summary');
+    expect(router.currentRoute.value.query.sessionId).toBe('5');
   });
 });
 
