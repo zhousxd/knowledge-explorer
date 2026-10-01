@@ -23,6 +23,11 @@ ke:
   agent:
     stale-seconds: 120
     recycle-interval-ms: 60000
+    # 单次 LLM 调用超时秒数（FR-S13 护栏，Task 20 手写 future.get 等价实现）
+    llm-timeout-seconds: 60
+  quota:
+    # 智能服务每日配额（FR-S04）：Redis INCR，超限 429
+    daily-limit: 30
 
 springdoc:
   api-docs:

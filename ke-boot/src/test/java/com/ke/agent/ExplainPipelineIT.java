@@ -2,9 +2,11 @@ package com.ke.agent;
 
 import com.jayway.jsonpath.JsonPath;
 import com.ke.support.ItDb;
+import com.ke.support.RedisFlush;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -29,10 +31,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * → GET /api/agent/runs/{id} 读终态与 artifact。
  * 网关用 StubLlmGateway（profile explain-test，@Primary 压过 test 的 MockLlmGateway），按测试脚本应答；
  * 直连 WSL ke_test（@ItDb 类前清库重建），Awaitility 等待异步终态。
+ * Task 20 起 submit 消费每日配额（Redis db15 的 user:quota:{userId} 键，跨类残留而 ke_test 用户 id
+ * 每类从 1 重排）——类前 RedisFlush flushdb，与 ke_user 同步归零，避免历史配额键 429 污染。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles({"test", "explain-test"})
 @ItDb
+@ExtendWith(RedisFlush.class)
 class ExplainPipelineIT {
 
     @Autowired

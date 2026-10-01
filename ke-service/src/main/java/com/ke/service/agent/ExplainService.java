@@ -20,10 +20,12 @@ import com.ke.infra.mapper.PathNodeMapper;
 import com.ke.service.agent.dto.ExplainOutput;
 import com.ke.service.agent.dto.ExplainResult;
 import com.ke.service.common.BadRequestException;
+import com.ke.service.common.RateLimitException;
 import com.ke.service.explore.SessionService;
 import com.ke.service.llm.ChatCommand;
 import com.ke.service.llm.LlmGateway;
 import com.ke.service.llm.ModelTier;
+import com.ke.service.quota.QuotaService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -40,17 +42,25 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
- * 讲解服务流水线（FR-S02 / 02 §5.2）：受限检索 → 提示词组装 → LLM → Jackson 绑定
- * {@link ExplainOutput}（失败自动重试 1 次）→ 引用校验（FR-S05，{@link CitationSanitizer}：
- * 越界引用剔除 + FACT 空引用降级，剥离留痕 agent_run.error 不置 FAILED）→ artifact(EXPLAIN) +
- * citation(object_type=agent_run) 落库 → 回写 agent_run(DONE, artifact_ids)。任何异常置 FAILED(error=消息)。
+ * 讲解服务流水线（FR-S02 / 02 §5.2）：受限检索 → 提示词组装 → LLM（{@code ke.agent.llm-timeout-seconds}
+ * 超时护栏，超时置 TIMEOUT 不重试）→ Jackson 绑定 {@link ExplainOutput}（失败自动重试 1 次）→
+ * 引用校验（FR-S05，{@link CitationSanitizer}：越界引用剔除 + FACT 空引用降级，剥离留痕
+ * agent_run.error 不置 FAILED）→ artifact(EXPLAIN) + citation(object_type=agent_run) 落库 →
+ * 回写 agent_run(DONE, artifact_ids)。任何异常置 FAILED(error=消息)。
+ * 提交前置配额（FR-S04，{@link QuotaService#tryConsume}，超限 RateLimitException → 429 envelope）。
  *
- * 线程模型：submit 前置校验在 controller 线程（会话属主/卡已发布，钉子①——userId 在 submit 时
+ * 线程模型：submit 前置校验（会话属主/卡已发布/配额）在 controller 线程（userId 在 submit 时
  * 捕获进 input_json，虚拟线程不再依赖 SecurityContext）；执行走 agentExecutor 虚拟线程（自代理
- * 调 @Async，同类 this 调用会退化为同步）。配额/超时/心跳循环留 Task 20（Resilience4j），
- * 本实现仅 RUNNING 时 touch 一次。
+ * 调 @Async，同类 this 调用会退化为同步）。LLM 调用再包一层虚拟线程 future.get 超时（Task 20 手写
+ * 等价实现，见 completeWithinTimeout 注释）；心跳循环维持 recycleStale 兜底。
  */
 @Service
 @PropertySource(value = "classpath:explain-prompts.properties", encoding = "UTF-8")
@@ -64,6 +74,9 @@ public class ExplainService {
     private static final int CARD_CONTENT_LIMIT = 2000;
     private static final int MAX_LLM_ATTEMPTS = 2;
 
+    /** LLM 超时护栏专用执行器：虚拟线程每任务一线，无池化开销（守护线程，JVM 退出无需 shutdown） */
+    private final ExecutorService llmExecutor = Executors.newVirtualThreadPerTaskExecutor();
+
     private final AgentRunMapper runs;
     private final CardMapper cards;
     private final CardVersionMapper cardVersions;
@@ -74,11 +87,16 @@ public class ExplainService {
     private final CitationMapper citations;
     private final LlmGateway llm;
     private final ObjectMapper objectMapper;
+    private final QuotaService quota;
     /** 自代理：submit 必须经代理调 executeExplain，同类 this 调用会让 @Async 失效退化为同步 */
     private final ExplainService self;
 
     @Value("${ke.llm.generator-model:unknown}")
     private String generatorModel;
+
+    /** 单次 LLM 调用超时秒数（FR-S13；真实 60s，IT 压到 1s） */
+    @Value("${ke.agent.llm-timeout-seconds:60}")
+    private int llmTimeoutSeconds;
 
     @Value("${explain.prompt.common}")
     private String commonPrompt;
@@ -94,7 +112,8 @@ public class ExplainService {
     public ExplainService(AgentRunMapper runs, CardMapper cards, CardVersionMapper cardVersions,
                           PathNodeMapper pathNodes, SessionService sessions, RetrievalService retrieval,
                           ArtifactMapper artifacts, CitationMapper citations, LlmGateway llm,
-                          ObjectMapper objectMapper, @Lazy ExplainService self) {
+                          ObjectMapper objectMapper, QuotaService quota,
+                          @Lazy ExplainService self) {
         this.runs = runs;
         this.cards = cards;
         this.cardVersions = cardVersions;
@@ -105,6 +124,7 @@ public class ExplainService {
         this.citations = citations;
         this.llm = llm;
         this.objectMapper = objectMapper;
+        this.quota = quota;
         this.self = self;
     }
 
@@ -116,8 +136,8 @@ public class ExplainService {
     // ---------- 提交（controller 线程，同步前置校验） ----------
 
     /**
-     * 提交讲解运行：校验（question/level、会话属主 404/403、节点归属、卡已发布 400）→
-     * 落库 QUEUED（input_json={userId,sessionId,nodeId,cardVersionId,question,level}）→
+     * 提交讲解运行：校验（question/level、会话属主 404/403、节点归属、卡已发布 400、每日配额
+     * 超限 429）→ 落库 QUEUED（input_json={userId,sessionId,nodeId,cardVersionId,question,level}）→
      * 异步执行，立即返回 runId（POST → 202）。
      */
     public Long explain(long userId, Long cardVersionId, String question, String level,
@@ -154,6 +174,11 @@ public class ExplainService {
         if (card == null || !CardStatus.PUBLISHED.name().equals(card.getStatus())) {
             throw new BadRequestException("卡片未发布");
         }
+        // FR-S04 配额前置（Task 20）：校验全过后才消费——无效请求不计入当日 30 次；
+        // 超限 RateLimitException → 429 envelope（04 §8.6 文案），不创建 run
+        if (!quota.tryConsume(userId)) {
+            throw new RateLimitException("今日 " + quota.dailyLimit() + " 次智能服务已用完,明早 8 点恢复");
+        }
 
         ExplainInput input = new ExplainInput(userId, sessionId, nodeId, cardVersionId, question, level);
         AgentRunEntity run = new AgentRunEntity();
@@ -179,7 +204,9 @@ public class ExplainService {
             }
             run.setStatus(AgentRunStatus.RUNNING.name());
             runs.updateById(run);
-            runs.touch(runId); // Task 20 接 Resilience4j 后改为执行中循环心跳
+            // 心跳：单次 LLM 已被 llm-timeout-seconds 封顶（默认 60s），执行中循环心跳收益有限，
+            // 卡死兜底维持 recycleStale（stale-seconds）定时回收
+            runs.touch(runId);
 
             Map<Long, String> materials = retrieval.retrieve(input.cardVersionId());
             String context = input.sessionId() == null ? "" : sessions.contextSummary(input.sessionId());
@@ -190,8 +217,12 @@ public class ExplainService {
             Exception last = null;
             for (int attempt = 0; attempt < MAX_LLM_ATTEMPTS && output == null; attempt++) {
                 try {
-                    String raw = llm.complete(new ChatCommand(system, user, ModelTier.GENERATOR));
+                    String raw = completeWithinTimeout(new ChatCommand(system, user, ModelTier.GENERATOR));
                     output = objectMapper.readValue(stripFences(raw), ExplainOutput.class);
+                } catch (LlmTimeoutException e) {
+                    // 超时不重试：LLM 已耗满时间预算，重试只会把等待翻倍；置 TIMEOUT 终态（用户可重新提交新 run）
+                    timeout(runId);
+                    return;
                 } catch (Exception e) {
                     last = e; // Jackson 绑定失败 → 重试 = 再调一次 LLM（共 2 次）
                 }
@@ -238,6 +269,45 @@ public class ExplainService {
             done.setError("引用校验:剥离 " + report.strippedCitations().size() + " 个越界引用");
         }
         runs.updateById(done);
+    }
+
+    /**
+     * LLM 调用超时护栏（FR-S13 / 02 §5.1）。Task 18 简报建议 Resilience4j TimeLimiter——单为一处
+     * 超时引入整个 resilience4j 栈不值，等价手写：complete 跑在独立虚拟线程，当前（虚拟）线程
+     * {@code future.get(timeout)} 等待，超时 {@code cancel(true)} 尽力中断底层任务（虚拟线程可中断，
+     * 但 HTTP 客户端阻塞读是否响应中断取决于实现——取消尽力而为，run 状态已落终态）。
+     * 阈值 {@code ke.agent.llm-timeout-seconds}（默认 60s，IT 压到 1s）。
+     */
+    private String completeWithinTimeout(ChatCommand command) throws Exception {
+        Future<String> future = llmExecutor.submit(() -> llm.complete(command));
+        try {
+            return future.get(llmTimeoutSeconds, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            throw new LlmTimeoutException();
+        } catch (ExecutionException e) {
+            // 解包网关真实异常（如 Stub 未配置应答），消息与直调一致
+            throw e.getCause() instanceof Exception ex ? ex : e;
+        }
+    }
+
+    /** 超时信号（不进重试循环）：error 文案固定，60s 上限细节由前端（Task 21）按配置展示 */
+    private static final class LlmTimeoutException extends RuntimeException {
+        LlmTimeoutException() {
+            super("服务超时,请稍后重试");
+        }
+    }
+
+    /** 超时终态：RUNNING→TIMEOUT 合法迁移；允许用户重新提交（新 run 新路径无损） */
+    private void timeout(long runId) {
+        try {
+            AgentRunEntity run = runs.selectById(runId);
+            run.setStatus(AgentRunStatus.TIMEOUT.name());
+            run.setError("服务超时,请稍后重试");
+            runs.updateById(run);
+        } catch (Exception e) {
+            log.error("explain run {} 超时终态回写失败", runId, e);
+        }
     }
 
     /** 讲解段 → 校验器入参（同形映射：ke-domain 不依赖 service DTO）；null 段原位传给校验器（索引不漂移），由 withSections 落库前过滤 */

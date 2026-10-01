@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -26,13 +27,21 @@ public class StubLlmGateway implements LlmGateway {
     public static final AtomicInteger CALLS = new AtomicInteger();
     private static final Queue<String> RESPONSES = new ConcurrentLinkedQueue<>();
     private static final AtomicReference<String> LAST = new AtomicReference<>();
+    /** 每次 complete 前的模拟耗时（Task 20 超时护栏 IT 用：delay > 超时阈值 → 触发 TIMEOUT） */
+    private static final AtomicLong DELAY_MS = new AtomicLong();
 
-    /** 每个测试方法前重置：清计数、按序装入应答 */
+    /** 每个测试方法前重置：清计数、按序装入应答、清延迟 */
     public static void reset(String... responses) {
         CALLS.set(0);
         RESPONSES.clear();
         LAST.set(null);
+        DELAY_MS.set(0);
         Collections.addAll(RESPONSES, responses);
+    }
+
+    /** 静态配置模拟耗时（毫秒）；0 = 立即返回 */
+    public static void setDelayMs(long ms) {
+        DELAY_MS.set(ms);
     }
 
     /** 合法 ExplainOutput JSON（可指定引用的 assetId） */
@@ -57,6 +66,15 @@ public class StubLlmGateway implements LlmGateway {
     @Override
     public String complete(ChatCommand command) {
         CALLS.incrementAndGet();
+        long delay = DELAY_MS.get();
+        if (delay > 0) {
+            try {
+                Thread.sleep(delay);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("StubLlmGateway 睡眠被中断", e);
+            }
+        }
         String next = RESPONSES.poll();
         if (next == null) {
             next = LAST.get();
