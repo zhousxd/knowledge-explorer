@@ -25,32 +25,48 @@ const cursor = ref<string | null>(null);
 const loading = ref(true);
 const loadingMore = ref(false);
 const errorMsg = ref('');
+const appendError = ref(false);
+
+/** 时序守卫:tab/搜索切换发起新请求后,旧(尤其挂起的 append)响应一律丢弃 */
+let reqSeq = 0;
 
 async function fetchPage(nextCursor: string | null, append: boolean): Promise<void> {
+  const seq = ++reqSeq;
   if (append) {
     loadingMore.value = true;
+    appendError.value = false;
   } else {
     loading.value = true;
+    errorMsg.value = '';
   }
-  errorMsg.value = '';
   try {
     const page = await listPublicCards({
       theme: activeTheme.value || undefined,
       q: keyword.value.trim() || undefined,
       cursor: nextCursor ?? undefined
     });
+    if (seq !== reqSeq) return; // 过期响应:列表状态已归新请求所有
     rows.value = append ? [...rows.value, ...page.items] : page.items;
     cursor.value = page.nextCursor;
   } catch (e) {
-    errorMsg.value = e instanceof Error ? e.message : '加载失败,请稍后重试';
+    if (seq !== reqSeq) return;
+    // 追加失败保留已加载列表,行内重试;首屏失败整页错误 + 重试按钮
+    if (append) {
+      appendError.value = true;
+    } else {
+      errorMsg.value = e instanceof Error ? e.message : '加载失败,请稍后重试';
+    }
   } finally {
-    loading.value = false;
-    loadingMore.value = false;
+    if (seq === reqSeq) {
+      loading.value = false;
+      loadingMore.value = false;
+    }
   }
 }
 
 /** 首页/搜索/tab 变更后重置游标拉首页 */
 function reload(): void {
+  appendError.value = false;
   void fetchPage(null, false);
 }
 
@@ -132,12 +148,21 @@ function typeLabel(type: string): string {
       </nav>
     </header>
 
-    <p
+    <div
       v-if="errorMsg"
       class="state"
     >
-      {{ errorMsg }}
-    </p>
+      <p class="state-txt">
+        {{ errorMsg }}
+      </p>
+      <button
+        type="button"
+        class="retry"
+        @click="reload"
+      >
+        重试
+      </button>
+    </div>
     <p
       v-else-if="loading"
       class="state"
@@ -190,6 +215,14 @@ function typeLabel(type: string): string {
         </span>
       </div>
       <button
+        v-else-if="appendError"
+        type="button"
+        class="more err"
+        @click="cursor && fetchPage(cursor, true)"
+      >
+        加载失败,点击重试
+      </button>
+      <button
         v-else-if="cursor"
         type="button"
         class="more"
@@ -220,6 +253,8 @@ function typeLabel(type: string): string {
 .tab { flex-shrink: 0; padding: 6px 14px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-full); background: var(--ke-surface); font-size: 12.5px; font-weight: 600; font-family: var(--ke-font); color: var(--ke-sub); cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); }
 .tab.on { border-color: var(--ke-primary); background: var(--ke-primary-soft); color: var(--ke-primary); }
 .state { margin: 40px 0 0; text-align: center; font-size: 12px; color: var(--ke-sub); }
+.state-txt { margin: 0; }
+.retry { display: inline-block; margin-top: 10px; padding: 8px 20px; border: none; border-radius: var(--ke-radius-m); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 13px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; }
 .cardrow { display: block; width: 100%; margin: 0 0 10px; padding: 13px 14px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-l); background: var(--ke-surface); text-align: left; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); box-sizing: border-box; }
 .cardrow:active { background: var(--ke-primary-soft); }
 .row-head { display: flex; align-items: center; gap: 6px; }
@@ -233,5 +268,6 @@ function typeLabel(type: string): string {
 .empty-s { display: block; margin-top: 4px; font-size: 12px; color: var(--ke-sub); }
 .more { display: block; width: 100%; margin: 14px 0 0; padding: 11px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-l); background: var(--ke-surface); font-size: 13px; font-weight: 700; font-family: var(--ke-font); color: var(--ke-ink-2); cursor: pointer; box-sizing: border-box; }
 .more:disabled { opacity: 0.45; cursor: default; }
+.more.err { border: 1px dashed var(--ke-line-strong); background: var(--ke-surface-2); color: var(--ke-warn); }
 .end { margin: 14px 0 0; text-align: center; font-size: 11px; color: var(--ke-sub-2); }
 </style>

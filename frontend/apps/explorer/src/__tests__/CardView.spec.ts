@@ -91,10 +91,11 @@ describe('CardView(卡片页,04 §7.2 KCard)', () => {
     expect(src.exists()).toBe(true);
     expect(src.text()).toContain('《岳麓书院史略》');
     expect(src.text()).toContain('[2]');
-    // 入口:default 2 行 + 折叠「还有 3 个入口」+ 新增虚线按钮
+    // 入口:default 2 行 + 折叠「还有 3 个入口」+ 新增虚线按钮(规范字面用 i-plus 图标)
     expect(wrapper.findAll('.entry')).toHaveLength(2);
     expect(wrapper.find('.fold').text()).toContain('还有 3 个入口');
     expect(wrapper.find('.addentry').text()).toContain('用一句话新增入口');
+    expect(wrapper.find('.addentry use').attributes('href')).toBe('#i-plus');
   });
 
   it('面包屑 = 专题中文名 · 标题', async () => {
@@ -136,6 +137,20 @@ describe('CardView(卡片页,04 §7.2 KCard)', () => {
     const { wrapper } = await mountCard('1', { authed: true });
     await wrapper.find('.fold').trigger('click');
     expect(wrapper.findAll('.entry')).toHaveLength(5);
+  });
+
+  it('入口拉取失败:卡主内容仍渲染,入口区局部重试可恢复', async () => {
+    mockedEntries.mockRejectedValueOnce(new Error('入口接口超时'));
+    const { wrapper } = await mountCard('1', { authed: true });
+    // 主内容不受入口失败遮蔽
+    expect(wrapper.findComponent(TextCard).exists()).toBe(true);
+    expect(wrapper.text()).toContain('岳麓书院');
+    expect(wrapper.text()).toContain('入口加载失败,点击重试');
+    // 局部重试(底层实现已由 beforeEach 复位为成功)恢复入口列表
+    await wrapper.find('.retry-entry').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('.entry')).toHaveLength(2);
+    expect(wrapper.text()).not.toContain('入口加载失败');
   });
 
   it('匿名(无 token):不调入口接口,给出登录引导', async () => {

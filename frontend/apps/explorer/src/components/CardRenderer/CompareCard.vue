@@ -3,7 +3,8 @@ import { CitationTag } from '@ke/shared';
 import type { CompareContent } from '../../api/cards';
 
 // 对比卡(04 §7.2 Compare):维度 × 对象表格,表头 primary-soft 底、首列 surface-2 加粗,
-// 单元格 12.5/1.55;移动端外层 overflow-x:auto 横滚,表头 sticky 吸顶
+// 单元格 12.5/1.55;外层 overflow:auto + max-height 让 wrap 自身成为纵/横滚动容器,
+// thead sticky 才相对 wrap 生效(仅 overflow-x 会使纵向吸顶失效),表头吸顶 + 横滚
 defineProps<{ content: CompareContent }>();
 // open 为分发器统一透传的事件,对比卡自身只 emit cite
 const emit = defineEmits<{ cite: [n: number]; open: [cardId: number] }>();
@@ -60,7 +61,7 @@ const emit = defineEmits<{ cite: [n: number]; open: [cardId: number] }>();
 </template>
 
 <style scoped>
-.cmp-wrap { margin-top: 4px; overflow-x: auto; }
+.cmp-wrap { max-height: 60vh; margin-top: 4px; overflow: auto; }
 .cmp { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .cmp th, .cmp td { border: 1px solid var(--ke-line); padding: 8px 10px; text-align: left; vertical-align: top; line-height: 1.55; }
 .cmp thead th { position: sticky; top: 0; z-index: 1; background: var(--ke-primary-soft); color: var(--ke-ink); font-weight: 700; }

@@ -17,10 +17,24 @@ const auth = useAuthStore();
 
 const card = ref<CardDetail | null>(null);
 const entries = ref<CardEntryGroup | null>(null);
+const entriesError = ref(false);
 const foldOpen = ref(false);
 const notFound = ref(false);
 const errorMsg = ref('');
 const loading = ref(true);
+
+/** 入口独立加载:失败只降级入口区(局部重试),不遮蔽卡主内容 */
+async function loadEntries(id: number): Promise<void> {
+  if (!auth.token) return;
+  entriesError.value = false;
+  entries.value = null;
+  try {
+    // 入口接口要 viewer 身份(公有/私有过滤):匿名不调用,给登录引导
+    entries.value = await fetchCardEntries(id);
+  } catch {
+    entriesError.value = true;
+  }
+}
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -28,6 +42,7 @@ async function load(): Promise<void> {
   errorMsg.value = '';
   card.value = null;
   entries.value = null;
+  entriesError.value = false;
   foldOpen.value = false;
   const id = Number(route.params.id);
   if (!Number.isInteger(id) || id <= 0) {
@@ -39,15 +54,18 @@ async function load(): Promise<void> {
     card.value = await getCard(id);
     // 不存在/非 PUBLISHED 一律 404(后端契约)→ 空态,不泄露草稿存在性
     notFound.value = card.value === null;
-    if (card.value && auth.token) {
-      // 入口接口要 viewer 身份(公有/私有过滤):匿名不调用,给登录引导
-      entries.value = await fetchCardEntries(id);
-    }
   } catch (e) {
     errorMsg.value = e instanceof Error ? e.message : '加载失败,请稍后重试';
   } finally {
     loading.value = false;
   }
+  if (card.value !== null) void loadEntries(id);
+}
+
+/** 入口区局部重试 */
+function retryEntries(): void {
+  const id = Number(route.params.id);
+  if (Number.isInteger(id) && id > 0) void loadEntries(id);
 }
 
 void load();
@@ -273,36 +291,46 @@ function entrySub(e: CardEntryItem): string {
         </div>
         <template v-if="auth.token">
           <button
-            v-for="e in visibleEntries"
-            :key="e.id"
+            v-if="entriesError"
             type="button"
-            class="entry"
-            @click="onEntry(e)"
+            class="retry-entry"
+            @click="retryEntries"
           >
-            <span class="ei">
-              <KeIcon :name="entryIcon(e.type)" />
-            </span>
-            <span class="et">
-              <span class="en">
-                {{ e.name }}
-              </span>
-              <span class="er">
-                {{ entrySub(e) }}
-              </span>
-            </span>
-            <KeIcon
-              class="ea"
-              name="chev"
-            />
+            入口加载失败,点击重试
           </button>
-          <button
-            v-if="entries?.folded.length && !foldOpen"
-            type="button"
-            class="fold"
-            @click="foldOpen = true"
-          >
-            还有 {{ entries.folded.length }} 个入口，展开 ∨
-          </button>
+          <template v-else-if="entries">
+            <button
+              v-for="e in visibleEntries"
+              :key="e.id"
+              type="button"
+              class="entry"
+              @click="onEntry(e)"
+            >
+              <span class="ei">
+                <KeIcon :name="entryIcon(e.type)" />
+              </span>
+              <span class="et">
+                <span class="en">
+                  {{ e.name }}
+                </span>
+                <span class="er">
+                  {{ entrySub(e) }}
+                </span>
+              </span>
+              <KeIcon
+                class="ea"
+                name="chev"
+              />
+            </button>
+            <button
+              v-if="entries.folded.length && !foldOpen"
+              type="button"
+              class="fold"
+              @click="foldOpen = true"
+            >
+              还有 {{ entries.folded.length }} 个入口，展开 ∨
+            </button>
+          </template>
         </template>
         <button
           v-else
@@ -316,7 +344,11 @@ function entrySub(e: CardEntryItem): string {
           type="button"
           class="addentry"
         >
-          ✚ 用一句话新增入口
+          <KeIcon
+            class="add-ic"
+            name="plus"
+          />
+          用一句话新增入口
         </button>
       </section>
     </main>
@@ -358,8 +390,9 @@ function entrySub(e: CardEntryItem): string {
 .en { display: block; font-size: 14px; font-weight: 600; line-height: 1.5; color: var(--ke-ink); }
 .er { display: block; margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--ke-sub); }
 .ea { flex-shrink: 0; color: var(--ke-sub-2); }
-.fold, .addentry { display: block; width: 100%; margin: 8px 0 0; padding: 10px; border: none; border-radius: var(--ke-radius-l); background: transparent; font-size: 12px; font-weight: 600; font-family: var(--ke-font); color: var(--ke-sub); text-align: center; cursor: pointer; box-sizing: border-box; }
-.addentry { margin-top: 10px; padding: 11px; border: 1.5px dashed var(--ke-line-strong); border-radius: var(--ke-radius-l); background: var(--ke-surface-2); color: var(--ke-primary); font-size: 13px; font-weight: 700; }
+.fold, .retry-entry { display: block; width: 100%; margin: 8px 0 0; padding: 10px; border: none; border-radius: var(--ke-radius-l); background: transparent; font-size: 12px; font-weight: 600; font-family: var(--ke-font); color: var(--ke-sub); text-align: center; cursor: pointer; box-sizing: border-box; }
+.addentry { display: flex; width: 100%; align-items: center; justify-content: center; gap: 5px; margin-top: 10px; padding: 11px; border: 1.5px dashed var(--ke-line-strong); border-radius: var(--ke-radius-l); background: var(--ke-surface-2); color: var(--ke-primary); font-size: 13px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; box-sizing: border-box; }
+.add-ic { width: 14px; height: 14px; }
 .empty { margin: 60px auto 0; max-width: 320px; text-align: center; }
 .empty-ic { width: 40px; height: 40px; color: var(--ke-sub-2); }
 .empty-t { display: block; margin-top: 10px; font-size: 14px; font-weight: 600; color: var(--ke-ink); }

@@ -107,6 +107,54 @@ describe('CardsView(/cards 列表页)', () => {
     expect(mockedList).toHaveBeenLastCalledWith({ theme: 'cuisine', q: undefined, cursor: undefined });
   });
 
+  it('首屏失败:错误文案 + 重试按钮,点击恢复渲染', async () => {
+    mockedList.mockRejectedValueOnce(new Error('网络异常')).mockResolvedValueOnce(PAGE1);
+    const { wrapper } = await mountList();
+    expect(wrapper.text()).toContain('网络异常');
+    const retry = wrapper.find('.retry');
+    expect(retry.exists()).toBe(true);
+    await retry.trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('.cardrow')).toHaveLength(2);
+    expect(wrapper.find('.retry').exists()).toBe(false);
+  });
+
+  it('加载更多失败:保留已加载行,行内「加载失败,点击重试」可恢复', async () => {
+    mockedList.mockResolvedValueOnce(PAGE1).mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(PAGE2);
+    const { wrapper } = await mountList();
+    await wrapper.find('.more').trigger('click');
+    await flushPromises();
+    // 已加载列表未被清空,出现行内重试
+    expect(wrapper.findAll('.cardrow')).toHaveLength(2);
+    const retry = wrapper.find('.more.err');
+    expect(retry.text()).toContain('加载失败,点击重试');
+    await retry.trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('.cardrow')).toHaveLength(3);
+    expect(wrapper.text()).toContain('没有更多了');
+  });
+
+  it('时序守卫:tab 切换重置后,过期挂起的「加载更多」响应被丢弃', async () => {
+    let releaseAppend: (page: PublicCardPage) => void = () => {};
+    const deferredAppend = new Promise<PublicCardPage>((resolve) => {
+      releaseAppend = resolve;
+    });
+    mockedList.mockResolvedValueOnce(PAGE1) // 首屏
+      .mockReturnValueOnce(deferredAppend) // 点「加载更多」后挂起
+      .mockResolvedValueOnce(PAGE1); // tab 切换触发重置
+    const { wrapper } = await mountList();
+    await wrapper.find('.more').trigger('click');
+    const cuisine = wrapper.findAll('.tab').find((t) => t.text() === '湘菜风物');
+    await cuisine?.trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('.cardrow')).toHaveLength(2); // 重置后的首页两行
+    releaseAppend(PAGE2); // 迟到的 append 响应此刻才落地
+    await flushPromises();
+    // 过期响应被丢弃:不追加、不串页
+    expect(wrapper.findAll('.cardrow')).toHaveLength(2);
+    expect(wrapper.text()).not.toContain('湘味两派对比');
+  });
+
   it('空结果:显示「换个关键词试试」空态', async () => {
     mockedList.mockResolvedValue({ items: [], nextCursor: null });
     const { wrapper } = await mountList({ q: '不存在词' });

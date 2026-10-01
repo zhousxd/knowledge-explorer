@@ -2,6 +2,8 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import type { CompareContent } from '../api/cards';
 import CompareCard from '../components/CardRenderer/CompareCard.vue';
+// @ts-expect-error vite ?raw 导入无类型声明
+import cmpSource from '../components/CardRenderer/CompareCard.vue?raw';
 
 const CONTENT: CompareContent = {
   objects: ['岳麓书院', '城南书院'],
@@ -31,10 +33,14 @@ describe('CompareCard(对比卡表格,04 §7.2 Compare)', () => {
     expect(rows[1].findAll('td')[1].text()).toBe('祭祀与教育并重');
   });
 
-  it('表格包在横滚容器里(移动端 overflow-x)', () => {
+  it('表格包在滚动容器里,且容器是纵/横滚动容器(吸顶生效前提)', () => {
     const wrapper = mount(CompareCard, { props: { content: CONTENT } });
     expect(wrapper.find('.cmp-wrap').exists()).toBe(true);
     expect(wrapper.find('table.cmp').exists()).toBe(true);
+    // jsdom 不应用 SFC scoped 样式:对源码断言 thead sticky 与 wrap overflow/max-height 同在
+    expect(cmpSource).toContain('position: sticky');
+    expect(cmpSource).toContain('overflow: auto');
+    expect(cmpSource).toContain('max-height');
   });
 
   it('整卡 citations 角标点击 emit cite(n)', async () => {
