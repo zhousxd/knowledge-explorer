@@ -1,0 +1,46 @@
+# worker profile(Task 36)— SPRING_PROFILES_ACTIVE=worker 时生效
+#
+# 职责:只跑智能体执行器(@Async 消费 agent_run)与 stale 回收任务(@Scheduled),
+# 不监听任何端口(spring.main.web-application-type: none),与 app(prod profile)
+# 共用同一 jar;compose 中 app-worker 以本 profile 启动,负载高时横向 --scale 加副本。
+#
+# 自足配置:不依赖 prod profile 亦可单独启动(数据源/Redis/LLM/JWT 全部环境变量注入)。
+# 注:JwtService 为普通 @Component,worker 上下文同样实例化,故 ke.jwt.* 必须可解析,
+#     缺 KE_JWT_SECRET 同样启动失败(与 prod 同策略,无默认值)。
+
+spring:
+  main:
+    # 关闭 Web 服务器:不占 8080,避免与 app 抢端口;Actuator 端点随之不可用
+    web-application-type: none
+  datasource:
+    # stringtype=unspecified 与 dev/prod 一致(JSONB 写入语义)
+    url: ${KE_DB_URL:jdbc:postgresql://localhost:5432/ke?stringtype=unspecified}
+    username: ${KE_DB_USER:ke}
+    password: ${KE_PG_PASSWORD}
+  flyway:
+    # 与 app 并发迁移安全:Flyway 对 PG 使用 advisory lock,先到者迁移、后到者等待校验
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${KE_REDIS_HOST:localhost}
+      port: ${KE_REDIS_PORT:6379}
+      password: ${KE_REDIS_PASSWORD}
+      database: 0
+  ai:
+    openai:
+      base-url: ${KE_LLM_BASE_URL:https://api.deepseek.com}
+      api-key: ${KE_LLM_API_KEY}
+
+ke:
+  jwt:
+    secret: ${KE_JWT_SECRET}
+    access-ttl: 2h
+    refresh-ttl: 7d
+  llm:
+    generator-model: ${KE_LLM_GENERATOR:deepseek-chat}
+    router-model: ${KE_LLM_ROUTER:deepseek-chat}
+  sms:
+    gateway-url: ${KE_SMS_GATEWAY_URL:}
+    api-key: ${KE_SMS_API_KEY:}
+  # ke.agent.*(执行/回收参数)沿用 application.yml 基线,worker 与 app 同值

@@ -1,0 +1,171 @@
+# 生产部署编排(02 §10.1 Docker Compose 单机)— Task 36
+#
+# 前置(见 docs/上线检查单.md「生产部署步骤」):
+#   1. 后端 jar:  ./mvnw -B -ntp -DskipTests package          → ke-boot/target/ke-boot-0.1.0-SNAPSHOT.jar
+#   2. 前端 dist: bash ops/build-frontend.sh                  → frontend/dist/{explorer,workbench}
+#   3. 环境变量(勿入库):KE_JWT_SECRET / KE_LLM_API_KEY / KE_PG_PASSWORD / KE_REDIS_PASSWORD 等,
+#      放同一目录 .env(compose 自动读取)或 export;必填项缺失时 compose up 即报错拒绝启动。
+#
+# 容器拓扑:nginx(80 公众端 explorer / 8081 工作台 workbench)→ app(:8080, prod)
+#           + app-worker(同镜像,SPRING_PROFILES_ACTIVE=worker,无 Web,只跑执行器与回收)
+#           + postgres:16(pgvector 镜像,向下兼容普通 PG,为二期检索预留 vector)
+#           + redis:7(requirepass)
+#           + minio(图片存储预留,--profile minio 显式启用)
+
+name: ke-prod
+
+x-app-env: &app-env
+  TZ: Asia/Shanghai
+  # 数据库(compose 网络内以服务名访问)
+  KE_DB_URL: jdbc:postgresql://postgres:5432/ke?stringtype=unspecified
+  KE_DB_USER: ${KE_DB_USER:-ke}
+  KE_PG_PASSWORD: ${KE_PG_PASSWORD:?KE_PG_PASSWORD required}
+  # Redis
+  KE_REDIS_HOST: redis
+  KE_REDIS_PASSWORD: ${KE_REDIS_PASSWORD:?KE_REDIS_PASSWORD required}
+  # LLM(DeepSeek,OpenAI 兼容)
+  KE_LLM_BASE_URL: ${KE_LLM_BASE_URL:-https://api.deepseek.com}
+  KE_LLM_API_KEY: ${KE_LLM_API_KEY:?KE_LLM_API_KEY required}
+  KE_LLM_GENERATOR: ${KE_LLM_GENERATOR:-deepseek-chat}
+  KE_LLM_ROUTER: ${KE_LLM_ROUTER:-deepseek-chat}
+  # JWT(无 fallback:KE_JWT_SECRET 缺失 → Spring 占位符解析失败 → 启动即失败,见 application-prod.yml)
+  KE_JWT_SECRET: ${KE_JWT_SECRET:?KE_JWT_SECRET required}
+  # 短信网关(MVP 可空,登录走验证码时必填)
+  KE_SMS_GATEWAY_URL: ${KE_SMS_GATEWAY_URL:-}
+  KE_SMS_API_KEY: ${KE_SMS_API_KEY:-}
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"       # 公众端(explorer)+ /api + /s/*(Accept 区分)
+      - "8081:8081"   # 工作台(workbench);生产建议改绑内网/加 IP 白名单
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # 前端 dist 由 ops/build-frontend.sh 组装(pnpm build 产出,见该脚本)
+      - ./frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks: [ke-net]
+
+  app:
+    # MVP 单机不建镜像:直接挂载 jar 到 JRE 基础镜像(02 §10.1 分层镜像优化二期再做)
+    image: eclipse-temurin:21-jre
+    restart: unless-stopped
+    command: ["java", "-Xmx1g", "-XX:MaxGCPauseMillis=200", "-jar", "/app/app.jar"]
+    volumes:
+      - ./ke-boot/target/ke-boot-0.1.0-SNAPSHOT.jar:/app/app.jar:ro
+    environment:
+      <<: *app-env
+      SPRING_PROFILES_ACTIVE: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # temurin 镜像无 curl/wget,用 bash /dev/tcp 做健康检查;Flyway 迁移完成后 /actuator/health 才返回 UP
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /actuator/health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q UP <&3'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks: [ke-net]
+
+  app-worker:
+    image: eclipse-temurin:21-jre
+    restart: unless-stopped
+    # 只跑智能体执行器与 stale 回收(@Scheduled),不监听端口;负载高时 docker compose up -d --scale app-worker=N
+    command: ["java", "-Xmx768m", "-jar", "/app/app.jar"]
+    volumes:
+      - ./ke-boot/target/ke-boot-0.1.0-SNAPSHOT.jar:/app/app.jar:ro
+    environment:
+      <<: *app-env
+      SPRING_PROFILES_ACTIVE: worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # worker 无 Web 端点(application-worker.yml: web-application-type none),仅进程存活检查:
+      # temurin 入口以 exec 启动 → java 即 PID 1,检查其 cmdline 含 app.jar(不依赖 procps/pgrep)
+      test: ["CMD-SHELL", "grep -aq app.jar /proc/1/cmdline"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks: [ke-net]
+
+  postgres:
+    # pgvector/pgvector:pg16 = 官方 postgres:16 + vector 扩展(02 §10.1;一期只用普通关系表,二期检索零迁移成本)
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${KE_DB_USER:-ke}
+      POSTGRES_PASSWORD: ${KE_PG_PASSWORD:?KE_PG_PASSWORD required}
+      POSTGRES_DB: ke
+      TZ: Asia/Shanghai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # 生产注意:5432 不对外发布端口,仅 compose 网络内可达(排障时 docker compose exec postgres psql)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [ke-net]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${KE_REDIS_PASSWORD:?KE_REDIS_PASSWORD required}", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${KE_REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    environment:
+      KE_REDIS_PASSWORD: ${KE_REDIS_PASSWORD:?KE_REDIS_PASSWORD required}
+    networks: [ke-net]
+
+  # 图片存储预留(02 §10.1);一期 MVP 未接,需用时 --profile minio 启用
+  minio:
+    image: minio/minio:latest
+    profiles: ["minio"]
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${KE_MINIO_USER:-ke}
+      MINIO_ROOT_PASSWORD: ${KE_MINIO_PASSWORD:?KE_MINIO_PASSWORD required when profile minio}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9000/minio/health/live || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks: [ke-net]
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+
+networks:
+  ke-net:
+    driver: bridge

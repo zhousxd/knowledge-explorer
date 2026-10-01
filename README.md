@@ -51,6 +51,12 @@ wsl -e bash -c "sudo service postgresql start && sudo service redis-server start
 
 GitHub Actions（`.github/workflows/ci.yml`）双 job：后端 job 用 services 起 pg16/redis，集成测试直连 localhost，与本地 WSL 环境同构；前端 job 走 pnpm lint/test/build。
 
+## 生产部署
+
+单机 Docker Compose 编排（nginx / app / app-worker / postgres / redis，minio 为可选 profile）：见 `docker-compose.prod.yml` 与 `nginx/nginx.conf`。完整步骤（构建 → 配置 env → up → Flyway 自动迁移 → 验收）与逐项放行门槛（限额护栏 / 敏感词 / 生成标识 / 备份恢复演练 / **算法备案评估——未完成前不对外放量，仅内测**）见 `docs/上线检查单.md`。备份与恢复：`ops/backup.sh`、`ops/restore.sh`。
+
+## 快速查看原型
+
 ## 快速查看原型
 
 两个原型均为**单文件、零依赖**的 HTML，直接用浏览器打开即可（无需构建、可离线）：

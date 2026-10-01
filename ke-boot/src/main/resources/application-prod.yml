@@ -1,0 +1,63 @@
+# 生产 profile(Task 36)— SPRING_PROFILES_ACTIVE=prod 时生效
+#
+# 与 dev 的关键差异:
+# - 敏感凭据一律环境变量注入,且**无默认值**——KE_JWT_SECRET / KE_PG_PASSWORD /
+#   KE_REDIS_PASSWORD / KE_LLM_API_KEY 缺失时占位符解析失败,应用启动即失败(快速失败,不带病运行);
+# - swagger / OpenAPI 文档生产关闭(springdoc.enabled=false);nginx 层再 404 一道(双防线);
+# - management 端点仅暴露 health(供容器 healthcheck 与 LB 探活);
+# - Flyway 保持开启:容器首启/发版时自动迁移(02 §10.1,Flyway 用 PG advisory lock 保证并发安全)。
+#
+# 连接目标为 compose 网络内服务名(postgres / redis);KE_DB_URL 可覆盖以对接外部托管实例。
+
+spring:
+  datasource:
+    # stringtype=unspecified:JSONB 列(agent_run.input_json 等)以字符串参数写入,由 PG 推断类型
+    url: ${KE_DB_URL:jdbc:postgresql://postgres:5432/ke?stringtype=unspecified}
+    username: ${KE_DB_USER:ke}
+    # 无默认:KE_PG_PASSWORD 缺失 → 启动失败
+    password: ${KE_PG_PASSWORD}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${KE_REDIS_HOST:redis}
+      port: ${KE_REDIS_PORT:6379}
+      # 无默认:配额计数(FR-S04)强依赖 Redis,密码缺失启动失败优于运行期静默失败
+      password: ${KE_REDIS_PASSWORD}
+      database: 0
+  ai:
+    openai:
+      base-url: ${KE_LLM_BASE_URL:https://api.deepseek.com}
+      # 无默认:KE_LLM_API_KEY 缺失 → 启动失败(严禁把 key 写进入库文件)
+      api-key: ${KE_LLM_API_KEY}
+
+ke:
+  jwt:
+    # 强制注入,无 fallback(与 dev 的 dev-only-secret 不同):缺失即启动失败——
+    # 生产密钥缺失若静默落到默认值,等于全员可伪造 token(R 高危)。要求 ≥32 字节随机串。
+    secret: ${KE_JWT_SECRET}
+    access-ttl: 2h
+    refresh-ttl: 7d
+  llm:
+    generator-model: ${KE_LLM_GENERATOR:deepseek-chat}
+    router-model: ${KE_LLM_ROUTER:deepseek-chat}
+  sms:
+    gateway-url: ${KE_SMS_GATEWAY_URL:}
+    api-key: ${KE_SMS_API_KEY:}
+  # ke.agent.*(stale-seconds/llm-timeout-seconds/recycle-interval-ms)与
+  # ke.quota.daily-limit 沿用 application.yml 基线——限额与超时护栏(R8/FR-S04/S13)在生产同值生效
+
+# 生产关闭 swagger 与 OpenAPI 文档
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# management 端点仅 health(默认基线含 info,生产收紧)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
