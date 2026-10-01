@@ -3,6 +3,7 @@ import { TOKEN_KEY } from '../api/http';
 import LoginView from '../views/LoginView.vue';
 import HomeView from '../views/HomeView.vue';
 import CardsView from '../views/CardsView.vue';
+import CardView from '../views/CardView.vue';
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -18,8 +19,10 @@ const router = createRouter({
     { path: '/login', component: LoginView, meta: { title: '登录' } },
     // 探索端首页(品牌头/搜索/专题格/推荐入口/继续探索卡占位);匿名可浏览
     { path: '/home', component: HomeView, meta: { title: '知识探索', public: true } },
-    // 卡片浏览页占位:Task 14 替换为真卡片页;?q=&theme= 由首页搜索/专题透传;匿名可浏览
+    // 卡片列表页:搜索/专题过滤 + keyset 分页;?q=&theme= 由首页搜索/专题透传;匿名可浏览
     { path: '/cards', component: CardsView, meta: { title: '卡片', public: true } },
+    // 卡片详情页(CardRenderer 按 templateType 分发);匿名可浏览,非 PUBLISHED 由 404 空态承载
+    { path: '/cards/:id(\\d+)', component: CardView, meta: { title: '卡片详情', public: true } },
     { path: '/', redirect: '/home' },
     // catch-all:未知路径回首页(避免白屏)
     { path: '/:pathMatch(.*)*', redirect: '/home' }

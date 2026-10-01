@@ -18,6 +18,11 @@ export const HOME_THEMES: HomeTheme[] = [
   { key: 'sound', name: '声音科学', icon: 'wave', count: 7 }
 ];
 
+/** 专题 key → 中文名(卡片页面包屑/列表页 tab 与行内专题标共用) */
+export const THEME_NAMES: Record<string, string> = Object.fromEntries(
+  HOME_THEMES.map((t) => [t.key, t.name])
+);
+
 /** 今日推荐入口(演示数据,界面统一标注「演示」chip) */
 export interface HomeEntry {
   icon: string;

@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import App from '../App.vue';
 import ResumeCard from '../components/ResumeCard.vue';
@@ -8,6 +8,11 @@ import router from '../router';
 import { useAuthStore } from '../stores/auth';
 import CardsView from '../views/CardsView.vue';
 import HomeView from '../views/HomeView.vue';
+
+// /cards 已是接真数据的列表页(Task 14):App 宿主测试里 mock 掉列表接口,只验证导航联通
+vi.mock('../api/cards', () => ({
+  listPublicCards: vi.fn(async () => ({ items: [], nextCursor: null }))
+}));
 
 /** 直挂 HomeView 用的独立 memory 路由:绕开全局守卫,便于覆盖登录态分支 */
 async function mountHome(options: { loggedIn?: boolean } = {}) {
@@ -107,7 +112,10 @@ describe('Home(经真实路由宿主)', () => {
     await flushPromises();
     expect(router.currentRoute.value.path).toBe('/cards');
     expect(router.currentRoute.value.query.theme).toBe('cuisine');
-    expect(wrapper.text()).toContain('cuisine'); // 占位页透传展示
+    // 列表页专题 tab 按 query 高亮(联通验证)
+    const active = wrapper.find('.tab.on');
+    expect(active.exists()).toBe(true);
+    expect(active.text()).toBe('湘菜风物');
   });
 
   it('搜索回车跳 /cards 并透传 q;空关键词不跳转', async () => {
@@ -120,7 +128,9 @@ describe('Home(经真实路由宿主)', () => {
     await flushPromises();
     expect(router.currentRoute.value.path).toBe('/cards');
     expect(router.currentRoute.value.query.q).toBe('岳麓书院');
-    expect(wrapper.text()).toContain('岳麓书院'); // 占位页透传展示
+    // 列表页搜索框回填 q(联通验证)
+    const cardsInput = wrapper.find('input[type="search"]').element as HTMLInputElement;
+    expect(cardsInput.value).toBe('岳麓书院');
   });
 
   it('未登录访问公开页 /home 放行,并渲染登录引导细条', async () => {

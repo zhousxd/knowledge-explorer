@@ -1,0 +1,152 @@
+import { flushPromises, mount } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMemoryHistory, createRouter } from 'vue-router';
+import { getCard, fetchCardEntries } from '../api/cards';
+import type { CardDetail, CardEntryGroup } from '../api/cards';
+import CompareCard from '../components/CardRenderer/CompareCard.vue';
+import TextCard from '../components/CardRenderer/TextCard.vue';
+import { useAuthStore } from '../stores/auth';
+import CardView from '../views/CardView.vue';
+
+vi.mock('../api/cards', () => ({
+  getCard: vi.fn(),
+  listPublicCards: vi.fn(),
+  fetchCardEntries: vi.fn()
+}));
+const mockedGet = vi.mocked(getCard);
+const mockedEntries = vi.mocked(fetchCardEntries);
+
+const TEXT_CARD: CardDetail = {
+  id: 1,
+  theme: 'academy',
+  templateType: 'TEXT',
+  title: '岳麓书院',
+  versionNo: 3,
+  updatedAt: '2026-09-30T10:00:00Z',
+  content: {
+    summary: '中国四大书院之一。',
+    sections: [{ h: '书院的由来', body: '北宋开宝九年创办。', citations: [1] }],
+    related: [{ cardId: 9, relation: '相关联', why: '朱张会讲的人物细节' }]
+  },
+  sources: [
+    { assetId: 11, title: '《岳麓书院史略》', locator: '第一章 p12', license: '已授权' },
+    { title: '湖南大学岳麓书院官网', locator: '书院沿革' }
+  ]
+};
+
+const ENTRIES: CardEntryGroup = {
+  cardId: 1,
+  defaultEntries: [
+    {
+      id: 1, name: '为什么建在这里', type: 'AGENT_SERVICE', relationLabel: null,
+      targetCardId: null, serviceType: 'EXPLAIN', scope: 'PUBLIC', status: 'ACTIVE', mine: false
+    },
+    {
+      id: 2, name: '哪些人物与这里有关', type: 'LINK_CARD', relationLabel: '相关联',
+      targetCardId: 9, serviceType: null, scope: 'PUBLIC', status: 'ACTIVE', mine: false
+    }
+  ],
+  folded: [3, 4, 5].map((n) => ({
+    id: n, name: `入口${n}`, type: 'LINK_CARD', relationLabel: '深入了解',
+    targetCardId: n + 10, serviceType: null, scope: 'PUBLIC', status: 'ACTIVE', mine: false
+  }))
+};
+
+/** 直挂 CardView 的独立 memory 路由:/cards/:id 详情 + 相关跳转目标 */
+async function mountCard(id = '1', opts: { authed?: boolean } = {}) {
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  if (opts.authed) useAuthStore().token = 'tk';
+  const local = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/cards/:id', component: CardView },
+      { path: '/cards', component: { render: () => null } },
+      { path: '/home', component: { render: () => null } },
+      { path: '/login', component: { render: () => null } }
+    ]
+  });
+  await local.push(`/cards/${id}`);
+  await local.isReady();
+  const wrapper = mount(CardView, { global: { plugins: [pinia, local] } });
+  await flushPromises();
+  return { wrapper, local };
+}
+
+describe('CardView(卡片页,04 §7.2 KCard)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mockedGet.mockResolvedValue(TEXT_CARD);
+    mockedEntries.mockResolvedValue(ENTRIES);
+  });
+
+  it('TEXT 卡完整渲染:chips/宋体标题/分发正文/出处条数/入口列表', async () => {
+    const { wrapper } = await mountCard('1', { authed: true });
+    expect(wrapper.text()).toContain('图文卡');
+    expect(wrapper.find('h1').text()).toBe('岳麓书院');
+    expect(wrapper.findComponent(TextCard).exists()).toBe(true);
+    const src = wrapper.find('.src');
+    expect(src.exists()).toBe(true);
+    expect(src.text()).toContain('《岳麓书院史略》');
+    expect(src.text()).toContain('[2]');
+    // 入口:default 2 行 + 折叠「还有 3 个入口」+ 新增虚线按钮
+    expect(wrapper.findAll('.entry')).toHaveLength(2);
+    expect(wrapper.find('.fold').text()).toContain('还有 3 个入口');
+    expect(wrapper.find('.addentry').text()).toContain('用一句话新增入口');
+  });
+
+  it('面包屑 = 专题中文名 · 标题', async () => {
+    const { wrapper } = await mountCard();
+    expect(wrapper.find('.crumb').text()).toContain('书院地标');
+    expect(wrapper.find('.crumb').text()).toContain('岳麓书院');
+  });
+
+  it('404 → 空态「卡片不存在或已下架」,不再拉入口', async () => {
+    mockedGet.mockResolvedValue(null);
+    const { wrapper } = await mountCard('404');
+    expect(wrapper.text()).toContain('卡片不存在或已下架');
+    expect(wrapper.find('.kcard').exists()).toBe(false);
+    expect(mockedEntries).not.toHaveBeenCalled();
+  });
+
+  it('COMPARE 卡分发到 CompareCard', async () => {
+    mockedGet.mockResolvedValue({
+      ...TEXT_CARD,
+      templateType: 'COMPARE',
+      content: { objects: ['甲', '乙'], dimensions: ['年代'], cells: [['976 年', '1161 年']], citations: [] }
+    });
+    const { wrapper } = await mountCard();
+    expect(wrapper.text()).toContain('对比卡');
+    expect(wrapper.findComponent(CompareCard).exists()).toBe(true);
+    expect(wrapper.findComponent(TextCard).exists()).toBe(false);
+  });
+
+  it('相关联跳转:TextCard emit open → 路由切到 /cards/9 并重拉数据', async () => {
+    const { wrapper, local } = await mountCard();
+    const calls = mockedGet.mock.calls.length;
+    await wrapper.findComponent(TextCard).vm.$emit('open', 9);
+    await flushPromises();
+    expect(local.currentRoute.value.path).toBe('/cards/9');
+    expect(mockedGet.mock.calls.length).toBeGreaterThan(calls);
+  });
+
+  it('折叠入口展开后显示全部', async () => {
+    const { wrapper } = await mountCard('1', { authed: true });
+    await wrapper.find('.fold').trigger('click');
+    expect(wrapper.findAll('.entry')).toHaveLength(5);
+  });
+
+  it('匿名(无 token):不调入口接口,给出登录引导', async () => {
+    const { wrapper } = await mountCard();
+    expect(mockedEntries).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('登录后查看这张卡的探索入口');
+  });
+
+  it('已登录:调 GET /cards/{id}/entries 渲染入口', async () => {
+    const { wrapper } = await mountCard('1', { authed: true });
+    expect(mockedEntries).toHaveBeenCalledWith(1);
+    expect(wrapper.findAll('.entry')).toHaveLength(2);
+  });
+});
