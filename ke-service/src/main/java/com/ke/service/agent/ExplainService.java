@@ -25,6 +25,8 @@ import com.ke.service.agent.post.AgentLabels;
 import com.ke.service.agent.post.ClaimLabelAppender;
 import com.ke.service.agent.post.RunMetrics;
 import com.ke.service.agent.post.SensitiveWordFilter;
+import com.ke.service.analytics.AnalyticsEvents;
+import com.ke.service.analytics.AnalyticsService;
 import com.ke.service.common.BadRequestException;
 import com.ke.service.common.NotFoundException;
 import com.ke.service.common.RateLimitException;
@@ -113,6 +115,8 @@ public class ExplainService {
     private final ObjectMapper objectMapper;
     private final QuotaService quota;
     private final SensitiveWordFilter sensitiveWords;
+    /** 埋点（FR-O05，Task 33）：service_run 终态（DONE/FAILED/TIMEOUT） */
+    private final AnalyticsService analytics;
     /** 自代理：submit 必须经代理调 executeExplain，同类 this 调用会让 @Async 失效退化为同步 */
     private final ExplainService self;
 
@@ -141,7 +145,7 @@ public class ExplainService {
                           PathNodeMapper pathNodes, SessionService sessions, RetrievalService retrieval,
                           ArtifactMapper artifacts, CitationMapper citations, LlmGateway llm,
                           ObjectMapper objectMapper, QuotaService quota, SensitiveWordFilter sensitiveWords,
-                          @Lazy ExplainService self) {
+                          AnalyticsService analytics, @Lazy ExplainService self) {
         this.runs = runs;
         this.cards = cards;
         this.cardVersions = cardVersions;
@@ -154,6 +158,7 @@ public class ExplainService {
         this.objectMapper = objectMapper;
         this.quota = quota;
         this.sensitiveWords = sensitiveWords;
+        this.analytics = analytics;
         this.self = self;
     }
 
@@ -308,6 +313,8 @@ public class ExplainService {
                     }
                 } catch (LlmTimeoutException e) {
                     // 超时不重试：LLM 已耗满时间预算，重试只会把等待翻倍；置 TIMEOUT 终态（用户可重新提交新 run）
+                    // 埋点 service_run=TIMEOUT（先于终态回写：观察者见 TIMEOUT 即有事件）
+                    trackTerminal(runId, input, AgentRunStatus.TIMEOUT.name(), null);
                     timeout(runId);
                     return;
                 } catch (Exception e) {
@@ -326,6 +333,9 @@ public class ExplainService {
             }
         } catch (Exception e) {
             log.warn("explain run {} failed: {}", runId, e.getMessage());
+            // 埋点 service_run=FAILED（先于终态回写：观察者见 FAILED 即有事件）
+            trackTerminal(runId, input, AgentRunStatus.FAILED.name(),
+                    (int) Math.min(Integer.MAX_VALUE, System.currentTimeMillis() - start));
             fail(runId, e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
         }
     }
@@ -431,6 +441,8 @@ public class ExplainService {
             // 旁路留痕（不置 FAILED，Task 19 起的既有行为，IT 依赖）：完整审计数据在 artifact.audit
             done.setError("引用校验:剥离 " + report.strippedCitations().size() + " 个越界引用");
         }
+        // 埋点 service_run=DONE（FR-O05，Task 33；先于终态回写：观察者见 DONE 即有事件，指标②④⑥数据源）
+        trackTerminal(runId, input, AgentRunStatus.DONE.name(), done.getLatencyMs());
         runs.updateById(done);
     }
 
@@ -500,7 +512,22 @@ public class ExplainService {
             // 旁路留痕（不置 FAILED，与讲解同则）：完整审计数据在 artifact.audit
             done.setError("引用校验:剥离 " + stripped.size() + " 个越界引用");
         }
+        // 埋点 service_run=DONE（比较通道，Task 33；先于终态回写）
+        trackTerminal(runId, input, AgentRunStatus.DONE.name(), done.getLatencyMs());
         runs.updateById(done);
+    }
+
+    /**
+     * service_run 终态埋点（FR-O05，Task 33）：DONE/FAILED/TIMEOUT 一行事件，
+     * payload={runId,serviceType,status,sessionId,nodeId,latencyMs}——6 指标②④⑥的聚合数据源。
+     * serviceType 取 input 快照（EXPLAIN/COMPARE，旧数据 null 回落 EXPLAIN）。
+     */
+    private void trackTerminal(long runId, ExplainInput input, String status, Integer latencyMs) {
+        analytics.track(input.userId(), AnalyticsEvents.SERVICE_RUN,
+                AnalyticsService.params("runId", runId,
+                        "serviceType", input.serviceType() == null ? SERVICE_TYPE : input.serviceType(),
+                        "status", status, "sessionId", input.sessionId(), "nodeId", input.nodeId(),
+                        "latencyMs", latencyMs));
     }
 
     /**

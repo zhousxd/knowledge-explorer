@@ -25,6 +25,8 @@ import com.ke.service.agent.dto.SummaryOutput;
 import com.ke.service.agent.post.AgentLabels;
 import com.ke.service.agent.post.RunMetrics;
 import com.ke.service.agent.post.SensitiveWordFilter;
+import com.ke.service.analytics.AnalyticsEvents;
+import com.ke.service.analytics.AnalyticsService;
 import com.ke.service.common.BadRequestException;
 import com.ke.service.common.RateLimitException;
 import com.ke.service.explore.SessionService;
@@ -103,6 +105,8 @@ public class SummaryService {
     private final ObjectMapper objectMapper;
     private final QuotaService quota;
     private final SensitiveWordFilter sensitiveWords;
+    /** 埋点（FR-O05，Task 33）：service_run 终态 + artifact_save */
+    private final AnalyticsService analytics;
     /** 自代理：submit 必须经代理调 executeSummarize，同类 this 调用会让 @Async 失效退化为同步 */
     private final SummaryService self;
 
@@ -120,7 +124,7 @@ public class SummaryService {
                           CardMapper cards, SessionService sessions, ArtifactMapper artifacts,
                           CitationMapper citations, LlmGateway llm, ObjectMapper objectMapper,
                           QuotaService quota, SensitiveWordFilter sensitiveWords,
-                          @Lazy SummaryService self) {
+                          AnalyticsService analytics, @Lazy SummaryService self) {
         this.runs = runs;
         this.pathNodes = pathNodes;
         this.cardVersions = cardVersions;
@@ -132,6 +136,7 @@ public class SummaryService {
         this.objectMapper = objectMapper;
         this.quota = quota;
         this.sensitiveWords = sensitiveWords;
+        this.analytics = analytics;
         this.self = self;
     }
 
@@ -214,6 +219,8 @@ public class SummaryService {
                     output = readSummaryOutput(raw);
                 } catch (LlmTimeoutException e) {
                     // 超时不重试：LLM 已耗满时间预算；置 TIMEOUT 终态（用户可重新提交新 run）
+                    // 埋点 service_run=TIMEOUT（先于终态回写：观察者见 TIMEOUT 即有事件）
+                    trackTerminal(runId, input, AgentRunStatus.TIMEOUT.name(), null);
                     timeout(runId);
                     return;
                 } catch (Exception e) {
@@ -227,6 +234,9 @@ public class SummaryService {
             finish(runId, start, input, output, materials);
         } catch (Exception e) {
             log.warn("summarize run {} failed: {}", runId, e.getMessage());
+            // 埋点 service_run=FAILED（先于终态回写：观察者见 FAILED 即有事件）
+            trackTerminal(runId, input, AgentRunStatus.FAILED.name(),
+                    (int) Math.min(Integer.MAX_VALUE, System.currentTimeMillis() - start));
             fail(runId, e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
         }
     }
@@ -461,7 +471,20 @@ public class SummaryService {
             // 旁路留痕（不置 FAILED，与讲解/比较同则）：完整审计数据在 artifact.audit
             done.setError("引用校验:剥离 " + report.strippedCitations().size() + " 个越界引用");
         }
+        // 埋点（FR-O05，Task 33；先于终态回写：观察者见 DONE 即有事件）：
+        // service_run=SUMMARIZE/DONE（指标②④⑥数据源）+ artifact_save（整理成果保存，指标②分子）
+        trackTerminal(runId, input, AgentRunStatus.DONE.name(), done.getLatencyMs());
+        analytics.track(input.userId(), AnalyticsEvents.ARTIFACT_SAVE,
+                AnalyticsService.params("sessionId", input.sessionId(), "artifactId", artifact.getId(),
+                        "runId", runId, "type", REPORT_ARTIFACT_TYPE));
         runs.updateById(done);
+    }
+
+    /** service_run 终态埋点（Task 33，与 ExplainService.trackTerminal 同型）：SUMMARIZE 恒定类型 */
+    private void trackTerminal(long runId, SummarizeInput input, String status, Integer latencyMs) {
+        analytics.track(input.userId(), AnalyticsEvents.SERVICE_RUN,
+                AnalyticsService.params("runId", runId, "serviceType", SERVICE_TYPE,
+                        "status", status, "sessionId", input.sessionId(), "latencyMs", latencyMs));
     }
 
     /** keyFinding → 校验器入参（同形映射：ke-domain 不依赖 service DTO） */

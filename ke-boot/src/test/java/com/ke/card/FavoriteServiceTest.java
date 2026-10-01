@@ -13,6 +13,7 @@ import com.ke.infra.entity.CardEntity;
 import com.ke.infra.entity.FavoriteEntity;
 import com.ke.infra.mapper.CardMapper;
 import com.ke.infra.mapper.FavoriteMapper;
+import com.ke.service.analytics.AnalyticsService;
 import com.ke.service.card.FavoriteService;
 
 /**
@@ -31,7 +32,8 @@ class FavoriteServiceTest {
     void setUp() {
         favorites = mock(FavoriteMapper.class);
         cards = mock(CardMapper.class);
-        service = new FavoriteService(favorites, cards);
+        // 埋点为旁路（track 内部吞异常），单测用 no-op mock 断言不受影响
+        service = new FavoriteService(favorites, cards, mock(AnalyticsService.class));
     }
 
     private CardEntity published(long id) {

@@ -16,6 +16,8 @@ import com.ke.infra.mapper.CardMapper;
 import com.ke.infra.mapper.EntryMapper;
 import com.ke.infra.mapper.ReviewTaskMapper;
 import com.ke.service.agent.ExplainService;
+import com.ke.service.analytics.AnalyticsEvents;
+import com.ke.service.analytics.AnalyticsService;
 import com.ke.service.common.BadRequestException;
 import com.ke.service.common.NotFoundException;
 import org.springframework.security.access.AccessDeniedException;
@@ -66,10 +68,12 @@ public class EntryMutationService {
     private final RelationGuard relationGuard;
     private final ExplainService explain;
     private final ObjectMapper objectMapper;
+    /** 埋点（FR-O05，Task 33）：entry_create */
+    private final AnalyticsService analytics;
 
     public EntryMutationService(CardMapper cards, EntryMapper entries, ReviewTaskMapper reviewTasks,
                                 EntryAuthorizedAssets authorizedAssets, RelationGuard relationGuard,
-                                ExplainService explain, ObjectMapper objectMapper) {
+                                ExplainService explain, ObjectMapper objectMapper, AnalyticsService analytics) {
         this.cards = cards;
         this.entries = entries;
         this.reviewTasks = reviewTasks;
@@ -77,6 +81,7 @@ public class EntryMutationService {
         this.relationGuard = relationGuard;
         this.explain = explain;
         this.objectMapper = objectMapper;
+        this.analytics = analytics;
     }
 
     /** 创建/切换结果（201/200 data）：入口 id + 生效 scope + 状态 */
@@ -159,6 +164,12 @@ public class EntryMutationService {
         if ("PUBLIC".equals(targetScope)) {
             queueReview(entry.getId());
         }
+        // 埋点 entry_create（FR-O05，Task 33）：payload 含 scope/testTotal（创建时恒 0，试运行另经
+        // service_run 无会话形态计入指标④——run↔entry 关联为 P5-18 遗留）
+        analytics.track(userId, AnalyticsEvents.ENTRY_CREATE,
+                AnalyticsService.params("entryId", entry.getId(), "scope", targetScope,
+                        "serviceType", config == null ? null : config.serviceType(),
+                        "testTotal", entry.getTestTotal()));
         return new EntryWritten(entry.getId(), targetScope, entry.getStatus());
     }
 

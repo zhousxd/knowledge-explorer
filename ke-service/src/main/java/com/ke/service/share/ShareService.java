@@ -23,6 +23,8 @@ import com.ke.infra.mapper.ShareMapper;
 import com.ke.infra.mapper.ShareSnapshotMapper;
 import com.ke.service.common.BadRequestException;
 import com.ke.service.common.NotFoundException;
+import com.ke.service.analytics.AnalyticsEvents;
+import com.ke.service.analytics.AnalyticsService;
 import com.ke.service.explore.SessionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,13 +89,15 @@ public class ShareService {
     private final ShareMapper shares;
     private final ShareSnapshotMapper snapshots;
     private final ObjectMapper objectMapper;
+    /** 埋点（FR-O05，Task 33）：share_create / share_view / share_continue（Phase 7 日志钉子的落表兑现） */
+    private final AnalyticsService analytics;
     /** share+snapshot 双写原子性 + token 冲突重试需独立事务：不走 @Transactional 自调用代理，显式模板 */
     private final TransactionTemplate writeTx;
 
     public ShareService(SessionService sessions, SessionMapper sessionRows, PathNodeMapper pathNodes,
                         CardVersionMapper cardVersions, CardMapper cards, EntryMapper entries,
                         ShareMapper shares, ShareSnapshotMapper snapshots, ObjectMapper objectMapper,
-                        PlatformTransactionManager transactionManager) {
+                        AnalyticsService analytics, PlatformTransactionManager transactionManager) {
         this.sessions = sessions;
         this.sessionRows = sessionRows;
         this.pathNodes = pathNodes;
@@ -103,6 +107,7 @@ public class ShareService {
         this.shares = shares;
         this.snapshots = snapshots;
         this.objectMapper = objectMapper;
+        this.analytics = analytics;
         this.writeTx = new TransactionTemplate(transactionManager);
     }
 
@@ -174,7 +179,9 @@ public class ShareService {
         }
 
         ShareCreated created = insertShareAtomically(userId, cmd.objectId(), json);
-        // 埋点 share_create：分析表 Phase 8 Task 33 落 analytics_event，本任务仅结构化日志（已与计划对齐）
+        // 埋点 share_create（FR-O05，Task 33 落 analytics_event，替代 Phase 7 的仅日志）
+        analytics.track(userId, AnalyticsEvents.SHARE_CREATE,
+                AnalyticsService.params("sessionId", cmd.objectId(), "nodeCount", selected.size()));
         log.info("share_create userId={} sessionId={} shareTokenHash={} nodeCount={} snapshotBytes={}",
                 userId, cmd.objectId(), created.token().hashCode(), selected.size(), json.length());
         return created;
@@ -201,8 +208,11 @@ public class ShareService {
 
     // ---------- 免登录浏览 ----------
 
-    /** 匿名浏览：revoked / 不存在 / 快照缺失 → 统一 404「分享不存在」（不泄露存在性，FR-H06） */
-    @Transactional(readOnly = true)
+    /**
+     * 匿名浏览：revoked / 不存在 / 快照缺失 → 统一 404「分享不存在」（不泄露存在性，FR-H06）。
+     * 不再包 readOnly 事务（Task 33）：本方法兼做 share_view 埋点写入，readOnly 连接会拒绝 INSERT
+     * （异常被 AnalyticsService 吞掉 → 指标③分母恒缺）；方法体仅两条独立读 + 反序列化，无需事务包裹。
+     */
     public ShareView viewPublic(String token) {
         ShareEntity share = requireShare(token);
         if (Boolean.TRUE.equals(share.getRevoked())) {
@@ -221,8 +231,9 @@ public class ShareService {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("分享快照数据损坏", e);
         }
-        // 埋点 share_view：分析表 Phase 8 Task 33 落 analytics_event，本任务仅结构化日志
-        log.info("share_view shareId={} (埋点 Phase 8 Task 33 落表)", share.getId());
+        // 埋点 share_view（FR-O05，Task 33）：匿名浏览 user_id 为 null（指标③分母）
+        analytics.track(null, AnalyticsEvents.SHARE_VIEW, AnalyticsService.params("shareId", share.getId()));
+        log.info("share_view shareId={} (Task 33 已落 analytics_event)", share.getId());
         return new ShareView(share.getToken(), snapshot.title(), snapshot.summary(), snapshot,
                 share.getCreatedAt(), CONTINUE_NOTICE);
     }
@@ -271,8 +282,11 @@ public class ShareService {
 
         ContinueResult result = writeTx.execute(tx -> copySnapshot(share.getId(), userId, theme, goal, snapshot));
         long newSessionId = result.sessionId();
-        // 埋点 share_continue：分析表 Phase 8 Task 33 落 analytics_event，本任务仅结构化日志
-        log.info("share_continue userId={} originShareId={} newSessionId={} nodeCount={} (埋点 Phase 8 Task 33 落表)",
+        // 埋点 share_continue（FR-O05，Task 33）：指标③分子
+        analytics.track(userId, AnalyticsEvents.SHARE_CONTINUE,
+                AnalyticsService.params("originShareId", share.getId(), "newSessionId", newSessionId,
+                        "nodeCount", result.nodeCount()));
+        log.info("share_continue userId={} originShareId={} newSessionId={} nodeCount={} (Task 33 已落 analytics_event)",
                 userId, share.getId(), newSessionId, result.nodeCount());
         return result;
     }

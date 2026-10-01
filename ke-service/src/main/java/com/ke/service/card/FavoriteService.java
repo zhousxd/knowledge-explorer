@@ -6,6 +6,8 @@ import com.ke.infra.entity.CardEntity;
 import com.ke.infra.entity.FavoriteEntity;
 import com.ke.infra.mapper.CardMapper;
 import com.ke.infra.mapper.FavoriteMapper;
+import com.ke.service.analytics.AnalyticsEvents;
+import com.ke.service.analytics.AnalyticsService;
 import com.ke.service.common.NotFoundException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -33,10 +35,13 @@ public class FavoriteService {
 
     private final FavoriteMapper favorites;
     private final CardMapper cards;
+    /** 埋点（FR-O05，Task 33）：favorite（仅真实新增收藏，幂等重复不打点防指标虚高） */
+    private final AnalyticsService analytics;
 
-    public FavoriteService(FavoriteMapper favorites, CardMapper cards) {
+    public FavoriteService(FavoriteMapper favorites, CardMapper cards, AnalyticsService analytics) {
         this.favorites = favorites;
         this.cards = cards;
+        this.analytics = analytics;
     }
 
     /** 收藏列表行：favoritedAt 即 favorite.created_at */
@@ -65,6 +70,8 @@ public class FavoriteService {
             row.setCardId(cardId);
             try {
                 favorites.insert(row);
+                // 埋点 favorite（FR-O05，Task 33）：仅真实新增打点（并发重复回落幂等不计）
+                analytics.track(userId, AnalyticsEvents.FAVORITE, AnalyticsService.params("cardId", cardId));
             } catch (DataIntegrityViolationException e) {
                 // 并发重复收藏：唯一约束兜底，回落返回已有收藏（幂等）
             }

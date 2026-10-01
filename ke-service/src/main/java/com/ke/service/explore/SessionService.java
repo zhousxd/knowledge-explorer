@@ -12,6 +12,8 @@ import com.ke.infra.mapper.EntryMapper;
 import com.ke.infra.mapper.PathNodeMapper;
 import com.ke.infra.mapper.SessionMapper;
 import com.ke.service.agent.OpenQuestionService;
+import com.ke.service.analytics.AnalyticsEvents;
+import com.ke.service.analytics.AnalyticsService;
 import com.ke.service.common.BadRequestException;
 import com.ke.service.common.NotFoundException;
 import org.springframework.security.access.AccessDeniedException;
@@ -54,16 +56,19 @@ public class SessionService {
     private final EntryMapper entries;
     /** 未决疑问聚合（FR-E09，Task 24）：断点续探 openQuestionCount 的真实数据源（P4-16 遗留兑现） */
     private final OpenQuestionService openQuestions;
+    /** 埋点（FR-O05，Task 33）：session_start / node_visit */
+    private final AnalyticsService analytics;
 
     public SessionService(SessionMapper sessions, PathNodeMapper pathNodes,
                           CardVersionMapper cardVersions, CardMapper cards, EntryMapper entries,
-                          OpenQuestionService openQuestions) {
+                          OpenQuestionService openQuestions, AnalyticsService analytics) {
         this.sessions = sessions;
         this.pathNodes = pathNodes;
         this.cardVersions = cardVersions;
         this.cards = cards;
         this.entries = entries;
         this.openQuestions = openQuestions;
+        this.analytics = analytics;
     }
 
     // ---------- DTO ----------
@@ -111,6 +116,9 @@ public class SessionService {
         session.setCreatedAt(now);
         session.setUpdatedAt(now);
         sessions.insert(session);
+        // 埋点 session_start（FR-O05，Task 33）
+        analytics.track(userId, AnalyticsEvents.SESSION_START,
+                AnalyticsService.params("sessionId", session.getId(), "theme", theme));
         return session.getId();
     }
 
@@ -258,6 +266,10 @@ public class SessionService {
         pathNodes.insert(node);
 
         touch(sessionId, now);
+        // 埋点 node_visit（FR-O05，Task 33）：isNewKnowledge 是 6 指标①「有效深入率」的分子来源
+        analytics.track(userId, AnalyticsEvents.NODE_VISIT,
+                AnalyticsService.params("sessionId", sessionId, "nodeId", node.getId(),
+                        "cardVersionId", cmd.cardVersionId(), "isNewKnowledge", isNewKnowledge));
         return toView(node, cardTitle);
     }
 
