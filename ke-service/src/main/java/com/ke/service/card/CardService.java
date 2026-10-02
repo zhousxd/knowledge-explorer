@@ -31,6 +31,7 @@ import com.ke.infra.mapper.ReviewTaskMapper;
 import com.ke.service.card.dto.SourceRef;
 import com.ke.service.common.BadRequestException;
 import com.ke.service.common.NotFoundException;
+import com.ke.service.image.ImageService;
 import com.ke.service.review.AuditId;
 import com.ke.service.review.Audited;
 import org.springframework.security.access.AccessDeniedException;
@@ -71,17 +72,19 @@ public class CardService {
     private final KeUserMapper users;
     private final KnowledgeAssetMapper assets;
     private final CitationMapper citations;
+    private final ImageService images;
     private final ObjectMapper objectMapper;
 
     public CardService(CardMapper cards, CardVersionMapper versions, ReviewTaskMapper reviewTasks,
                        KeUserMapper users, KnowledgeAssetMapper assets, CitationMapper citations,
-                       ObjectMapper objectMapper) {
+                       ImageService images, ObjectMapper objectMapper) {
         this.cards = cards;
         this.versions = versions;
         this.reviewTasks = reviewTasks;
         this.users = users;
         this.assets = assets;
         this.citations = citations;
+        this.images = images;
         this.objectMapper = objectMapper;
     }
 
@@ -452,6 +455,10 @@ public class CardService {
         CardContent parsed = CardContentValidator.parseAndValidate(templateType, content.toString());
         CitationIndexValidator.check(parsed, safeSources.size());
         checkAssetRefs(safeSources);
+        // 配图把关（二期图片功能）：引用须指向真实 card_image 行，且 url 与 id 一致（防自造/悬挂引用）
+        if (parsed instanceof TextCardContent text && text.image() != null) {
+            images.requireUsable(text.image().id(), text.image().url());
+        }
         try {
             String sourcesJson = safeSources.isEmpty() ? null : objectMapper.writeValueAsString(safeSources);
             return new WritePayload(objectMapper.writeValueAsString(parsed), sourcesJson);

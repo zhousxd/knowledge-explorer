@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
+import { ApiError } from '../../api/http';
+import { uploadImage } from '../../api/assets';
 import { citationsError, citationsOf } from './citations';
 
 /**
- * 图文卡编辑器(FR-C03):summary ≤120、sections(h/body/citations)增删、related 可选。
+ * 图文卡编辑器(FR-C03):summary ≤120、sections(h/body/citations)增删、related 可选、
+ * image 可选配图(二期图片功能:上传落本地服务器,content 引用 /api/images/{id})。
  * v-model:modelValue 为 TextCardContent 形状的 content 对象;每次变更即时 emit 规范化载荷;
  * 行内校验与后端 CardContentValidator 同规则(summary 非空 ≤120、h/body 非空、citations 1-based)。
  */
@@ -18,6 +21,11 @@ interface RelatedRow {
   why: string;
   sourceRaw: string;
 }
+interface ImageState {
+  id: number;
+  url: string;
+  alt: string;
+}
 
 const props = defineProps<{ modelValue: Record<string, unknown>; sourcesCount: number }>();
 const emit = defineEmits<{ (e: 'update:modelValue', value: Record<string, unknown>): void }>();
@@ -25,6 +33,7 @@ const emit = defineEmits<{ (e: 'update:modelValue', value: Record<string, unknow
 const SUMMARY_MAX = 120;
 /** 关系词四选一(与后端 RelationType.labels() 白名单一致) */
 const RELATION_OPTIONS = ['深入了解', '相关联', '相比较', '去实践'] as const;
+const IMAGE_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp';
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -67,6 +76,38 @@ function addRelated(): void {
 }
 function removeRelated(index: number): void {
   related.splice(index, 1);
+}
+
+// —— 配图(二期图片功能):回填已有 → 上传换图 → alt 说明 → 移除;错误并入 errors 门禁 ——
+function asImage(value: unknown): ImageState | null {
+  const record = asRecord(value);
+  const id = record.id;
+  const url = asString(record.url);
+  return typeof id === 'number' && url !== '' ? { id, url, alt: asString(record.alt) } : null;
+}
+const image = ref<ImageState | null>(asImage(props.modelValue.image));
+const imageUploading = ref(false);
+const imageError = ref('');
+
+async function onImagePick(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0] ?? null;
+  input.value = ''; // 清空让同一文件可重选
+  if (!file || imageUploading.value) return;
+  imageError.value = '';
+  imageUploading.value = true;
+  try {
+    const uploaded = await uploadImage(file);
+    image.value = { id: uploaded.id, url: uploaded.url, alt: image.value?.alt ?? '' };
+  } catch (e) {
+    imageError.value = e instanceof ApiError ? e.message : '上传失败,请重试';
+  } finally {
+    imageUploading.value = false;
+  }
+}
+function removeImage(): void {
+  image.value = null;
+  imageError.value = '';
 }
 
 const summaryError = computed(() => {
@@ -120,6 +161,9 @@ const errors = computed<string[]>(() => {
   }
   sections.forEach((_, index) => list.push(...sectionErrors(index)));
   related.forEach((_, index) => list.push(...relatedErrors(index)));
+  if (imageError.value) {
+    list.push(`image: ${imageError.value}`);
+  }
   return list;
 });
 
@@ -135,7 +179,16 @@ const payload = computed<Record<string, unknown>>(() => ({
       item.source = Number(row.sourceRaw);
     }
     return item;
-  })
+  }),
+  ...(image.value
+    ? {
+        image: {
+          id: image.value.id,
+          url: image.value.url,
+          ...(image.value.alt.trim() === '' ? {} : { alt: image.value.alt.trim() })
+        }
+      }
+    : {})
 }));
 
 watch(payload, (value) => emit('update:modelValue', value), { immediate: true });
@@ -160,6 +213,62 @@ defineExpose({ errors });
         class="field-error summary-error"
       >{{ summaryError }}</span>
     </label>
+
+    <fieldset class="block">
+      <legend class="block-title">
+        配图(可选)
+      </legend>
+      <div
+        v-if="image"
+        class="image-row"
+      >
+        <img
+          :src="image.url"
+          :alt="image.alt === '' ? '卡片配图' : image.alt"
+          class="image-thumb"
+        >
+        <div class="image-side">
+          <label class="field">
+            <span class="field-label">图片说明(alt,可空)</span>
+            <input
+              v-model="image.alt"
+              class="input"
+              type="text"
+              maxlength="60"
+              placeholder="一句话描述图片内容"
+            >
+          </label>
+          <button
+            class="del-btn"
+            type="button"
+            @click="removeImage"
+          >
+            移除配图
+          </button>
+        </div>
+      </div>
+      <label
+        v-else
+        class="upload-btn"
+        :class="{ busy: imageUploading }"
+      >
+        <input
+          class="upload-input"
+          type="file"
+          :accept="IMAGE_ACCEPT"
+          :disabled="imageUploading"
+          @change="onImagePick"
+        >
+        {{ imageUploading ? '上传中…' : '上传配图(JPG/PNG/GIF/WebP,≤5MB)' }}
+      </label>
+      <p
+        v-if="imageError"
+        class="field-error"
+        role="alert"
+      >
+        {{ imageError }}
+      </p>
+    </fieldset>
 
     <fieldset class="block">
       <legend class="block-title">
@@ -325,4 +434,11 @@ defineExpose({ errors });
 .add-btn:hover { border-color: var(--ke-primary); color: var(--ke-primary); }
 .del-btn { border-style: solid; border-color: var(--ke-line); }
 .del-btn:hover { border-color: var(--ke-danger); color: var(--ke-danger); }
+.image-row { display: flex; gap: 12px; align-items: flex-start; }
+.image-thumb { flex: 0 0 auto; width: 132px; height: 88px; object-fit: cover; border: 1px solid var(--ke-line-2); border-radius: var(--ke-radius-s); background: var(--ke-surface-2); }
+.image-side { display: flex; flex: 1; flex-direction: column; gap: 10px; }
+.upload-btn { position: relative; display: flex; align-items: center; justify-content: center; padding: 18px; border: 1.5px dashed var(--ke-line-strong); border-radius: var(--ke-radius-s); color: var(--ke-sub); font-size: 12px; cursor: pointer; transition: color var(--ke-dur-fast) var(--ke-ease), border-color var(--ke-dur-fast) var(--ke-ease); }
+.upload-btn:hover, .upload-btn.busy { border-color: var(--ke-primary); color: var(--ke-primary); }
+.upload-btn.busy { cursor: default; opacity: 0.7; }
+.upload-input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 </style>

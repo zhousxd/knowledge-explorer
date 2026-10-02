@@ -126,6 +126,33 @@ describe('CardView(卡片页,04 §7.2 KCard)', () => {
     Element.prototype.scrollIntoView = vi.fn();
   });
 
+  // —— 配图(二期图片功能):有 image 渲染真图,无 image 回落示意图占位 ——
+
+  it('TEXT 卡带配图 → figure.kimg-photo 渲染 img(alt 回落卡题)', async () => {
+    mockedGet.mockResolvedValue({
+      ...TEXT_CARD,
+      content: {
+        summary: '中国四大书院之一。',
+        sections: [{ h: '书院的由来', body: '北宋开宝九年创办。', citations: [1] }],
+        related: [{ cardId: 9, relation: '相关联', why: '朱张会讲的人物细节' }],
+        image: { id: 9, url: '/api/images/9', alt: '岳麓书院讲堂' }
+      }
+    } as CardDetail);
+    const { wrapper } = await mountCard('1');
+    const photo = wrapper.find('.kimg-photo img');
+    expect(photo.exists()).toBe(true);
+    expect(photo.attributes('src')).toBe('/api/images/9');
+    expect(photo.attributes('alt')).toBe('岳麓书院讲堂');
+    expect(wrapper.find('.kimg-tag').exists()).toBe(false); // 占位与真图互斥
+  });
+
+  it('TEXT 卡无配图 → 回落示意图占位(temple 图标+角标)', async () => {
+    const { wrapper } = await mountCard('1');
+    expect(wrapper.find('.kimg-photo').exists()).toBe(false);
+    expect(wrapper.find('.kimg .kimg-ic').exists()).toBe(true);
+    expect(wrapper.find('.kimg-tag').text()).toBe('示意图');
+  });
+
   it('TEXT 卡完整渲染:chips/宋体标题/分发正文/出处条数/入口列表', async () => {
     const { wrapper } = await mountCard('1', { authed: true });
     expect(wrapper.text()).toContain('图文卡');

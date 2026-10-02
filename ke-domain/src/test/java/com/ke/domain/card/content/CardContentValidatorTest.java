@@ -167,4 +167,38 @@ class CardContentValidatorTest {
         assertThatThrownBy(() -> CardContentValidator.parseAndValidate(null, "{}"))
             .isInstanceOf(InvalidCardContentException.class);
     }
+
+    /** 二期图片功能：图文卡可选配图 image——合法引用通过，缺 id/坏 url/超长 alt 各自拦下 */
+    @Test
+    void textCardImageReference() {
+        assertThat(CardContentValidator.parseAndValidate("TEXT", """
+            {"summary":"摘要","sections":[{"h":"h","body":"b"}],
+             "image":{"id":9,"url":"/api/images/9","alt":"讲堂"}}
+            """)).isInstanceOfSatisfying(TextCardContent.class,
+            c -> assertThat(c.image().id()).isEqualTo(9));
+
+        // 缺 id → 违规消息含 image.id
+        assertThatThrownBy(() -> CardContentValidator.parseAndValidate("TEXT", """
+            {"summary":"摘要","sections":[{"h":"h","body":"b"}],
+             "image":{"url":"/api/images/9"}}
+            """)).isInstanceOf(InvalidCardContentException.class).hasMessageContaining("image.id");
+
+        // url 非规范形状（外链/自造）→ 拒绝
+        assertThatThrownBy(() -> CardContentValidator.parseAndValidate("TEXT", """
+            {"summary":"摘要","sections":[{"h":"h","body":"b"}],
+             "image":{"id":9,"url":"https://cdn.example.com/9.png"}}
+            """)).isInstanceOf(InvalidCardContentException.class).hasMessageContaining("image.url");
+
+        // alt 超 60 字 → 拒绝
+        assertThatThrownBy(() -> CardContentValidator.parseAndValidate("TEXT", """
+            {"summary":"摘要","sections":[{"h":"h","body":"b"}],
+             "image":{"id":9,"url":"/api/images/9","alt":"%s"}}
+            """.formatted("长".repeat(61))))
+            .isInstanceOf(InvalidCardContentException.class).hasMessageContaining("image.alt");
+
+        // 无 image 字段的历史内容照常通过（可选字段向前兼容）
+        assertThat(CardContentValidator.parseAndValidate("TEXT", """
+            {"summary":"摘要","sections":[{"h":"h","body":"b"}]}
+            """)).isInstanceOf(TextCardContent.class);
+    }
 }

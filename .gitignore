@@ -20,5 +20,8 @@ Thumbs.db
 .env
 .env.local
 
+# 卡片配图本地存储（ke.upload.dir 默认值,内容属运营数据不入库）
+data/
+
 # OpenAPI 生成产物（W2 契约冻结时再定入库策略）
 frontend/packages/shared/src/api/

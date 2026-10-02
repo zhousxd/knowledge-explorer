@@ -41,6 +41,8 @@ public class SecurityConfig {
                 // 入口列表（含 viewer 过滤）与全部写路径仍走 anyRequest().authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/cards").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/cards/{id:\\d+}").permitAll()
+                // 卡片配图与卡片详情同语义（浏览无登录要求）：只读回源磁盘白名单图片，无枚举面
+                .requestMatchers(HttpMethod.GET, "/api/images/{id:\\d+}").permitAll()
                 // 免登录分享页（FR-H04/H06）：仅 GET /s/{token} 读快照 permitAll；撤销/接续（POST）
                 // 不放行——TOKEN 是唯一凭证，泄露面只在「持有 token 可见快照」（02 §9）
                 .requestMatchers(HttpMethod.GET, "/s/*").permitAll()

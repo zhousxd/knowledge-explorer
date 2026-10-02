@@ -8,6 +8,11 @@ spring:
       enabled: true
   jackson:
     default-property-inclusion: non_null
+  servlet:
+    multipart:
+      # 卡片配图上传上限（二期图片功能）：ImageService 另有 5MB 双保险 + 魔数白名单
+      max-file-size: 5MB
+      max-request-size: 6MB
 
 server:
   port: 8080
@@ -28,6 +33,10 @@ ke:
   quota:
     # 智能服务每日配额（FR-S04）：Redis INCR，超限 429
     daily-limit: 30
+  upload:
+    # 卡片配图本地存储根目录（二期图片功能·本地存储版）：文件按 {yyyy}/{MM}/{uuid}.{ext} 落盘。
+    # 生产可用 KE_UPLOAD_DIR 指到挂载卷/数据盘；日后切 MinIO/OSS 仅替换本服务的存储实现
+    dir: ${KE_UPLOAD_DIR:./data/uploads}
 
 springdoc:
   api-docs:

@@ -47,6 +47,9 @@ ke:
     api-key: ${KE_SMS_API_KEY:}
   # ke.agent.*(stale-seconds/llm-timeout-seconds/recycle-interval-ms)与
   # ke.quota.daily-limit 沿用 application.yml 基线——限额与超时护栏(R8/FR-S04/S13)在生产同值生效
+  upload:
+    # 配图本地存储：生产强制指到数据盘挂载卷（无默认，防误落应用目录随发版丢失）
+    dir: ${KE_UPLOAD_DIR}
 
 # 生产关闭 swagger 与 OpenAPI 文档
 springdoc:

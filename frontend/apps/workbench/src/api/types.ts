@@ -170,3 +170,12 @@ export interface CitationItem {
   quote: string | null;
   locator: Record<string, unknown> | null;
 }
+
+/** POST /api/wb/images 响应 data(二期图片功能:url 即 <img> 可用规范地址 /api/images/{id}) */
+export interface UploadImageResp {
+  id: number;
+  url: string;
+  originalName: string | null;
+  contentType: string;
+  sizeBytes: number;
+}

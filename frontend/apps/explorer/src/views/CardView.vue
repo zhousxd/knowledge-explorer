@@ -125,6 +125,12 @@ const textSummary = computed(() => {
   return (card.value.content as TextContent).summary ?? '';
 });
 
+/** 二期图片功能:图文卡真实配图,有则渲染真图,无则回落「示意图」占位(保持一期占位语义) */
+const textImage = computed(() => {
+  if (card.value?.templateType !== 'TEXT') return null;
+  return (card.value.content as TextContent).image ?? null;
+});
+
 const sourceRows = computed(() =>
   (card.value?.sources ?? []).map((s, i) => ({
     index: i + 1,
@@ -458,8 +464,18 @@ function entrySub(e: CardEntryItem): string {
         >
           {{ textSummary }}
         </p>
+        <figure
+          v-if="textImage"
+          class="kimg kimg-photo"
+        >
+          <img
+            :src="textImage.url"
+            :alt="textImage.alt === undefined || textImage.alt === '' ? card.title : textImage.alt"
+            loading="lazy"
+          >
+        </figure>
         <div
-          v-if="card.templateType === 'TEXT'"
+          v-else-if="card.templateType === 'TEXT'"
           class="kimg"
         >
           <KeIcon
@@ -594,6 +610,8 @@ function entrySub(e: CardEntryItem): string {
 .kimg { position: relative; display: flex; align-items: center; justify-content: center; height: 124px; margin-top: 12px; border-radius: var(--ke-radius-m); background: var(--ke-surface-2); color: var(--ke-sub-2); }
 .kimg-ic { width: 34px; height: 34px; }
 .kimg-tag { position: absolute; right: 8px; bottom: 8px; padding: 1px 8px; border-radius: var(--ke-radius-s); background: var(--ke-surface); color: var(--ke-sub-2); font-size: 10px; }
+.kimg-photo { margin: 12px 0 0; overflow: hidden; }
+.kimg-photo img { display: block; width: 100%; height: 124px; object-fit: cover; }
 .cr-fallback { margin: 12px 0 0; font-size: 13px; color: var(--ke-sub); }
 .srclist { margin-top: 12px; }
 .srclist .cite-pop { margin: 0 0 8px; }

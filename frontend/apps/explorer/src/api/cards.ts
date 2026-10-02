@@ -33,10 +33,18 @@ export interface TextRelated {
   source?: number;
 }
 
+/** 图文卡可选配图(二期图片功能):url 为 /api/images/{id} 规范地址,后端写路径已验证存在 */
+export interface CardImageRef {
+  id: number;
+  url: string;
+  alt?: string;
+}
+
 export interface TextContent {
   summary: string;
   sections: TextSection[];
   related?: TextRelated[];
+  image?: CardImageRef;
 }
 
 export interface CompareContent {
