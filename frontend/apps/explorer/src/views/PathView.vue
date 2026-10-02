@@ -86,6 +86,11 @@ async function confirmResume(): Promise<void> {
   if (!pending.value || confirming.value) return;
   confirming.value = true;
   try {
+    // A2 游标落 sessionStorage:卡片页服务提交时读取它作为挂父节点——
+    // 「回到历史节点→再去卡片探索」由此形成真实分支(纯确认也落游标,保持语义)
+    if (store.sessionId != null) {
+      sessionStorage.setItem(`ke_path_cur_${store.sessionId}`, String(pending.value.nodeId));
+    }
     if (pendingPayload.value) {
       await store.addNodeAt(pending.value.nodeId, pendingPayload.value);
       showToast('已在该节点下开始新分支');

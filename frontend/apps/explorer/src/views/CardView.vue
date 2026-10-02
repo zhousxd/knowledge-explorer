@@ -9,7 +9,7 @@ import type { CardDetail, CardEntryItem, CardEntryGroup, TextContent } from '../
 import { favorite, unfavorite } from '../api/favorites';
 import { submitRun } from '../api/runs';
 import type { RunSubmitPayload } from '../api/runs';
-import { addNode } from '../api/sessions';
+import { addNode, fetchSessionTree } from '../api/sessions';
 import CitationPopover from '../components/CitationPopover.vue';
 import { CARD_TYPE_LABELS, CardRenderer } from '../components/CardRenderer';
 import ServiceBar from '../components/ServiceBar.vue';
@@ -231,10 +231,24 @@ const svcBusy = ref(false);
 async function launchRun(kind: ServiceKind, question: string, entryId?: number): Promise<void> {
   if (!card.value) return;
   const sessionId = await sessionStore.ensureForCard(card.value);
-  // 挂根(parentNodeId 缺省):MVP 授权决策,后续任务接完整路径挂接
+  // A2 挂父优先级:路径页「回到此节点」游标(sessionStorage) > 会话最新节点(链式) > 挂根。
+  // 前者让「回到历史节点→再去卡片探索」形成真实分支;后者保证连续探索成链而非平铺森林。
+  let parentNodeId: number | null | undefined;
+  const cursorKey = `ke_path_cur_${sessionId}`;
+  const cursor = Number(sessionStorage.getItem(cursorKey));
+  if (Number.isInteger(cursor) && cursor > 0) {
+    parentNodeId = cursor;
+  } else {
+    try {
+      const tree = await fetchSessionTree(sessionId);
+      const nodes = tree?.nodes ?? [];
+      if (nodes.length > 0) parentNodeId = nodes[nodes.length - 1].nodeId;
+    } catch { /* 取树失败退回挂根 */ }
+  }
   const node = await addNode(sessionId, {
     cardVersionId: card.value.cardVersionId,
     questionText: question,
+    ...(parentNodeId != null ? { parentNodeId } : {}),
     ...(entryId != null ? { entryId } : {})
   });
   const payload: RunSubmitPayload = {
