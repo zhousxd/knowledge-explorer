@@ -73,8 +73,8 @@ public class SessionService {
 
     // ---------- DTO ----------
 
-    /** 断点续探摘要（Phase 4 冻结形状；前端格式化时间，Task 17 接线） */
-    public record ResumeSession(long sessionId, String title, OffsetDateTime lastVisitedAt,
+    /** 断点续探摘要（Phase 4 冻结形状 + theme[断点续探按专题续,前端 ensureForCard 复用判定];前端格式化时间） */
+    public record ResumeSession(long sessionId, String title, String theme, OffsetDateTime lastVisitedAt,
                                 long nodeCount, long branchCount, long openQuestionCount) {
     }
 
@@ -190,6 +190,7 @@ public class SessionService {
         return new ResumeSession(
                 session.getId(),
                 titleOf(session, latestTitle),
+                session.getTheme(),
                 latest == null ? session.getUpdatedAt() : latest.getVisitedAt(),
                 stat == null || stat.getNodeCount() == null ? 0 : stat.getNodeCount(),
                 stat == null || stat.getBranchCount() == null ? 0 : stat.getBranchCount(),

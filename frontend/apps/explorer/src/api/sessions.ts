@@ -14,6 +14,8 @@ export interface ResumeSession {
   sessionId: number;
   /** 会话标题(最新节点所访卡题 → goal → 「新探索」) */
   title: string;
+  /** 会话专题(THEMES key;ensureForCard 断点续探按同专题复用) */
+  theme: string;
   /** 最近访问时间(ISO),展示层格式化为「今天/昨天/N月N日探索」 */
   lastVisitedAt: string;
   nodeCount: number;

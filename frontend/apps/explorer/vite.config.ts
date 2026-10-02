@@ -20,7 +20,8 @@ export default defineConfig({
       // bypass:浏览器对 /s/{token} 的文档导航(Accept 含 text/html)回 SPA 由前端路由接管,
       // 否则会被转发到 Spring 拿到 JSON/406;fetch 的 API 请求(Accept: application/json)继续代理
       // —— 与生产 nginx 必须做的 Accept 区分同构(记 Phase 8 部署清单)。
-      '/s': {
+      // 键必须带尾斜杠 '/s/':'/s' 是前缀匹配,会把 /src/* 等前端模块请求也转发给后端(dev 全页挂)。
+      '/s/': {
         target: 'http://localhost:8080',
         changeOrigin: true,
         bypass: (req) =>

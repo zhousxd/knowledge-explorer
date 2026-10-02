@@ -30,6 +30,7 @@ const mockedLatest = vi.mocked(fetchLatestSession);
 function resumeFixture(): ResumeSession {
   return {
     sessionId: 7,
+    theme: 'academy',
     title: '岳麓书院：从选址到人物',
     lastVisitedAt: new Date(Date.now() - 86400000).toISOString(),
     nodeCount: 5,

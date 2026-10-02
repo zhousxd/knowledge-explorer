@@ -9,6 +9,7 @@ function jsonResp(status: number, body: unknown) {
 /** P4-16 冻结契约(以 SessionController/SessionService 为准)的形状样本 */
 const LATEST: ResumeSession = {
   sessionId: 3,
+  theme: 'academy',
   title: '岳麓书院：从选址到人物',
   lastVisitedAt: '2026-09-29T21:00:00Z',
   nodeCount: 4,
@@ -44,7 +45,8 @@ describe('fetchLatestSession 契约', () => {
       total: 12, page: 2, size: 5
     };
     const TREE: SessionTree = {
-      sessionId: 9, theme: 'academy', goal: '读懂书院', explainLevel: 'DEEP', status: 'ACTIVE',
+      sessionId: 9,
+        theme: 'academy', goal: '读懂书院', explainLevel: 'DEEP', status: 'ACTIVE',
       createdAt: '2026-09-28T09:00:00Z', updatedAt: '2026-09-29T21:00:00Z',
       nodes: [{
         nodeId: 1, parentNodeId: null, cardVersionId: 11, entryId: null, questionText: null,
