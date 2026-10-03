@@ -2,7 +2,6 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import type { CompareContent } from '../api/cards';
 import CompareCard from '../components/CardRenderer/CompareCard.vue';
-// @ts-expect-error vite ?raw 导入无类型声明
 import cmpSource from '../components/CardRenderer/CompareCard.vue?raw';
 
 const CONTENT: CompareContent = {

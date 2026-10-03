@@ -20,7 +20,8 @@ declare module 'vue-router' {
 }
 
 const router = createRouter({
-  history: createWebHistory(),
+  // base 取 vite BASE_URL:dev 为 /,部署挂 /app/ 上下文时由 --base=/app/ 注入(nginx 单实例双端)
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/login', component: LoginView, meta: { title: '登录' } },
     // 探索端首页(品牌头/搜索/专题格/推荐入口/继续探索卡占位);匿名可浏览
