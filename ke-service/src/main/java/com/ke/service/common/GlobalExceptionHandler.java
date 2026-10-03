@@ -30,8 +30,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(404, e.getMessage()));
     }
 
-    @ExceptionHandler({UnauthorizedException.class, org.springframework.security.core.AuthenticationException.class})
-    public ResponseEntity<ApiResponse<Void>> unauthorized(Exception e) {
+    /** 服务层 401（登录凭证错误/验证码错误/无效刷新令牌等）：消息本身已面向用户，原样透出 */
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ApiResponse<Void>> unauthorized(UnauthorizedException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(401, e.getMessage()));
+    }
+
+    /** 过滤器链/MVC 层的 Spring 认证异常（JWT 缺失或失效）：统一通用文案，不泄露内部细节 */
+    @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
+    public ResponseEntity<ApiResponse<Void>> authenticationFailure(
+            org.springframework.security.core.AuthenticationException e) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(401, "未认证或凭证无效"));
     }
 
