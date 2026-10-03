@@ -53,11 +53,11 @@ const emit = defineEmits<{ explain: []; compare: []; organize: [] }>();
 </template>
 
 <style scoped>
-.svcbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--ke-z-bar); display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--ke-surface); border-top: 1px solid var(--ke-line); }
-.svc { display: flex; flex: 1; align-items: center; justify-content: center; gap: 5px; padding: 10px 0; border: none; border-radius: var(--ke-radius-m); font-size: 13px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; transition: transform var(--ke-dur-fast) var(--ke-ease), background var(--ke-dur-fast) var(--ke-ease); }
+.svcbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--ke-z-bar); display: flex; gap: 8px; background: var(--ke-surface); border-top: 1px solid var(--ke-line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.svc { display: flex; flex: 1; align-items: center; justify-content: center; gap: 5px; padding: 10px 0; border: none; font-weight: 700; font-family: var(--ke-font); cursor: pointer; transition: transform var(--ke-dur-fast) var(--ke-ease), background var(--ke-dur-fast) var(--ke-ease); min-height: 48px; font-size: 12px; border-radius: var(--ke-radius-xs); }
 .svc:active { transform: scale(0.97); }
-.svc.pri { background: var(--ke-primary-soft); color: var(--ke-primary); }
-.svc.alt { background: var(--ke-surface); border: 1px solid var(--ke-line); color: var(--ke-ink); }
+.svc.pri { background: var(--ke-primary); color: var(--ke-white); }
+.svc.alt { border: 1px solid var(--ke-line); color: var(--ke-ink); background: transparent; border-color: var(--ke-line); }
 .svc:disabled { opacity: 0.45; cursor: default; transform: none; }
 .svc-ic { width: 15px; height: 15px; }
 </style>

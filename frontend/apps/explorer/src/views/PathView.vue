@@ -168,7 +168,14 @@ function nodeTitle(n: PathNode): string {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page path-page">
+    <div class="path-intro">
+      <p class="atlas-eyebrow">
+        YOUR FIELD NOTES / 探索手记
+      </p>
+      <h1>我的探索路径</h1>
+      <p>每一个问题，都是通往下一页的路。</p>
+    </div>
     <TopBar
       section="我的路径"
       :current="loaded ? store.title : ''"
@@ -351,16 +358,16 @@ function nodeTitle(n: PathNode): string {
 </template>
 
 <style scoped>
-.page { min-height: 100vh; box-sizing: border-box; padding: 52px 16px 170px; background: var(--ke-bg); }
+.page { min-height: 100vh; box-sizing: border-box; background: var(--ke-bg); padding: 84px 24px 180px; }
 .state { margin: 40px 0 0; text-align: center; font-size: 12px; color: var(--ke-sub); }
-.levels { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; padding: 10px 12px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-l); background: var(--ke-surface); }
+.levels { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; padding: 12px 0; margin-bottom: 18px; border: none; border-top: 1px solid var(--ke-line); border-bottom: 1px solid var(--ke-line); border-radius: 0; background: transparent; }
 .lv-label { font-size: 12px; font-weight: 700; color: var(--ke-sub); }
-.lv { padding: 3px 12px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-full); background: var(--ke-surface); color: var(--ke-sub); font-size: 11px; font-weight: 600; font-family: var(--ke-font); cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); }
+.lv { color: var(--ke-sub); font-size: 11px; font-weight: 600; font-family: var(--ke-font); cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); min-height: 38px; padding: 6px 12px; border: none; border-radius: var(--ke-radius-xs); background: var(--ke-surface-2); }
 .lv.on { border-color: var(--ke-primary); background: var(--ke-primary); color: var(--ke-white); }
-.guide { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 9px 12px; border-radius: var(--ke-radius-m); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 12px; line-height: 1.6; }
+.guide { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; border-radius: var(--ke-radius-m); background: var(--ke-primary-soft); color: var(--ke-primary); line-height: 1.6; padding: 12px; margin-bottom: 26px; font-size: 11px; }
 .guide span { flex: 1; min-width: 0; }
 .guide-x { flex-shrink: 0; border: none; background: transparent; color: var(--ke-primary); font-size: 12px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; }
-.tail { margin: 12px 0 0; text-align: center; font-size: 11px; color: var(--ke-sub-2); }
+.tail { margin: 12px 0 0; text-align: center; font-size: 11px; margin-top: 26px; color: var(--ke-sub); }
 .empty { margin: 60px auto 0; max-width: 320px; text-align: center; }
 .empty-ic { width: 40px; height: 40px; color: var(--ke-sub-2); }
 .empty-t { display: block; margin-top: 10px; font-size: 14px; font-weight: 600; color: var(--ke-ink); }
@@ -373,8 +380,12 @@ function nodeTitle(n: PathNode): string {
 .rb-go { flex-shrink: 0; padding: 7px 12px; border: none; border-radius: var(--ke-radius-m); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 12px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; }
 .rb-go:disabled { opacity: 0.45; cursor: default; }
 .rb-x { flex-shrink: 0; border: none; background: transparent; color: var(--ke-sub); font-size: 12px; font-family: var(--ke-font); cursor: pointer; }
-.pausebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--ke-z-bar); display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--ke-surface); border-top: 1px solid var(--ke-line); }
-.pb { display: flex; flex: 1; align-items: center; justify-content: center; gap: 5px; padding: 10px 0; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-m); background: var(--ke-surface); color: var(--ke-ink); font-size: 13px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; transition: transform var(--ke-dur-fast) var(--ke-ease); }
+.pausebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--ke-z-bar); display: flex; background: var(--ke-surface); border-top: 1px solid var(--ke-line); gap: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.pb { display: flex; flex: 1; align-items: center; justify-content: center; gap: 5px; border-radius: var(--ke-radius-m); color: var(--ke-ink); font-weight: 700; font-family: var(--ke-font); cursor: pointer; transition: transform var(--ke-dur-fast) var(--ke-ease); min-height: 44px; padding: 10px 6px; border: none; background: transparent; font-size: 11px; }
 .pb:active { transform: scale(0.97); }
 .pb-ic { width: 15px; height: 15px; }
+.path-intro { padding-bottom: 28px; }
+.path-intro h1 { margin: 16px 0 12px; font-family: var(--ke-font-display); font-size: 30px; font-weight: 400; line-height: 1.4; }
+.path-intro > p:last-child { margin: 0; color: var(--ke-sub); font-size: 12px; line-height: 1.8; }
+.pb:first-child { background: var(--ke-accent); color: var(--ke-on-accent); }
 </style>

@@ -11,6 +11,7 @@ async function mountLogin() {
     history: createMemoryHistory(),
     routes: [
       { path: '/login', component: LoginView },
+      { path: '/home', component: { template: '<div class="home-stub">探索首页</div>' } },
       { path: '/', component: { template: '<div class="home-stub">探索首页</div>' } }
     ]
   });

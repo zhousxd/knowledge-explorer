@@ -242,7 +242,7 @@ onBeforeUnmount(() => {
 .sv-state { margin: 0; text-align: center; font-size: 12px; color: var(--ke-sub); }
 
 /* 头部:标题(宋体)/摘要/来源小字 */
-.sv-title { margin: 8px 0 0; font-family: var(--ke-font-display); font-size: 22px; font-weight: 900; line-height: 1.5; color: var(--ke-ink); overflow-wrap: anywhere; }
+.sv-title { margin: 8px 0 0; font-family: var(--ke-font-display); color: var(--ke-ink); overflow-wrap: anywhere; font-size: 30px; font-weight: 400; line-height: 1.5; }
 .sv-summary { margin: 8px 0 0; font-size: 13px; line-height: 1.8; color: var(--ke-ink-2); overflow-wrap: anywhere; }
 .sv-source { margin: 8px 0 0; font-size: 11px; color: var(--ke-sub-2); }
 

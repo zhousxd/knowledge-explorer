@@ -29,9 +29,9 @@ defineProps<{
 </template>
 
 <style scoped>
-.src { background: var(--ke-surface-2); border: 1px solid var(--ke-line); border-radius: var(--ke-radius-s); padding: 10px 13px; font-size: 12px; color: var(--ke-sub); line-height: 1.85; }
-.src b { color: var(--ke-ink); }
-.row { margin: 0; transition: background var(--ke-dur-fast) var(--ke-ease), transform var(--ke-dur-fast) var(--ke-ease); }
-.row.row-hl { margin: 0 -4px; padding: 0 4px; border-radius: var(--ke-radius-xs); background: var(--ke-primary-soft); color: var(--ke-ink); transform: scale(1.03); transform-origin: left center; }
+.src { color: var(--ke-sub); padding: 18px 0 0; border: none; border-top: 1px solid var(--ke-line); border-radius: 0; background: transparent; font-size: 11px; line-height: 1.9; }
+.src b { color: var(--ke-ink); display: block; margin-bottom: 12px; font-size: 12px; }
+.row { margin: 0; transition: background var(--ke-dur-fast) var(--ke-ease), transform var(--ke-dur-fast) var(--ke-ease); padding: 8px 0; }
+.row.row-hl { margin: 0 -4px; border-radius: var(--ke-radius-xs); background: var(--ke-primary-soft); color: var(--ke-ink); transform-origin: left center; padding: 8px 4px; transform: none; }
 .gap { margin: 4px 0 0; color: var(--ke-warn); }
 </style>

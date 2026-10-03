@@ -1,7 +1,9 @@
-/* frontend/packages/shared/src/tokens.css v1.1 —— 与 prototype/styleguide.html :root 同源 */
+/* 知识图鉴 v2 — docs/04-主题与UI规范.md 与 prototype/styleguide.html 同源 */
 :root{
-  /* 品牌色 · 靛青 */
-  --ke-primary:#3A5FCD; --ke-primary-deep:#2F53B8; --ke-primary-soft:#EEF2FD;
+  /* 品牌色 · 松绿与嫩黄 */
+  --ke-primary:#203D32; --ke-primary-deep:#172D25; --ke-primary-soft:#E9EEE2;
+  --ke-accent:#DDEB89; --ke-on-accent:#172B26;
+  --ke-academy:#CFD9C9; --ke-cuisine:#EDD6BE; --ke-sound:#CEDFE1; --ke-canvas:#E5E8E2;
   /* 三档可信色（独占 · 符号 ●◐○） */
   --ke-fact:#1F7A4D;  --ke-fact-soft:#EAF5EF;  --ke-fact-graphic:#2E8B57;   /* ● 事实 */
   --ke-synth:#0E7490; --ke-synth-soft:#E3F4F8;                               /* ◐ 归纳 */
@@ -11,28 +13,29 @@
   --ke-danger:#C0392B;  --ke-danger-soft:#FDECEA;
   --ke-private:#6B46C1; --ke-private-soft:#F1ECFA;
   --ke-success:var(--ke-fact); --ke-success-soft:var(--ke-fact-soft);       /* 与事实同源 */
-  /* 中性色 · 纸墨（暖） */
-  --ke-ink:#26221D; --ke-ink-2:#4A443A; --ke-sub:#6E675C; --ke-sub-2:#9A9284;
-  --ke-line:#E7E1D4; --ke-line-2:#EFEAE0; --ke-line-strong:#CDC5B4;
-  --ke-surface:#FFFFFF; --ke-surface-2:#F5F1E8; --ke-bg:#F7F3EB;
-  /* 暗色面板 · 墨（工作台侧栏） */
-  --ke-side:#262119; --ke-side-2:#332D24; --ke-side-line:#3B342A;
-  --ke-side-text:#B0A794; --ke-side-text-2:#989180;
-  /* v1.1.1 扩展:暗面板上的纯白文字 */
+  /* 中性色 · 雾白与松墨 */
+  --ke-ink:#172B26; --ke-ink-2:#344A41; --ke-sub:#5F6D64; --ke-sub-2:#626F67;
+  --ke-line:#CBD2C8; --ke-line-2:#E4E8DF; --ke-line-strong:#829080;
+  --ke-surface:#FAFBF6; --ke-surface-2:#EDF0E8; --ke-bg:#FAFBF6;
+  /* 浅色面板 · 编目工作台侧栏 */
+  --ke-side:#E9EDE3; --ke-side-2:#DDE5D5; --ke-side-line:#CBD2C8;
+  --ke-side-text:#344A41; --ke-side-text-2:#5F6D64;
+  /* 深色行动面上的纯白文字 */
   --ke-white:#FFFFFF;
   /* 透明层 */
-  --ke-mask:rgba(28,24,18,.55); --ke-toast:rgba(38,34,29,.92);
+  --ke-mask:rgba(23,43,38,.55); --ke-toast:rgba(23,43,38,.94);
   /* 圆角（印刷感） */
-  --ke-radius-xs:3px; --ke-radius-s:5px; --ke-radius-m:8px; --ke-radius-l:12px;
+  --ke-radius-xs:2px; --ke-radius-s:3px; --ke-radius-m:4px; --ke-radius-l:5px;
   --ke-radius-full:999px;
   /* 阴影：细线优先，阴影只给悬浮层 */
-  --ke-shadow-1:0 2px 8px rgba(38,34,29,.07);
-  --ke-shadow-2:0 8px 24px rgba(38,34,29,.12);
-  --ke-shadow-3:0 16px 48px rgba(38,34,29,.18);
-  --ke-focus:0 0 0 3px rgba(58,95,205,.25);
+  --ke-shadow-1:0 2px 8px rgba(23,43,38,.05);
+  --ke-shadow-2:0 10px 32px rgba(23,43,38,.10);
+  --ke-shadow-3:0 24px 64px rgba(23,43,38,.16);
+  --ke-focus:0 0 0 3px rgba(32,61,50,.18);
   /* 字体：显示层宋体 × 界面层黑体 */
-  --ke-font:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei",sans-serif;
+  --ke-font:"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;
   --ke-font-display:"Noto Serif SC","Songti SC","STSong","Source Han Serif SC","SimSun",serif;
+  --ke-font-mono:"Bahnschrift","DIN Alternate","Consolas",monospace;
   /* 动效 */
   --ke-dur-fast:120ms; --ke-dur-base:150ms; --ke-dur-slow:250ms;
   --ke-ease:cubic-bezier(.25,.8,.35,1);

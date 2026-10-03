@@ -146,11 +146,11 @@ describe('CardView(卡片页,04 §7.2 KCard)', () => {
     expect(wrapper.find('.kimg-tag').exists()).toBe(false); // 占位与真图互斥
   });
 
-  it('TEXT 卡无配图 → 回落示意图占位(temple 图标+角标)', async () => {
+  it('TEXT 卡无配图 → 回落专题图版并明确标记为示意图', async () => {
     const { wrapper } = await mountCard('1');
     expect(wrapper.find('.kimg-photo').exists()).toBe(false);
-    expect(wrapper.find('.kimg .kimg-ic').exists()).toBe(true);
-    expect(wrapper.find('.kimg-tag').text()).toBe('示意图');
+    expect(wrapper.find('.kimg .theme-artwork').exists()).toBe(true);
+    expect(wrapper.find('.kimg-tag').text()).toBe('专题示意图');
   });
 
   it('TEXT 卡完整渲染:chips/宋体标题/分发正文/出处条数/入口列表', async () => {

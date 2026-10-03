@@ -36,10 +36,9 @@ const when = computed(() => `${formatRelativeDay(props.session.lastVisitedAt)}æŽ
 </template>
 
 <style scoped>
-.resume { display: block; width: 100%; margin: 14px 0 4px; padding: 16px; border: none; border-radius: var(--ke-radius-l); background: var(--ke-primary-deep); color: var(--ke-white); text-align: left; box-sizing: border-box; }
-.eyebrow { margin: 0; font-size: 11px; letter-spacing: 2px; opacity: .8; }
-.r-title { margin: 6px 0 0; font-family: var(--ke-font-display); font-size: 15px; font-weight: 900; line-height: 1.4; color: var(--ke-white); }
-.r-progress { margin: 4px 0 0; font-size: 12px; line-height: 1.6; opacity: .85; }
-.resume-btn { margin-top: 12px; padding: 7px 14px; border: 1px solid currentcolor; border-radius: var(--ke-radius-m); background: transparent; color: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); }
-.resume-btn:active { background: var(--ke-primary); }
+.resume { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; margin: 24px 0 0; padding: 18px 0; border-top: 1px solid var(--ke-line); border-bottom: 1px solid var(--ke-line); color: var(--ke-ink); }
+.eyebrow { grid-column: 1 / -1; margin: 0; font-size: 10px; letter-spacing: .06em; color: var(--ke-sub); }
+.r-title { margin: 3px 0 0; font-family: var(--ke-font-display); font-size: 20px; font-weight: 400; line-height: 1.5; }
+.r-progress { grid-column: 1; margin: 2px 0 0; font-size: 11px; line-height: 1.6; color: var(--ke-sub); }
+.resume-btn { grid-column: 2; grid-row: 2 / 4; align-self: center; max-width: 95px; min-height: 44px; padding: 8px 10px; border: none; border-radius: var(--ke-radius-xs); background: var(--ke-accent); color: var(--ke-on-accent); font-size: 11px; line-height: 1.7; cursor: pointer; }
 </style>

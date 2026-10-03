@@ -68,7 +68,7 @@ cd knowledge-explorer-design/prototype && python3 -m http.server 8080
 
 - `index.html`：移动探索端，含 17 个界面状态，覆盖核心闭环（发现卡片 → 选择入口 → 智能体服务 → 路径分支 → 成果整理 → 分享 → 接续探索）
 - `workbench.html`：网页工作台，含卡片管理、入口编排（自然语言生成配置）、审核中心、知识资源、数据看板 5 个模块
-- `styleguide.html`：主题与 UI 规范的可视化呈现（「纸墨编辑部」方向：色彩 / 字体 / 组件 / 状态 / Token），与 `docs/04` 同源维护
+- `styleguide.html`：主题与 UI 规范的可视化呈现（「知识图鉴」v2 方向：色彩 / 字体 / 组件 / 状态 / Token），与 `docs/04` 同源维护
 
 ## 核心结论速览
 

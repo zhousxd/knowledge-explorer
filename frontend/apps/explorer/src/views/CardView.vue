@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { showToast } from 'vant';
-import { KeIcon, SourceList, themeLabel } from '@ke/shared';
+import { ThemeArtwork, KeIcon, SourceList, themeLabel } from '@ke/shared';
 import { ApiError } from '../api/http';
 import { fetchCardEntries, getCard } from '../api/cards';
 import type { CardDetail, CardEntryItem, CardEntryGroup, TextContent } from '../api/cards';
@@ -348,7 +348,7 @@ function entrySub(e: CardEntryItem): string {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page reader-page">
     <header class="topbar">
       <button
         type="button"
@@ -477,13 +477,14 @@ function entrySub(e: CardEntryItem): string {
         <div
           v-else-if="card.templateType === 'TEXT'"
           class="kimg"
+          :class="`plate-${card.theme}`"
         >
-          <KeIcon
-            class="kimg-ic"
-            name="temple"
+          <ThemeArtwork
+            class="kimg-art"
+            :theme="card.theme"
           />
           <span class="kimg-tag">
-            示意图
+            专题示意图
           </span>
         </div>
         <CardRenderer
@@ -594,35 +595,35 @@ function entrySub(e: CardEntryItem): string {
 </template>
 
 <style scoped>
-.page { min-height: 100vh; box-sizing: border-box; padding: 52px 16px 96px; background: var(--ke-bg); }
-.topbar { position: fixed; top: 0; left: 0; right: 0; z-index: var(--ke-z-bar); display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 10px; background: color-mix(in srgb, var(--ke-bg) 86%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--ke-line-2); }
-.ic { display: flex; width: 34px; height: 34px; align-items: center; justify-content: center; border: none; border-radius: var(--ke-radius-full); background: transparent; color: var(--ke-ink); cursor: pointer; }
+.page { min-height: 100vh; box-sizing: border-box; background: var(--ke-bg); padding: 76px 24px 110px; }
+.topbar { position: fixed; top: 0; left: 0; right: 0; z-index: var(--ke-z-bar); display: flex; align-items: center; gap: 8px; height: 60px; padding: 0 16px; background: var(--ke-surface); border-bottom: 1px solid var(--ke-line); backdrop-filter: none; }
+.ic { display: flex; align-items: center; justify-content: center; border: none; background: transparent; color: var(--ke-ink); cursor: pointer; width: 44px; height: 44px; border-radius: var(--ke-radius-xs); }
 .ic:active { background: var(--ke-primary-soft); }
 .crumb { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--ke-sub); }
 .crumb b { color: var(--ke-ink); font-weight: 700; }
 .state { margin: 40px 0 0; text-align: center; font-size: 12px; color: var(--ke-sub); }
-.kcard { margin: 4px 0 12px; padding: 16px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-l); background: var(--ke-surface); }
+.kcard { border-radius: var(--ke-radius-l); padding: 0; margin: 8px 0 28px; border: none; background: transparent; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { display: inline-block; padding: 1px 9px; border-radius: var(--ke-radius-full); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 11px; font-weight: 600; line-height: 1.7; }
-.chip.plain { background: var(--ke-line-2); color: var(--ke-sub); }
-.kt { margin: 10px 0 0; font-family: var(--ke-font-display); font-size: 19px; font-weight: 900; line-height: 1.4; color: var(--ke-ink); }
-.ksum { margin: 8px 0 0; padding-bottom: 10px; border-bottom: 1px dashed var(--ke-line); font-size: 13px; line-height: 1.75; color: var(--ke-sub); }
-.kimg { position: relative; display: flex; align-items: center; justify-content: center; height: 124px; margin-top: 12px; border-radius: var(--ke-radius-m); background: var(--ke-surface-2); color: var(--ke-sub-2); }
+.chip { display: inline-block; line-height: 1.7; padding: 2px 0; border-radius: 0; background: transparent; color: var(--ke-sub); font-size: 11px; font-weight: 400; }
+.chip.plain { color: var(--ke-sub); padding-left: 10px; border-left: 1px solid var(--ke-line); background: transparent; }
+.kt { margin: 10px 0 0; font-family: var(--ke-font-display); color: var(--ke-ink); margin-top: 20px; font-size: 36px; font-weight: 400; line-height: 1.4; letter-spacing: -.03em; }
+.ksum {  border-bottom: 1px dashed var(--ke-line); color: var(--ke-sub); margin: 14px 0 0; padding: 0; border: none; font-size: 13px; line-height: 1.9; }
+.kimg { position: relative; display: flex; align-items: center; justify-content: center; background: var(--ke-surface-2); color: var(--ke-sub-2); height: 208px; margin: 26px 0; border-radius: var(--ke-radius-xs); }
 .kimg-ic { width: 34px; height: 34px; }
-.kimg-tag { position: absolute; right: 8px; bottom: 8px; padding: 1px 8px; border-radius: var(--ke-radius-s); background: var(--ke-surface); color: var(--ke-sub-2); font-size: 10px; }
+.kimg-tag { position: absolute; border-radius: var(--ke-radius-s); right: auto; left: 12px; bottom: 9px; padding: 0; background: transparent; color: var(--ke-sub); font-size: 10px; }
 .kimg-photo { margin: 12px 0 0; overflow: hidden; }
-.kimg-photo img { display: block; width: 100%; height: 124px; object-fit: cover; }
+.kimg-photo img { display: block; width: 100%; object-fit: cover; height: 208px; }
 .cr-fallback { margin: 12px 0 0; font-size: 13px; color: var(--ke-sub); }
-.srclist { margin-top: 12px; }
+.srclist { margin-top: 30px; }
 .srclist .cite-pop { margin: 0 0 8px; }
 .fav-btn.faved { color: var(--ke-primary); }
 .fav-btn.faved .ke-icon { fill: var(--ke-primary); }
 .ic:disabled { opacity: 0.5; cursor: default; }
-.sec-title { display: flex; align-items: center; gap: 6px; margin: 14px 0 8px; font-size: 13px; font-weight: 700; color: var(--ke-ink); }
+.sec-title { display: flex; align-items: center; gap: 6px; font-weight: 700; color: var(--ke-ink); margin: 24px 0 10px; font-size: 14px; }
 .sec-title .ln { flex: 1; height: 1px; background: var(--ke-line); }
-.entry { display: flex; width: 100%; align-items: center; gap: 10px; margin: 0 0 8px; padding: 12px 13px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-l); background: var(--ke-surface); text-align: left; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); box-sizing: border-box; }
+.entry { display: flex; width: 100%; align-items: center; gap: 10px; text-align: left; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); box-sizing: border-box; padding: 18px 0; margin: 0; border: none; border-bottom: 1px solid var(--ke-line); background: transparent; border-radius: 0; }
 .entry:active { background: var(--ke-primary-soft); }
-.ei { display: flex; width: 36px; height: 36px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: var(--ke-radius-s); background: var(--ke-primary-soft); color: var(--ke-primary); }
+.ei { display: flex; width: 36px; height: 36px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: var(--ke-radius-s); color: var(--ke-primary); background: transparent; }
 .et { flex: 1; min-width: 0; }
 .en { display: block; font-size: 14px; font-weight: 600; line-height: 1.5; color: var(--ke-ink); }
 
@@ -631,11 +632,15 @@ function entrySub(e: CardEntryItem): string {
 .er { display: block; margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--ke-sub); }
 .ea { flex-shrink: 0; color: var(--ke-sub-2); }
 .fold, .retry-entry { display: block; width: 100%; margin: 8px 0 0; padding: 10px; border: none; border-radius: var(--ke-radius-l); background: transparent; font-size: 12px; font-weight: 600; font-family: var(--ke-font); color: var(--ke-sub); text-align: center; cursor: pointer; box-sizing: border-box; }
-.addentry { display: flex; width: 100%; align-items: center; justify-content: center; gap: 5px; margin-top: 10px; padding: 11px; border: 1.5px dashed var(--ke-line-strong); border-radius: var(--ke-radius-l); background: var(--ke-surface-2); color: var(--ke-primary); font-size: 13px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; box-sizing: border-box; }
+.addentry { display: flex; width: 100%; align-items: center; justify-content: center; gap: 5px; padding: 11px; border: 1.5px dashed var(--ke-line-strong); border-radius: var(--ke-radius-l); background: var(--ke-surface-2); color: var(--ke-primary); font-size: 13px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; box-sizing: border-box; margin-top: 20px; min-height: 48px; }
 .add-ic { width: 14px; height: 14px; }
 .empty { margin: 60px auto 0; max-width: 320px; text-align: center; }
 .empty-ic { width: 40px; height: 40px; color: var(--ke-sub-2); }
 .empty-t { display: block; margin-top: 10px; font-size: 14px; font-weight: 600; color: var(--ke-ink); }
 .empty-s { display: block; margin-top: 4px; font-size: 12px; color: var(--ke-sub); }
 .empty-btn { display: inline-block; margin-top: 14px; padding: 8px 18px; border: none; border-radius: var(--ke-radius-m); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 13px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; }
+.kimg.plate-academy { background: var(--ke-academy); }
+.kimg.plate-cuisine { background: var(--ke-cuisine); }
+.kimg.plate-sound { background: var(--ke-sound); }
+.kimg-art { width: 85%; height: 180px; }
 </style>

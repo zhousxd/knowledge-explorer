@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ApiError } from '../api/http';
 import { useAuthStore } from '../stores/auth';
+import { ThemeArtwork } from '@ke/shared';
 
 const PHONE_RE = /^1\d{10}$/;
 const COOLDOWN_SECONDS = 60;
@@ -83,130 +84,157 @@ async function submit() {
 </script>
 
 <template>
-  <div class="login-page">
-    <form
-      class="login-card"
-      @submit.prevent="submit"
-    >
-      <h1 class="title">
-        知识探索
-      </h1>
-      <p class="subtitle">
-        验证码或密码登录,从一张卡片开始探索
-      </p>
-      <div
-        class="tabs"
-        role="tablist"
-      >
-        <button
-          type="button"
-          class="tab"
-          role="tab"
-          :class="{ active: tab === 'code' }"
-          :aria-selected="tab === 'code'"
-          @click="switchTab('code')"
-        >
-          验证码登录
-        </button>
-        <button
-          type="button"
-          class="tab"
-          role="tab"
-          :class="{ active: tab === 'password' }"
-          :aria-selected="tab === 'password'"
-          @click="switchTab('password')"
-        >
-          密码登录
-        </button>
+  <div class="login-page atlas-login">
+    <header class="login-masthead">
+      <div class="login-brand">
+        <span
+          class="brand-mark"
+          aria-hidden="true"
+        >知</span>知识探索
       </div>
-      <p
-        v-if="errorMsg"
-        class="error"
-        role="alert"
+      <RouterLink
+        class="login-back"
+        to="/home"
       >
-        {{ errorMsg }}
-      </p>
-      <label class="field">
-        <span class="field-label">手机号</span>
-        <input
-          v-model="phone"
-          class="input"
-          type="tel"
-          name="phone"
-          placeholder="请输入手机号"
-          autocomplete="username"
-        >
-      </label>
-      <div
-        v-if="tab === 'code'"
-        class="field"
+        先去看看 ↗
+      </RouterLink>
+    </header>
+    <main class="login-spread">
+      <section
+        class="login-story"
+        aria-label="知识探索介绍"
       >
-        <span class="field-label">验证码</span>
-        <div class="code-row">
-          <input
-            v-model="code"
-            class="input"
-            type="text"
-            name="code"
-            maxlength="6"
-            inputmode="numeric"
-            placeholder="6 位验证码"
-          >
-          <button
-            type="button"
-            class="send-code"
-            :disabled="!canSendCode || busy"
-            @click="sendCode"
-          >
-            {{ sendLabel }}
-          </button>
+        <p class="atlas-eyebrow">
+          KNOWLEDGE EXPLORER / 开放知识图鉴
+        </p>
+        <h2 class="story-title">
+          好奇的下一页，<br>从这里开始。
+        </h2>
+        <p class="story-desc">
+          沿着书院的屋檐，追寻一口湘菜的来路，听见日常里的科学。从一张卡片，走进一个世界。
+        </p>
+        <div class="story-plate">
+          <ThemeArtwork theme="academy" />
+          <div class="plate-note">
+            <span>图版 01 / 书院地标</span><span>建筑示意</span>
+          </div>
         </div>
-      </div>
-      <label
-        v-else
-        class="field"
+        <div class="story-index">
+          <span><i aria-hidden="true" />书院地标</span>
+          <span><i aria-hidden="true" />湘菜风物</span>
+          <span><i aria-hidden="true" />声音科学</span>
+        </div>
+      </section>
+      <section
+        class="login-form-area"
+        aria-label="账号登录"
       >
-        <span class="field-label">密码</span>
-        <input
-          v-model="password"
-          class="input"
-          type="password"
-          name="password"
-          placeholder="请输入密码"
-          autocomplete="current-password"
+        <form
+          class="login-card"
+          @submit.prevent="submit"
         >
-      </label>
-      <button
-        class="submit"
-        type="submit"
-        :disabled="busy"
-      >
-        {{ busy ? '登录中' : '登录' }}
-      </button>
-    </form>
+          <h1 class="title">
+            继续你的探索
+          </h1>
+          <div
+            class="tabs"
+            role="tablist"
+          >
+            <button
+              type="button"
+              class="tab"
+              role="tab"
+              :class="{ active: tab === 'code' }"
+              :aria-selected="tab === 'code'"
+              @click="switchTab('code')"
+            >
+              验证码登录
+            </button>
+            <button
+              type="button"
+              class="tab"
+              role="tab"
+              :class="{ active: tab === 'password' }"
+              :aria-selected="tab === 'password'"
+              @click="switchTab('password')"
+            >
+              密码登录
+            </button>
+          </div>
+          <p
+            v-if="errorMsg"
+            class="error"
+            role="alert"
+          >
+            {{ errorMsg }}
+          </p>
+          <label class="field">
+            <span class="field-label">手机号</span>
+            <input
+              v-model="phone"
+              class="input"
+              type="tel"
+              name="phone"
+              placeholder="请输入手机号"
+              autocomplete="username"
+            >
+          </label>
+          <div
+            v-if="tab === 'code'"
+            class="field"
+          >
+            <label
+              class="field-label"
+              for="login-code"
+            >验证码</label>
+            <div class="code-row">
+              <input
+                id="login-code"
+                v-model="code"
+                class="input"
+                type="text"
+                name="code"
+                maxlength="6"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                placeholder="6 位验证码"
+              >
+              <button
+                type="button"
+                class="send-code"
+                :disabled="!canSendCode || busy"
+                @click="sendCode"
+              >
+                {{ sendLabel }}
+              </button>
+            </div>
+          </div>
+          <label
+            v-else
+            class="field"
+          >
+            <span class="field-label">密码</span>
+            <input
+              v-model="password"
+              class="input"
+              type="password"
+              name="password"
+              placeholder="请输入密码"
+              autocomplete="current-password"
+            >
+          </label>
+          <button
+            class="submit"
+            type="submit"
+            :disabled="busy"
+          >
+            {{ busy ? '登录中' : '登录' }}
+          </button>
+        </form>
+      </section>
+    </main>
+    <footer class="login-footer">
+      从一张卡片出发 · 逐层深入 · 随时回望
+    </footer>
   </div>
 </template>
-
-<style scoped>
-.login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; background: var(--ke-bg); }
-.login-card { width: 360px; max-width: 100%; padding: 32px 28px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-l); background: var(--ke-surface); box-shadow: var(--ke-shadow-2); }
-.title { margin: 0 0 6px; color: var(--ke-ink); font-family: var(--ke-font-display); font-size: 26px; font-weight: 900; text-align: center; }
-.subtitle { margin: 0 0 18px; color: var(--ke-sub); font-size: 13px; text-align: center; }
-.tabs { display: flex; margin-bottom: 18px; border-bottom: 1px solid var(--ke-line); }
-.tab { flex: 1; padding: 10px 0; border: none; background: none; color: var(--ke-sub); font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; transition: color var(--ke-dur-fast) var(--ke-ease), border-color var(--ke-dur-fast) var(--ke-ease); }
-.tab.active { color: var(--ke-primary); border-bottom-color: var(--ke-primary); font-weight: 600; }
-.error { margin: 0 0 14px; padding: 8px 12px; border-radius: var(--ke-radius-s); background: var(--ke-danger-soft); color: var(--ke-danger); font-size: 13px; }
-.field { display: block; margin-bottom: 14px; }
-.field-label { display: block; margin-bottom: 6px; color: var(--ke-ink-2); font-size: 12px; }
-.input { width: 100%; height: 38px; padding: 0 12px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-s); background: var(--ke-surface); color: var(--ke-ink); font-size: 14px; box-sizing: border-box; transition: border-color var(--ke-dur-fast) var(--ke-ease), box-shadow var(--ke-dur-fast) var(--ke-ease); }
-.input::placeholder { color: var(--ke-sub-2); }
-.input:focus { outline: none; border-color: var(--ke-primary); box-shadow: var(--ke-focus); }
-.code-row { display: flex; gap: 10px; }
-.code-row .input { flex: 1; min-width: 0; }
-.send-code { flex-shrink: 0; height: 38px; padding: 0 14px; border: 1px solid var(--ke-primary); border-radius: var(--ke-radius-s); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 13px; white-space: nowrap; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); }
-.send-code:disabled { opacity: .6; cursor: default; }
-.send-code:hover:not(:disabled) { background: var(--ke-primary); color: var(--ke-white); }
-.submit { width: 100%; height: 40px; margin-top: 6px; border: none; border-radius: var(--ke-radius-s); background: var(--ke-primary); color: var(--ke-white); font-size: 14px; font-weight: 600; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); }
-.submit:disabled { opacity: .6; cursor: default; }
-.submit:hover:not(:disabled) { background: var(--ke-primary-deep); }
-</style>

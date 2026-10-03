@@ -282,8 +282,8 @@ function goPath(): void {
 </template>
 
 <style scoped>
-.page { min-height: 100vh; box-sizing: border-box; padding: 24px 16px 48px; background: var(--ke-bg); }
-.title { margin: 0 0 14px; font-family: var(--ke-font-display); font-size: 20px; font-weight: 900; line-height: 1.3; color: var(--ke-ink); }
+.page { min-height: 100vh; box-sizing: border-box; background: var(--ke-bg); padding: 32px 24px 60px; }
+.title { margin: 0 0 14px; font-family: var(--ke-font-display); line-height: 1.3; color: var(--ke-ink); font-size: 34px; font-weight: 400; margin-bottom: 20px; }
 
 /* 配额卡 */
 .quota-card { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; padding: 14px 16px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-l); background: var(--ke-surface); }

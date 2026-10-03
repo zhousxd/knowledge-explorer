@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ApiError } from '../api/http';
 import { useAuthStore } from '../stores/auth';
+import { ThemeArtwork } from '@ke/shared';
 
 const phone = ref('');
 const password = ref('');
@@ -27,69 +28,103 @@ async function submit() {
 </script>
 
 <template>
-  <div class="login-page">
-    <form
-      class="login-card"
-      @submit.prevent="submit"
-    >
-      <h1 class="title">
-        知识探索 · 工作台
-      </h1>
-      <p class="subtitle">
-        登录后进入内容工作台
-      </p>
-      <p
-        v-if="errorMsg"
-        class="error"
-        role="alert"
+  <div class="login-page atlas-login">
+    <header class="login-masthead">
+      <div class="login-brand">
+        <span
+          class="brand-mark"
+          aria-hidden="true"
+        >知</span>知识探索
+      </div>
+      <span class="atlas-eyebrow">CONTENT / 创作与运营</span>
+    </header>
+    <main class="login-spread">
+      <section
+        class="login-story"
+        aria-label="知识探索介绍"
       >
-        {{ errorMsg }}
-      </p>
-      <label class="field">
-        <span class="field-label">手机号</span>
-        <input
-          v-model="phone"
-          class="input"
-          type="tel"
-          name="phone"
-          placeholder="请输入手机号"
-          autocomplete="username"
-        >
-      </label>
-      <label class="field">
-        <span class="field-label">密码</span>
-        <input
-          v-model="password"
-          class="input"
-          type="password"
-          name="password"
-          placeholder="请输入密码"
-          autocomplete="current-password"
-        >
-      </label>
-      <button
-        class="submit"
-        type="submit"
-        :disabled="busy"
+        <p class="atlas-eyebrow">
+          KNOWLEDGE EXPLORER / 开放知识图鉴
+        </p>
+        <h2 class="story-title">
+          为知识编目，<br>为好奇开门。
+        </h2>
+        <p class="story-desc">
+          从一张卡片、一份出处开始，将地方与人文、风味与生活、日常与科学，编成一本开放的知识图鉴。
+        </p>
+        <div class="story-plate">
+          <ThemeArtwork theme="academy" />
+          <div class="plate-note">
+            <span>图版 01 / 书院地标</span><span>建筑示意</span>
+          </div>
+        </div>
+        <div class="story-index">
+          <span><i aria-hidden="true" />书院地标</span>
+          <span><i aria-hidden="true" />湘菜风物</span>
+          <span><i aria-hidden="true" />声音科学</span>
+        </div>
+      </section>
+      <section
+        class="login-form-area"
+        aria-label="账号登录"
       >
-        {{ busy ? '登录中' : '登录' }}
-      </button>
-    </form>
+        <form
+          class="login-card"
+          @submit.prevent="submit"
+        >
+          <p class="atlas-eyebrow">
+            EDITOR ACCESS / 编辑入口
+          </p>
+          <h1 class="title">
+            进入内容工作台
+          </h1>
+          <p class="subtitle">
+            整理知识、编排入口，让内容抵达更多好奇的人。
+          </p>
+          <p
+            v-if="errorMsg"
+            class="error"
+            role="alert"
+          >
+            {{ errorMsg }}
+          </p>
+          <label class="field">
+            <span class="field-label">手机号</span>
+            <input
+              v-model="phone"
+              class="input"
+              type="tel"
+              name="phone"
+              placeholder="请输入手机号"
+              autocomplete="username"
+            >
+          </label>
+          <label class="field">
+            <span class="field-label">密码</span>
+            <input
+              v-model="password"
+              class="input"
+              type="password"
+              name="password"
+              placeholder="请输入密码"
+              autocomplete="current-password"
+            >
+          </label>
+          <button
+            class="submit"
+            type="submit"
+            :disabled="busy"
+          >
+            {{ busy ? '登录中' : '登录' }}
+          </button>
+          <p class="login-note">
+            使用已有创作者、编辑或运营账号登录。
+          </p>
+        </form>
+      </section>
+    </main>
+    <footer class="login-footer">
+      从一张卡片出发 · 逐层深入 · 随时回望
+    </footer>
   </div>
 </template>
-
-<style scoped>
-.login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--ke-bg); }
-.login-card { width: 360px; padding: 32px 28px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-l); background: var(--ke-surface); box-shadow: var(--ke-shadow-2); }
-.title { margin: 0 0 6px; color: var(--ke-ink); font-family: var(--ke-font-display); font-size: 24px; font-weight: 700; }
-.subtitle { margin: 0 0 20px; color: var(--ke-sub); font-size: 13px; }
-.error { margin: 0 0 14px; padding: 8px 12px; border-radius: var(--ke-radius-s); background: var(--ke-danger-soft); color: var(--ke-danger); font-size: 13px; }
-.field { display: block; margin-bottom: 14px; }
-.field-label { display: block; margin-bottom: 6px; color: var(--ke-ink-2); font-size: 12px; }
-.input { width: 100%; height: 38px; padding: 0 12px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-s); background: var(--ke-surface); color: var(--ke-ink); font-size: 14px; box-sizing: border-box; transition: border-color var(--ke-dur-fast) var(--ke-ease), box-shadow var(--ke-dur-fast) var(--ke-ease); }
-.input::placeholder { color: var(--ke-sub-2); }
-.input:focus { outline: none; border-color: var(--ke-primary); box-shadow: var(--ke-focus); }
-.submit { width: 100%; height: 40px; margin-top: 6px; border: none; border-radius: var(--ke-radius-s); background: var(--ke-primary); color: var(--ke-white); font-size: 14px; font-weight: 600; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); }
-.submit:hover { background: var(--ke-primary-deep); }
-.submit:disabled { opacity: .6; cursor: default; }
-</style>

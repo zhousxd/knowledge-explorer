@@ -59,11 +59,11 @@ function onKeydown(e: KeyboardEvent): void {
 </template>
 
 <style scoped>
-.askbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--ke-z-bar); display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--ke-surface); border-top: 1px solid var(--ke-line); }
-.ask-in { flex: 1; min-width: 0; height: 44px; padding: 0 13px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-m); background: var(--ke-surface); font-size: 14px; font-family: var(--ke-font); color: var(--ke-ink); box-sizing: border-box; }
+.askbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--ke-z-bar); display: flex; gap: 8px; background: var(--ke-surface); border-top: 1px solid var(--ke-line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.ask-in { flex: 1; min-width: 0; height: 44px; padding: 0 13px; border: 1px solid var(--ke-line-strong); background: var(--ke-surface); font-size: 14px; font-family: var(--ke-font); color: var(--ke-ink); box-sizing: border-box; min-height: 48px; border-radius: var(--ke-radius-xs); }
 .ask-in::placeholder { color: var(--ke-sub-2); }
 .ask-in:focus { outline: none; border-color: var(--ke-primary); box-shadow: var(--ke-focus); }
 .ask-in:disabled { opacity: 0.55; cursor: default; }
-.ask-send { height: 44px; padding: 0 18px; border: none; border-radius: var(--ke-radius-m); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 14px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; }
+.ask-send { height: 44px; padding: 0 18px; border: none; font-size: 14px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; min-height: 48px; background: var(--ke-primary); color: var(--ke-white); border-radius: var(--ke-radius-xs); }
 .ask-send:disabled { opacity: 0.45; cursor: default; }
 </style>

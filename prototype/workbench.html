@@ -4,11 +4,55 @@
 <meta charset="UTF-8">
 <title>知识探索卡片系统 · 创作/运营工作台原型</title>
 <style>
+/* 知识图鉴 v2 — docs/04-主题与UI规范.md 与 prototype/styleguide.html 同源 */
 :root{
-  --ink:#1f2d3d;--sub:#69758a;--line:#e6eaf1;--bg:#f5f6fa;--side:#1c2333;
-  --pri:#3a5fcd;--pri-soft:#eef2fd;--green:#2e8b57;--green-soft:#eaf5ef;
-  --amber:#b7791f;--amber-soft:#fdf6e3;--red:#c0392b;--red-soft:#fdecea;--orange:#d97a2b;
+  /* 品牌色 · 松绿与嫩黄 */
+  --ke-primary:#203D32; --ke-primary-deep:#172D25; --ke-primary-soft:#E9EEE2;
+  --ke-accent:#DDEB89; --ke-on-accent:#172B26;
+  --ke-academy:#CFD9C9; --ke-cuisine:#EDD6BE; --ke-sound:#CEDFE1; --ke-canvas:#E5E8E2;
+  /* 三档可信色（独占 · 符号 ●◐○） */
+  --ke-fact:#1F7A4D;  --ke-fact-soft:#EAF5EF;  --ke-fact-graphic:#2E8B57;   /* ● 事实 */
+  --ke-synth:#0E7490; --ke-synth-soft:#E3F4F8;                               /* ◐ 归纳 */
+  --ke-gen:#A85510;   --ke-gen-soft:#FDF1E7;   --ke-gen-graphic:#D97A2B;    /* ○ 生成 */
+  /* 功能与场景色 */
+  --ke-warn:#8F5E12;    --ke-warn-soft:#FDF6E3; --ke-warn-line:#F3DDAD;
+  --ke-danger:#C0392B;  --ke-danger-soft:#FDECEA;
+  --ke-private:#6B46C1; --ke-private-soft:#F1ECFA;
+  --ke-success:var(--ke-fact); --ke-success-soft:var(--ke-fact-soft);       /* 与事实同源 */
+  /* 中性色 · 雾白与松墨 */
+  --ke-ink:#172B26; --ke-ink-2:#344A41; --ke-sub:#5F6D64; --ke-sub-2:#626F67;
+  --ke-line:#CBD2C8; --ke-line-2:#E4E8DF; --ke-line-strong:#829080;
+  --ke-surface:#FAFBF6; --ke-surface-2:#EDF0E8; --ke-bg:#FAFBF6;
+  /* 浅色面板 · 编目工作台侧栏 */
+  --ke-side:#E9EDE3; --ke-side-2:#DDE5D5; --ke-side-line:#CBD2C8;
+  --ke-side-text:#344A41; --ke-side-text-2:#5F6D64;
+  /* 深色行动面上的纯白文字 */
+  --ke-white:#FFFFFF;
+  /* 透明层 */
+  --ke-mask:rgba(23,43,38,.55); --ke-toast:rgba(23,43,38,.94);
+  /* 圆角（印刷感） */
+  --ke-radius-xs:2px; --ke-radius-s:3px; --ke-radius-m:4px; --ke-radius-l:5px;
+  --ke-radius-full:999px;
+  /* 阴影：细线优先，阴影只给悬浮层 */
+  --ke-shadow-1:0 2px 8px rgba(23,43,38,.05);
+  --ke-shadow-2:0 10px 32px rgba(23,43,38,.10);
+  --ke-shadow-3:0 24px 64px rgba(23,43,38,.16);
+  --ke-focus:0 0 0 3px rgba(32,61,50,.18);
+  /* 字体：显示层宋体 × 界面层黑体 */
+  --ke-font:"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;
+  --ke-font-display:"Noto Serif SC","Songti SC","STSong","Source Han Serif SC","SimSun",serif;
+  --ke-font-mono:"Bahnschrift","DIN Alternate","Consolas",monospace;
+  /* 动效 */
+  --ke-dur-fast:120ms; --ke-dur-base:150ms; --ke-dur-slow:250ms;
+  --ke-ease:cubic-bezier(.25,.8,.35,1);
+  /* 层级 */
+  --ke-z-sticky:10; --ke-z-bar:20; --ke-z-drawer:50; --ke-z-modal:100; --ke-z-toast:200;
 }
+
+
+:root{--ink:var(--ke-ink);--sub:var(--ke-sub);--line:var(--ke-line);--bg:var(--ke-bg);--card:var(--ke-surface);--side:var(--ke-side);--pri:var(--ke-primary);--pri-soft:var(--ke-primary-soft);--green:var(--ke-fact);--green-soft:var(--ke-fact-soft);--blue:var(--ke-synth);--blue-soft:var(--ke-synth-soft);--orange:var(--ke-gen);--orange-soft:var(--ke-gen-soft);--amber:var(--ke-warn);--amber-soft:var(--ke-warn-soft);--red:var(--ke-danger);--red-soft:var(--ke-danger-soft);--shadow:none}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;vertical-align:middle;flex-shrink:0}
+
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);display:flex;height:100vh;overflow:hidden}
 /* ---------- 侧边栏 ---------- */
@@ -91,15 +135,53 @@ label.fld{display:block;font-size:12px;font-weight:700;color:var(--sub);margin:1
 .toast{position:fixed;top:70px;right:24px;background:rgba(31,45,61,.94);color:#fff;font-size:13px;border-radius:10px;padding:11px 18px;opacity:0;transition:.25s;z-index:99;pointer-events:none;max-width:340px;line-height:1.5}
 .toast.show{opacity:1}
 .review-item{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:12px;background:#fff}
+
+.theme-artwork { color: var(--ke-primary); }
+.art-solid { fill: currentcolor; }
+.art-soft { fill: color-mix(in srgb, currentcolor 12%, transparent); }
+.art-paper { fill: var(--ke-surface); stroke: currentcolor; }
+.art-letters { fill: currentcolor; font-family: var(--ke-font-display); font-size: 10px; letter-spacing: 3px; }
+.art-line { stroke: currentcolor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.art-faint { stroke: currentcolor; stroke-width: .7; opacity: .4; }
+
+body{font-family:var(--ke-font)}.side{background:var(--ke-side);color:var(--ke-side-text);border-right:1px solid var(--ke-line)}.logo{padding:30px 22px;border-color:var(--ke-line)}.logo b{font:400 23px var(--ke-font-display);color:var(--ke-ink)}.logo span{color:var(--ke-sub)}.nv{border-radius:2px;min-height:44px;color:var(--ke-ink)}.nv:hover{background:var(--ke-side-2);color:var(--ke-ink)}.nv.on{background:var(--ke-primary);color:var(--ke-white)}.side .ft{border-color:var(--ke-line);color:var(--ke-sub)}.body{padding:32px}.topbar{height:68px;background:var(--ke-surface)}.btn,.tag,.inp,.panel,.stat,.review-item,.note{border-radius:3px}.panel{background:var(--ke-surface)}.tb th{background:var(--ke-surface-2)}.tb td{padding:16px 14px}.tb tr:hover td{background:var(--ke-primary-soft)}.tab{border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent}.tab.on{background:transparent;color:var(--ke-primary);border-bottom-color:var(--ke-primary)}.avt{background:var(--ke-accent)}.bar .b{background:var(--ke-primary);border-radius:2px 2px 0 0}.stat .sv{font-family:var(--ke-font-display);font-weight:400}.prototype-label{padding:9px 14px;margin:0 0 18px;border-left:2px solid var(--ke-primary);background:var(--ke-primary-soft);font-size:11px;color:var(--ke-sub)}
+
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5 20 20"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5C6.5 4 9.8 4 12 5.7c2.2-1.7 5.5-1.7 8-.2V19c-2.5-1.5-5.8-1.5-8 .2-2.2-1.7-5.5-1.7-8-.2z"/><path d="M12 5.7V19.2"/></symbol>
+    <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 4v16M5 7.5h14M5 7.5 2.8 13h4.4zM19 7.5 16.8 13h4.4z"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3.5 20.5 8 12 12.5 3.5 8z"/><path d="M3.5 12.5 12 17l8.5-4.5M3.5 16.5 12 21l8.5-4.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 13l5 5L19 7"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 21 19H3z"/><path d="M12 10v4"/><path d="M12 16.8v.2"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.6"/><circle cx="17.5" cy="5.5" r="2.6"/><circle cx="17.5" cy="18.5" r="2.6"/><path d="M8.4 10.8l6.7-3.9M8.4 13.2l6.7 3.9"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.8l2.5 5.1 5.6.8-4 4 .9 5.6-5-2.7-5 2.7.9-5.6-4-4 5.6-.8z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5c0-3 2.5-5.2 5.5-5.2s5.5 2.2 5.5 5.2"/><circle cx="16.8" cy="9.2" r="2.5"/><path d="M16.5 14.6c2.3.3 4 2.2 4 4.9"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1.5-4.5L17 4l3 3L8.5 18.5z"/><path d="M14.5 6.5l3 3"/></symbol>
+    <symbol id="i-mountain" viewBox="0 0 24 24"><path d="M3 19 9.5 7.5l3.5 6 2.5-4L21 19z"/></symbol>
+    <symbol id="i-temple" viewBox="0 0 24 24"><path d="M4 9h16M6 9c1-4 3.5-6 6-6s5 2 6 6"/><path d="M12 3v3"/><path d="M7 9v8M17 9v8M4.5 20.5h15"/><path d="M7 17c0 1.5 1.2 2.5 2.5 2.5S12 18.5 12 17c0 1.5 1.2 2.5 2.5 2.5S17 18.5 17 17"/></symbol>
+    <symbol id="i-bowl" viewBox="0 0 24 24"><path d="M4 11h16c0 4.5-3.5 8-8 8s-8-3.5-8-8z"/><path d="M8.5 7.5c1-1.8 3-1.8 4 0M13 5.5c1-1.8 3-1.8 4 0"/><path d="M3 21h18"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.6"/><path d="M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7"/><path d="M5.8 18.2a9 9 0 0 1 0-12.4M18.2 5.8a9 9 0 0 1 0 12.4"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4.5 10.5 12 4l7.5 6.5V20h-15z"/><path d="M9.5 20v-6h5v6"/></symbol>
+    <symbol id="i-path" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="12" r="2.2"/><circle cx="8" cy="19" r="2.2"/><path d="M8 6.8c4 .8 4 4.4 7.8 5M7.3 8.1c-.4 4 0 8 0 8.8"/></symbol>
+    <symbol id="i-me" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6"/></symbol>
+  </defs>
+</svg>
 
 <!-- ═══════ 侧边栏 ═══════ -->
 <aside class="side">
   <div class="logo"><b>知识探索 · 工作台</b><span>创作 / 审核 / 运营</span></div>
   <nav class="nav">
-    <div class="nv on" data-v="v-cards" onclick="sw(this)">🗂️ 卡片管理</div>
+    <div class="nv on" data-v="v-cards" onclick="sw(this)"><svg class="ico" aria-hidden="true"><use href="#i-layers"/></svg> 卡片管理</div>
     <div class="nv" data-v="v-entry" onclick="sw(this)">✚ 入口编排</div>
     <div class="nv" data-v="v-review" onclick="sw(this)">🛡️ 审核中心 <span class="tag t-red" style="margin-left:auto">3</span></div>
     <div class="nv" data-v="v-assets" onclick="sw(this)">📚 知识资源</div>
@@ -119,6 +201,7 @@ label.fld{display:block;font-size:12px;font-weight:700;color:var(--sub);margin:1
     <div class="avt">🧑‍🏫</div>
   </div>
   <div class="body">
+<div class="prototype-label">知识图鉴 v2 · 离线交互原型 · 所有数据与服务操作均为演示</div>
 
   <!-- ═══ 视图1 卡片管理 ═══ -->
   <div class="view active" id="v-cards">
@@ -140,7 +223,7 @@ label.fld{display:block;font-size:12px;font-weight:700;color:var(--sub);margin:1
         <tr onclick="toast('互动卡模板为三期功能')"><td><b>频率与波形（互动）</b></td><td><span class="tag t-gray">互动卡（三期）</span></td><td>声音科学</td><td>—</td><td><span class="tag t-gray">规划中</span></td><td>—</td><td>—</td><td>—</td><td><button class="btn ghost sm">详情</button></td></tr>
       </table>
     </div>
-    <div class="note">💡 版本不可变：编辑产生新版本 v(n+1)，发布后探索者的历史路径仍引用旧版本，保证「探索实例可回溯」。卡片资料更新后，系统会提示引用该卡的入口<b>重新测试</b>。</div>
+    <div class="note"><svg class="ico" aria-hidden="true"><use href="#i-book"/></svg> 版本不可变：编辑产生新版本 v(n+1)，发布后探索者的历史路径仍引用旧版本，保证「探索实例可回溯」。卡片资料更新后，系统会提示引用该卡的入口<b>重新测试</b>。</div>
   </div>
 
   <!-- ═══ 视图2 入口编排 ═══ -->
@@ -317,7 +400,7 @@ label.fld{display:block;font-size:12px;font-weight:700;color:var(--sub);margin:1
     <div class="kv"><div class="k">引用提示</div><div class="v">本卡被 3 个公共入口引用、出现在 41 条分享路径中</div></div>
     <div style="display:flex;gap:10px;margin-top:16px">
       <button class="btn pri" onclick="toast('进入内容编辑器：模板表单（摘要/段落/出处/入口），保存即产生新版本')">✎ 编辑新版本</button>
-      <button class="btn ghost" onclick="toast('已送审，进入审核队列')">📤 送审</button>
+      <button class="btn ghost" onclick="toast('已送审，进入审核队列')"><svg class="ico" aria-hidden="true"><use href="#i-share"/></svg> 送审</button>
       <button class="btn danger" onclick="toast('停用需二次确认；进行中的分享将标识不可用节点')">停用</button>
     </div>
   </div>

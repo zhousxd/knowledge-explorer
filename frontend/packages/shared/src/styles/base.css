@@ -1,0 +1,71 @@
+*, *::before, *::after { box-sizing: border-box; }
+html { color: var(--ke-ink); background: var(--ke-canvas); font-family: var(--ke-font); }
+body { margin: 0; }
+button, input, textarea, select { font: inherit; }
+button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
+button, a { touch-action: manipulation; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--ke-primary); outline-offset: 4px; }
+input::placeholder, textarea::placeholder { color: var(--ke-sub); }
+::selection { background: var(--ke-accent); color: var(--ke-ink); }
+.atlas-eyebrow { margin: 0; font-family: var(--ke-font-mono); font-size: 11px; letter-spacing: .12em; color: var(--ke-sub); }
+
+/* 两端的登录扉页共用布局；表单与鉴权由各端自行管理。 */
+.atlas-login { min-height: 100vh; min-height: 100dvh; background: var(--ke-surface); }
+.login-masthead { display: flex; align-items: center; justify-content: space-between; gap: 20px; max-width: 1440px; margin: auto; padding: 26px 48px; border-bottom: 1px solid var(--ke-line); }
+.login-brand { display: inline-flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 700; }
+.brand-mark { display: grid; place-items: center; width: 30px; height: 34px; border: 1px solid var(--ke-primary); color: var(--ke-primary); font-family: var(--ke-font-display); font-size: 20px; }
+.login-back { display: inline-flex; align-items: center; min-height: 44px; color: var(--ke-sub); text-decoration: none; font-size: 12px; }
+.login-spread { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr); max-width: 1260px; /* 扣减=顶栏+页脚实高(≈146px,见两处 padding),不足即整页微溢出出滚动条 */ min-height: calc(100dvh - 148px); margin: auto; }
+.login-story { position: relative; display: flex; flex-direction: column; justify-content: center; padding: 52px 74px 42px 44px; border-right: 1px solid var(--ke-line); }
+.story-title { margin: 24px 0 20px; font-family: var(--ke-font-display); font-size: clamp(36px, 4vw, 58px); font-weight: 400; line-height: 1.45; letter-spacing: -.04em; }
+.story-desc { max-width: 390px; margin: 0; color: var(--ke-sub); font-size: 13px; line-height: 1.9; }
+.story-plate { position: relative; max-width: 470px; margin: 32px 0 20px; padding: 15px 30px 0; background: var(--ke-academy); border-radius: var(--ke-radius-xs); }
+.story-plate .theme-artwork { display: block; width: 100%; height: 190px; }
+.plate-note { display: flex; justify-content: space-between; padding: 16px 0; border-top: 1px solid color-mix(in srgb, var(--ke-primary) 25%, transparent); color: var(--ke-primary); font-size: 10px; letter-spacing: .04em; }
+.story-index { display: flex; flex-wrap: wrap; gap: 20px; color: var(--ke-sub); font-size: 11px; }
+.story-index span { display: inline-flex; align-items: center; gap: 6px; }
+.story-index i { display: inline-block; width: 8px; height: 8px; background: var(--ke-academy); }
+.story-index span:nth-child(2) i { background: var(--ke-cuisine); }
+.story-index span:nth-child(3) i { background: var(--ke-sound); }
+.login-form-area { display: flex; flex-direction: column; justify-content: center; padding: 60px 48px; }
+.atlas-login .login-card { width: 100%; max-width: 380px; margin: 0 auto; padding: 0; border: none; background: transparent; box-shadow: none; }
+.atlas-login .title { margin: 16px 0 12px; color: var(--ke-ink); font-family: var(--ke-font-display); font-size: 32px; font-weight: 400; line-height: 1.4; text-align: left; }
+.atlas-login .subtitle { margin: 0 0 34px; color: var(--ke-sub); font-size: 12px; line-height: 1.8; text-align: left; }
+.atlas-login .tabs { display: flex; margin-bottom: 30px; border-bottom: 1px solid var(--ke-line); }
+.atlas-login .tab { flex: 1; min-height: 44px; padding: 10px 0; border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--ke-sub); font-size: 13px; cursor: pointer; }
+.atlas-login .tab.active { border-bottom-color: var(--ke-primary); color: var(--ke-primary); font-weight: 700; }
+.atlas-login .field { display: block; margin-bottom: 24px; }
+.atlas-login .field-label { display: block; margin-bottom: 9px; color: var(--ke-ink); font-size: 12px; }
+.atlas-login .input { display: block; width: 100%; min-width: 0; height: 48px; padding: 0 14px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-xs); outline: none; background: var(--ke-surface); color: var(--ke-ink); font-size: 14px; transition: border-color var(--ke-dur-fast), box-shadow var(--ke-dur-fast); }
+.atlas-login .input:focus { border-color: var(--ke-primary); box-shadow: var(--ke-focus); }
+.atlas-login .code-row { display: flex; gap: 10px; }
+.atlas-login .code-row .input { flex: 1; }
+.atlas-login .send-code { flex-shrink: 0; min-height: 48px; padding: 0 12px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-xs); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 12px; cursor: pointer; }
+.atlas-login .submit { width: 100%; min-height: 48px; margin-top: 8px; border: none; border-radius: var(--ke-radius-xs); background: var(--ke-primary); color: var(--ke-white); font-size: 14px; font-weight: 700; cursor: pointer; transition: background var(--ke-dur-fast); }
+.atlas-login .submit:hover:not(:disabled) { background: var(--ke-primary-deep); }
+.atlas-login button:disabled { opacity: .5; cursor: default; }
+.atlas-login .error { margin: 0 0 20px; padding: 12px; border-left: 2px solid var(--ke-danger); background: var(--ke-danger-soft); color: var(--ke-danger); font-size: 12px; line-height: 1.7; }
+.login-note { margin: 24px 0 0; padding-top: 20px; border-top: 1px solid var(--ke-line); color: var(--ke-sub); font-size: 11px; line-height: 1.8; }
+.login-footer { max-width: 1440px; margin: auto; padding: 18px 48px; border-top: 1px solid var(--ke-line); color: var(--ke-sub); font-size: 10px; letter-spacing: .08em; }
+
+@media (width <= 760px) {
+  /* 单屏目标:顶栏+叙事+表单+页脚 ≤ 常见手机视口(≈860px),不出现滚动条(04 §4.3) */
+  .login-masthead { padding: 14px 24px; }
+  .login-spread { grid-template-columns: 1fr; min-height: auto; }
+  .login-story { padding: 20px 24px 16px; border-right: none; border-bottom: 1px solid var(--ke-line); }
+  .story-title { margin: 8px 0; font-size: 30px; }
+  .story-desc { max-width: none; font-size: 12px; line-height: 1.7; }
+  .story-plate { display: none; }
+  .story-index { margin-top: 12px; }
+  .login-form-area { padding: 22px 24px 28px; }
+  .atlas-login .login-card { max-width: 440px; }
+  .atlas-login .title { margin-top: 0; font-size: 28px; }
+  .atlas-login .subtitle { margin-bottom: 22px; }
+  .atlas-login .tabs { margin-bottom: 24px; }
+  .atlas-login .field { margin-bottom: 18px; }
+  .login-footer { padding: 14px 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

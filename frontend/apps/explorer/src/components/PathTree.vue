@@ -89,20 +89,23 @@ function pick(n: PathNode): void {
 .level { margin: 0; padding: 0; list-style: none; }
 
 /* 子层:16px 缩进 + 2px 左竖线作父子连线 */
-.level:not(.root) { margin: 2px 0 4px 9px; padding-left: 16px; border-left: 2px solid var(--ke-line); }
-.node { display: flex; width: 100%; align-items: flex-start; gap: 9px; margin: 6px 0 0; padding: 10px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-m); background: var(--ke-surface); text-align: left; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); box-sizing: border-box; }
+.level:not(.root) { margin: 0 0 8px 6px; padding-left: 20px; border-left: 1px solid var(--ke-line-strong); }
+.node { display: flex; width: 100%; align-items: flex-start; text-align: left; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); box-sizing: border-box; position: relative; gap: 12px; min-height: 72px; margin: 0; padding: 16px 0; border: none; border-radius: 0; background: transparent; }
 .node:active { background: var(--ke-primary-soft); }
 
 /* 当前节点:浅靛底 + 靛描边(04 §7.2),不可再「回到」 */
-.node.cur { border-color: var(--ke-primary); background: var(--ke-primary-soft); cursor: default; }
-.dot { width: 9px; height: 9px; margin-top: 6px; border-radius: var(--ke-radius-full); background: var(--ke-line-strong); flex-shrink: 0; box-sizing: border-box; }
+.node.cur { border-color: var(--ke-primary); cursor: default; padding: 16px 12px; border-radius: var(--ke-radius-xs); background: var(--ke-primary); color: var(--ke-white); }
+.dot { border-radius: var(--ke-radius-full); flex-shrink: 0; box-sizing: border-box; position: relative; z-index: 1; width: 12px; height: 12px; margin-top: 6px; background: var(--ke-surface); border: 1px solid var(--ke-primary); }
 .dot.solid { background: var(--ke-primary); }
-.node.cur .dot { background: var(--ke-surface); border: 2.5px solid var(--ke-primary); }
+.node.cur .dot { background: var(--ke-accent); border: 1px solid var(--ke-accent); }
 .txt { flex: 1; min-width: 0; }
-.nt { display: block; font-size: 13.5px; font-weight: 600; line-height: 1.4; color: var(--ke-ink); }
-.ns { display: block; margin-top: 2px; font-size: 11px; color: var(--ke-sub); }
-.chip { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: var(--ke-radius-full); font-size: 10px; font-weight: 600; line-height: 1.6; vertical-align: 1px; }
-.chip.fork { background: var(--ke-gen-soft); color: var(--ke-gen); }
-.chip.now { background: var(--ke-primary); color: var(--ke-white); }
-.nx { flex-shrink: 0; padding-top: 2px; font-size: 11px; color: var(--ke-primary); white-space: nowrap; }
+.nt { display: block; font-weight: 600; color: var(--ke-ink); font-size: 15px; line-height: 1.6; }
+.ns { display: block; color: var(--ke-sub); margin-top: 7px; font-size: 10px; }
+.chip { display: inline-block; margin-left: 6px; font-weight: 600; line-height: 1.6; vertical-align: 1px; padding: 1px 5px; border-radius: var(--ke-radius-xs); font-size: 10px; }
+.chip.fork { background: var(--ke-surface-2); color: var(--ke-sub); }
+.chip.now { background: var(--ke-accent); color: var(--ke-on-accent); }
+.nx { flex-shrink: 0; padding-top: 2px; white-space: normal; max-width: 58px; font-size: 10px; line-height: 1.8; color: var(--ke-sub); }
+.level:not(.root) > li > .node::before { position: absolute; top: 27px; left: -21px; width: 21px; height: 1px; background: var(--ke-line-strong); content: ''; }
+.node.cur .nt { color: var(--ke-white); }
+.node.cur .ns { color: var(--ke-line); }
 </style>

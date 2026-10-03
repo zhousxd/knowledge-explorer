@@ -59,8 +59,8 @@ function goPath(): void {
 </template>
 
 <style scoped>
-.topbar { position: fixed; top: 0; left: 0; right: 0; z-index: var(--ke-z-bar); display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 10px; background: color-mix(in srgb, var(--ke-bg) 86%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--ke-line-2); }
-.ic { display: flex; width: 34px; height: 34px; align-items: center; justify-content: center; border: none; border-radius: var(--ke-radius-full); background: transparent; color: var(--ke-ink); cursor: pointer; }
+.topbar { position: fixed; top: 0; left: 0; right: 0; z-index: var(--ke-z-bar); display: flex; align-items: center; gap: 8px; height: 60px; padding: 0 16px; border-bottom: 1px solid var(--ke-line); background: var(--ke-surface); backdrop-filter: none; }
+.ic { display: flex; align-items: center; justify-content: center; border: none; background: transparent; color: var(--ke-ink); cursor: pointer; width: 44px; height: 44px; border-radius: var(--ke-radius-xs); }
 .ic:active { background: var(--ke-primary-soft); }
 .ic.on { color: var(--ke-primary); }
 .crumb { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--ke-sub); }

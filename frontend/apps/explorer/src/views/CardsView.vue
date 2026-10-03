@@ -110,6 +110,16 @@ function typeLabel(type: string): string {
 <template>
   <div class="page">
     <header class="head">
+      <button
+        class="list-back"
+        type="button"
+        @click="router.push('/home')"
+      >
+        ←  返回发现
+      </button>
+      <p class="atlas-eyebrow list-eyebrow">
+        THE KNOWLEDGE INDEX / 知识索引
+      </p>
       <h1 class="title">
         卡片
       </h1>
@@ -242,26 +252,26 @@ function typeLabel(type: string): string {
 </template>
 
 <style scoped>
-.page { min-height: 100vh; box-sizing: border-box; padding: 24px 16px 40px; background: var(--ke-bg); }
-.title { margin: 0; font-family: var(--ke-font-display); font-size: 20px; font-weight: 900; line-height: 1.3; color: var(--ke-ink); }
-.search { display: flex; align-items: center; gap: 8px; height: 44px; margin-top: 12px; padding: 0 14px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-l); background: var(--ke-surface); transition: border-color var(--ke-dur-fast) var(--ke-ease), box-shadow var(--ke-dur-fast) var(--ke-ease); }
+.page { min-height: 100vh; box-sizing: border-box; background: var(--ke-bg); padding: 28px 24px 60px; }
+.title { font-family: var(--ke-font-display); line-height: 1.3; color: var(--ke-ink); margin: 18px 0 22px; font-size: 34px; font-weight: 400; }
+.search { display: flex; align-items: center; gap: 8px; height: 44px; margin-top: 12px; padding: 0 14px; border: 1px solid var(--ke-line-strong); transition: border-color var(--ke-dur-fast) var(--ke-ease), box-shadow var(--ke-dur-fast) var(--ke-ease); border-radius: var(--ke-radius-xs); background: var(--ke-surface-2); }
 .search:focus-within { border-color: var(--ke-primary); box-shadow: var(--ke-focus); }
 .s-icon { width: 18px; height: 18px; color: var(--ke-sub-2); }
 .s-input { flex: 1; min-width: 0; height: 100%; border: none; outline: none; background: transparent; color: var(--ke-ink); font-size: 14px; }
 .s-input::placeholder { color: var(--ke-sub-2); }
-.tabs { display: flex; gap: 8px; margin-top: 12px; overflow-x: auto; }
-.tab { flex-shrink: 0; padding: 6px 14px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-full); background: var(--ke-surface); font-size: 12.5px; font-weight: 600; font-family: var(--ke-font); color: var(--ke-sub); cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); }
-.tab.on { border-color: var(--ke-primary); background: var(--ke-primary-soft); color: var(--ke-primary); }
+.tabs { display: flex; overflow-x: auto; gap: 0; margin: 22px 0 12px; border-bottom: 1px solid var(--ke-line); }
+.tab { flex-shrink: 0; font-weight: 600; font-family: var(--ke-font); color: var(--ke-sub); cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); min-height: 44px; padding: 9px 12px; border: none; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; font-size: 12px; }
+.tab.on { border-color: var(--ke-primary); border-bottom-color: var(--ke-primary); background: transparent; color: var(--ke-ink); }
 .state { margin: 40px 0 0; text-align: center; font-size: 12px; color: var(--ke-sub); }
 .state-txt { margin: 0; }
 .retry { display: inline-block; margin-top: 10px; padding: 8px 20px; border: none; border-radius: var(--ke-radius-m); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 13px; font-weight: 700; font-family: var(--ke-font); cursor: pointer; }
-.cardrow { display: block; width: 100%; margin: 0 0 10px; padding: 13px 14px; border: 1px solid var(--ke-line); border-radius: var(--ke-radius-l); background: var(--ke-surface); text-align: left; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); box-sizing: border-box; }
+.cardrow { display: block; width: 100%; text-align: left; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); box-sizing: border-box; padding: 24px 0; margin: 0; border: none; border-bottom: 1px solid var(--ke-line); border-radius: 0; background: transparent; }
 .cardrow:active { background: var(--ke-primary-soft); }
-.row-head { display: flex; align-items: center; gap: 6px; }
-.chip { display: inline-block; padding: 0 8px; border-radius: var(--ke-radius-full); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 11px; font-weight: 600; line-height: 1.8; }
-.theme-tag { font-size: 11px; color: var(--ke-sub-2); }
-.row-title { display: block; margin-top: 7px; font-family: var(--ke-font-display); font-size: 15px; font-weight: 700; line-height: 1.45; color: var(--ke-ink); }
-.row-sum { display: -webkit-box; margin-top: 4px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 12.5px; line-height: 1.6; color: var(--ke-sub); }
+.row-head { display: flex; align-items: center; gap: 12px; }
+.chip { display: inline-block; border-radius: var(--ke-radius-full); font-size: 11px; line-height: 1.8; padding: 0; background: transparent; color: var(--ke-sub); font-weight: 400; }
+.theme-tag { font-size: 11px; color: var(--ke-sub); }
+.row-title { display: block; font-family: var(--ke-font-display); line-height: 1.45; color: var(--ke-ink); margin-top: 12px; font-size: 24px; font-weight: 400; }
+.row-sum { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: var(--ke-sub); margin-top: 10px; font-size: 13px; line-height: 1.9; }
 .empty { margin: 60px auto 0; max-width: 320px; text-align: center; }
 .empty-ic { width: 40px; height: 40px; color: var(--ke-sub-2); }
 .empty-t { display: block; margin-top: 10px; font-size: 14px; font-weight: 600; color: var(--ke-ink); }
@@ -270,4 +280,6 @@ function typeLabel(type: string): string {
 .more:disabled { opacity: 0.45; cursor: default; }
 .more.err { border: 1px dashed var(--ke-line-strong); background: var(--ke-surface-2); color: var(--ke-warn); }
 .end { margin: 14px 0 0; text-align: center; font-size: 11px; color: var(--ke-sub-2); }
+.list-back { display: inline-flex; align-items: center; min-height: 44px; padding: 0; border: none; background: transparent; color: var(--ke-sub); font-size: 12px; cursor: pointer; }
+.list-eyebrow { margin-top: 22px; }
 </style>

@@ -5,12 +5,55 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>知识探索卡片系统 · 移动探索端原型</title>
 <style>
+/* 知识图鉴 v2 — docs/04-主题与UI规范.md 与 prototype/styleguide.html 同源 */
 :root{
-  --ink:#1f2d3d; --sub:#7a8699; --line:#e8ecf2; --bg:#f4f6f9; --card:#ffffff;
-  --pri:#3a5fcd; --pri-soft:#eef2fd; --green:#2e8b57; --green-soft:#eaf5ef;
-  --blue:#3a5fcd; --blue-soft:#eef2fd; --orange:#d97a2b; --orange-soft:#fdf1e7;
-  --amber:#b7791f; --shadow:0 4px 16px rgba(31,45,61,.06);
+  /* 品牌色 · 松绿与嫩黄 */
+  --ke-primary:#203D32; --ke-primary-deep:#172D25; --ke-primary-soft:#E9EEE2;
+  --ke-accent:#DDEB89; --ke-on-accent:#172B26;
+  --ke-academy:#CFD9C9; --ke-cuisine:#EDD6BE; --ke-sound:#CEDFE1; --ke-canvas:#E5E8E2;
+  /* 三档可信色（独占 · 符号 ●◐○） */
+  --ke-fact:#1F7A4D;  --ke-fact-soft:#EAF5EF;  --ke-fact-graphic:#2E8B57;   /* ● 事实 */
+  --ke-synth:#0E7490; --ke-synth-soft:#E3F4F8;                               /* ◐ 归纳 */
+  --ke-gen:#A85510;   --ke-gen-soft:#FDF1E7;   --ke-gen-graphic:#D97A2B;    /* ○ 生成 */
+  /* 功能与场景色 */
+  --ke-warn:#8F5E12;    --ke-warn-soft:#FDF6E3; --ke-warn-line:#F3DDAD;
+  --ke-danger:#C0392B;  --ke-danger-soft:#FDECEA;
+  --ke-private:#6B46C1; --ke-private-soft:#F1ECFA;
+  --ke-success:var(--ke-fact); --ke-success-soft:var(--ke-fact-soft);       /* 与事实同源 */
+  /* 中性色 · 雾白与松墨 */
+  --ke-ink:#172B26; --ke-ink-2:#344A41; --ke-sub:#5F6D64; --ke-sub-2:#626F67;
+  --ke-line:#CBD2C8; --ke-line-2:#E4E8DF; --ke-line-strong:#829080;
+  --ke-surface:#FAFBF6; --ke-surface-2:#EDF0E8; --ke-bg:#FAFBF6;
+  /* 浅色面板 · 编目工作台侧栏 */
+  --ke-side:#E9EDE3; --ke-side-2:#DDE5D5; --ke-side-line:#CBD2C8;
+  --ke-side-text:#344A41; --ke-side-text-2:#5F6D64;
+  /* 深色行动面上的纯白文字 */
+  --ke-white:#FFFFFF;
+  /* 透明层 */
+  --ke-mask:rgba(23,43,38,.55); --ke-toast:rgba(23,43,38,.94);
+  /* 圆角（印刷感） */
+  --ke-radius-xs:2px; --ke-radius-s:3px; --ke-radius-m:4px; --ke-radius-l:5px;
+  --ke-radius-full:999px;
+  /* 阴影：细线优先，阴影只给悬浮层 */
+  --ke-shadow-1:0 2px 8px rgba(23,43,38,.05);
+  --ke-shadow-2:0 10px 32px rgba(23,43,38,.10);
+  --ke-shadow-3:0 24px 64px rgba(23,43,38,.16);
+  --ke-focus:0 0 0 3px rgba(32,61,50,.18);
+  /* 字体：显示层宋体 × 界面层黑体 */
+  --ke-font:"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;
+  --ke-font-display:"Noto Serif SC","Songti SC","STSong","Source Han Serif SC","SimSun",serif;
+  --ke-font-mono:"Bahnschrift","DIN Alternate","Consolas",monospace;
+  /* 动效 */
+  --ke-dur-fast:120ms; --ke-dur-base:150ms; --ke-dur-slow:250ms;
+  --ke-ease:cubic-bezier(.25,.8,.35,1);
+  /* 层级 */
+  --ke-z-sticky:10; --ke-z-bar:20; --ke-z-drawer:50; --ke-z-modal:100; --ke-z-toast:200;
 }
+
+
+:root{--ink:var(--ke-ink);--sub:var(--ke-sub);--line:var(--ke-line);--bg:var(--ke-bg);--card:var(--ke-surface);--side:var(--ke-side);--pri:var(--ke-primary);--pri-soft:var(--ke-primary-soft);--green:var(--ke-fact);--green-soft:var(--ke-fact-soft);--blue:var(--ke-synth);--blue-soft:var(--ke-synth-soft);--orange:var(--ke-gen);--orange-soft:var(--ke-gen-soft);--amber:var(--ke-warn);--amber-soft:var(--ke-warn-soft);--red:var(--ke-danger);--red-soft:var(--ke-danger-soft);--shadow:none}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;vertical-align:middle;flex-shrink:0}
+
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
   background:#232a35;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px 0}
@@ -156,17 +199,56 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
 .qa-bar input{flex:1;border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;font-size:13.5px;font-family:inherit}
 .qa-bar .send{width:44px;height:44px;border-radius:12px;background:var(--pri);color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px}
 .legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+
+.theme-artwork { color: var(--ke-primary); }
+.art-solid { fill: currentcolor; }
+.art-soft { fill: color-mix(in srgb, currentcolor 12%, transparent); }
+.art-paper { fill: var(--ke-surface); stroke: currentcolor; }
+.art-letters { fill: currentcolor; font-family: var(--ke-font-display); font-size: 10px; letter-spacing: 3px; }
+.art-line { stroke: currentcolor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.art-faint { stroke: currentcolor; stroke-width: .7; opacity: .4; }
+
+body{background:var(--ke-canvas);font-family:var(--ke-font)}.phone{border:1px solid var(--ke-line);border-radius:8px;box-shadow:none;height:852px}.scroll{padding-left:24px;padding-right:24px}.topbar .ic{border:0;border-radius:2px;background:transparent;min-width:44px;min-height:44px}.cardbox,.btn,.btn.sm,.chip,.kimg,.addentry,.inp,.src{border-radius:3px}.kcard{border:0;padding:0;background:transparent;box-shadow:none}.kt{font-family:var(--ke-font-display);font-size:32px;font-weight:400;margin:20px 0 14px}.kimg{height:180px;background:var(--ke-academy);margin:24px 0}.kimg>svg{width:90%;height:160px}.entry{border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;padding:18px 0}.entry .ei{background:transparent;border-radius:0}.src{border:0;border-top:1px solid var(--line);padding:18px 0;margin-top:24px;background:transparent}p.body{font-size:15px;line-height:2;color:var(--ke-ink-2);text-align:left}.resume{background:transparent;color:var(--ink);border-top:1px solid var(--line);border-bottom:1px solid var(--line);border-radius:0;padding:18px 0;box-shadow:none}.resume .rt{font-family:var(--ke-font-display);font-size:20px;font-weight:400;margin:8px 0}.resume .rb{border-radius:2px;background:var(--ke-accent);color:var(--ke-ink);padding:8px 12px}.search{border-radius:2px;background:var(--ke-surface-2)}.atlas-intro{font:400 34px/1.4 var(--ke-font-display);margin:24px 0 12px}.atlas-topics{grid-template-columns:1fr 1fr;gap:10px}.atlas-topics .theme{position:relative;text-align:left;overflow:hidden;min-height:148px;padding:16px;border:0;border-radius:2px}.atlas-topics .theme:first-child{grid-column:1/-1;min-height:180px;background:var(--ke-academy)}.atlas-topics .theme:nth-child(2){background:var(--ke-cuisine)}.atlas-topics .theme:nth-child(3){background:var(--ke-sound)}.atlas-topics .tn{font-family:var(--ke-font-display);font-size:23px;font-weight:400;margin:12px 0}.atlas-topics .theme:first-child .tn{font-size:30px}.atlas-topics svg{position:absolute;right:-6px;bottom:22px;width:52%;height:120px;opacity:.3}.atlas-topics .theme:first-child svg{opacity:1}.atlas-topics .theme-no,.atlas-topics .tc{position:relative;font-size:10px;color:var(--ink)}.atlas-topics .open{position:relative;display:block;font-size:11px;margin-top:16px}.tabbar .tab.on{color:var(--ke-ink);background:var(--ke-accent);border-radius:2px}.svc{border-radius:2px;background:var(--ke-primary);color:var(--ke-white)}.tabbar{padding:10px 12px;gap:10px}.sec-title{margin-top:24px}.pathnode{border-radius:2px;box-shadow:none}.pathnode.cur{background:var(--ke-primary);color:var(--ke-white)}
+
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5 20 20"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5C6.5 4 9.8 4 12 5.7c2.2-1.7 5.5-1.7 8-.2V19c-2.5-1.5-5.8-1.5-8 .2-2.2-1.7-5.5-1.7-8-.2z"/><path d="M12 5.7V19.2"/></symbol>
+    <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 4v16M5 7.5h14M5 7.5 2.8 13h4.4zM19 7.5 16.8 13h4.4z"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3.5 20.5 8 12 12.5 3.5 8z"/><path d="M3.5 12.5 12 17l8.5-4.5M3.5 16.5 12 21l8.5-4.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 13l5 5L19 7"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 21 19H3z"/><path d="M12 10v4"/><path d="M12 16.8v.2"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.6"/><circle cx="17.5" cy="5.5" r="2.6"/><circle cx="17.5" cy="18.5" r="2.6"/><path d="M8.4 10.8l6.7-3.9M8.4 13.2l6.7 3.9"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.8l2.5 5.1 5.6.8-4 4 .9 5.6-5-2.7-5 2.7.9-5.6-4-4 5.6-.8z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5c0-3 2.5-5.2 5.5-5.2s5.5 2.2 5.5 5.2"/><circle cx="16.8" cy="9.2" r="2.5"/><path d="M16.5 14.6c2.3.3 4 2.2 4 4.9"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1.5-4.5L17 4l3 3L8.5 18.5z"/><path d="M14.5 6.5l3 3"/></symbol>
+    <symbol id="i-mountain" viewBox="0 0 24 24"><path d="M3 19 9.5 7.5l3.5 6 2.5-4L21 19z"/></symbol>
+    <symbol id="i-temple" viewBox="0 0 24 24"><path d="M4 9h16M6 9c1-4 3.5-6 6-6s5 2 6 6"/><path d="M12 3v3"/><path d="M7 9v8M17 9v8M4.5 20.5h15"/><path d="M7 17c0 1.5 1.2 2.5 2.5 2.5S12 18.5 12 17c0 1.5 1.2 2.5 2.5 2.5S17 18.5 17 17"/></symbol>
+    <symbol id="i-bowl" viewBox="0 0 24 24"><path d="M4 11h16c0 4.5-3.5 8-8 8s-8-3.5-8-8z"/><path d="M8.5 7.5c1-1.8 3-1.8 4 0M13 5.5c1-1.8 3-1.8 4 0"/><path d="M3 21h18"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.6"/><path d="M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7"/><path d="M5.8 18.2a9 9 0 0 1 0-12.4M18.2 5.8a9 9 0 0 1 0 12.4"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4.5 10.5 12 4l7.5 6.5V20h-15z"/><path d="M9.5 20v-6h5v6"/></symbol>
+    <symbol id="i-path" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="12" r="2.2"/><circle cx="8" cy="19" r="2.2"/><path d="M8 6.8c4 .8 4 4.4 7.8 5M7.3 8.1c-.4 4 0 8 0 8.8"/></symbol>
+    <symbol id="i-me" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6"/></symbol>
+  </defs>
+</svg>
 <div class="phone" id="phone">
 
 <!-- ═══════════ 1 首页 ═══════════ -->
 <section class="screen active" id="s-home">
   <div class="scroll">
     <h1 class="page">知识探索</h1>
+    <h2 class="atlas-intro">从一个地方，<br>走进一个世界。</h2>
     <div style="font-size:12px;color:var(--sub);margin-top:2px">从一张卡片出发，逐层深入，随时回望</div>
-    <div class="search" onclick="toast('搜索为原型示意，一期为标题+摘要关键词检索')">🔍 搜索卡片、主题或问题</div>
+    <div class="search" onclick="toast('搜索为原型示意，一期为标题+摘要关键词检索')"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg> 搜索卡片、主题或问题</div>
 
     <div class="resume" onclick="go('s-card-yuelu')">
       <div style="font-size:11px;opacity:.8">继续探索 · 昨天暂存</div>
@@ -176,24 +258,111 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
     </div>
 
     <div class="sec-title">主题专题 <span class="ln"></span></div>
-    <div class="themes">
-      <div class="theme" onclick="go('s-card-yuelu')"><div class="em">🏛️</div><div class="tn">书院地标</div><div class="tc">12 张卡</div></div>
-      <div class="theme" onclick="go('s-card-dish')"><div class="em">🌶️</div><div class="tn">湘菜风物</div><div class="tc">9 张卡</div></div>
-      <div class="theme" onclick="go('s-card-sound')"><div class="em">🔊</div><div class="tn">声音科学</div><div class="tc">7 张卡</div></div>
+    <div class="themes atlas-topics">
+      <div class="theme" onclick="go('s-card-yuelu')"><span class="theme-no">01 / ACADEMY</span><svg class="theme-artwork" viewBox="0 0 320 200" fill="none" aria-hidden="true">
+      <path
+        class="art-soft"
+        d="M27 99 160 33 293 99 268 106H51Z"
+      />
+      <path
+        class="art-line"
+        d="M27 99 160 33 293 99M160 33 76 103M160 33 107 103M160 33 135 103M160 33 185 103M160 33 213 103M160 33 244 103"
+      />
+      <path
+        class="art-solid"
+        d="m18 113 40-15 102-45 102 45 40 15-28 13H46Z"
+      />
+      <path
+        class="art-line"
+        d="M47 126v49h226v-49M73 127v47M110 127v47M210 127v47M247 127v47M35 180h250M24 187h272"
+      />
+      <path
+        class="art-solid"
+        d="M141 137h38v37h-38Z"
+      />
+      <rect
+        class="art-paper"
+        x="124"
+        y="113"
+        width="72"
+        height="20"
+      />
+      <text
+        class="art-letters"
+        x="160"
+        y="127"
+        text-anchor="middle"
+      >书院</text>
+      <path
+        class="art-faint"
+        d="M160 12v15m0 163v7M10 181h10m280 0h10M44 23h38m-19-8v16M260 35h34m-17-8v16"
+      />
+    </svg><div class="tn">书院地标</div><div class="tc">12 张卡 · 示例</div><span class="open">打开专题 ↗</span></div>
+      <div class="theme" onclick="go('s-card-dish')"><span class="theme-no">02 / CUISINE</span><svg class="theme-artwork" viewBox="0 0 320 200" fill="none" aria-hidden="true">
+      <ellipse
+        class="art-line"
+        cx="161"
+        cy="156"
+        rx="115"
+        ry="21"
+      />
+      <path
+        class="art-soft"
+        d="M55 157q17 34 105 34t107-34"
+      />
+      <path
+        class="art-line"
+        d="M55 157q17 34 105 34t107-34M89 61c-8 21-7 60 35 86 24 15 43 8 48-1-41-12-54-49-61-67-3-10-14-19-22-18Z"
+      />
+      <path
+        class="art-solid"
+        d="M210 62c8 20 10 64-35 87-21 12-45 10-49-2 46-14 49-46 56-66 5-14 19-20 28-19Z"
+      />
+      <path
+        class="art-line"
+        d="M93 64c-2-18 3-29 22-38M206 64c-5-20-19-25-36-26M138 73q14-30 36-31-4 28-28 35"
+      />
+      <path
+        class="art-faint"
+        d="M69 29h26m-13-8v16M241 105h33m-16-8v16M33 145h10M286 145h10"
+      />
+    </svg><div class="tn">湘菜风物</div><div class="tc">9 张卡 · 示例</div><span class="open">打开专题 ↗</span></div>
+      <div class="theme" onclick="go('s-card-sound')"><span class="theme-no">03 / SOUND</span><svg class="theme-artwork" viewBox="0 0 320 200" fill="none" aria-hidden="true">
+      <circle
+        class="art-faint"
+        cx="160"
+        cy="103"
+        r="75"
+      />
+      <circle
+        class="art-line"
+        cx="160"
+        cy="103"
+        r="49"
+      />
+      <path
+        class="art-line"
+        d="M15 103h28l9-23 14 47 16-69 17 90 17-119 19 146 19-151 18 147 17-124 16 97 17-68 15 47 13-22h39"
+      />
+      <path
+        class="art-faint"
+        d="M15 103h290M160 12v182M47 32h32m-16-8v16M261 166h32m-16-8v16"
+      />
+    </svg><div class="tn">声音科学</div><div class="tc">7 张卡 · 示例</div><span class="open">打开专题 ↗</span></div>
     </div>
 
     <div class="sec-title">今日推荐入口 <span class="ln"></span></div>
     <div class="entry" onclick="go('s-task')">
-      <div class="ei">🧭</div><div class="et"><div class="en">带孩子 60 分钟逛岳麓书院</div><div class="er">任务卡 · 4 站观察路线</div></div><div class="ea">›</div>
+      <div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div><div class="et"><div class="en">带孩子 60 分钟逛岳麓书院</div><div class="er">任务卡 · 4 站观察路线</div></div><div class="ea">›</div>
     </div>
     <div class="entry" onclick="go('s-compare')">
-      <div class="ei">⚖️</div><div class="et"><div class="en">剁椒鱼头为什么是"辣"的</div><div class="er">对比卡 · 饮食 × 科学跨主题</div></div><div class="ea">›</div>
+      <div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-scale"/></svg></div><div class="et"><div class="en">剁椒鱼头为什么是"辣"的</div><div class="er">对比卡 · 饮食 × 科学跨主题</div></div><div class="ea">›</div>
     </div>
   </div>
   <div class="tabbar">
-    <div class="tab on"><div class="ti">🏠</div>首页</div>
-    <div class="tab" onclick="openPath()"><div class="ti">🧭</div>我的路径</div>
-    <div class="tab" onclick="go('s-me')"><div class="ti">👤</div>我的</div>
+    <div class="tab on"><div class="ti"><svg class="ico" aria-hidden="true"><use href="#i-home"/></svg></div>首页</div>
+    <div class="tab" onclick="openPath()"><div class="ti"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div>我的路径</div>
+    <div class="tab" onclick="go('s-me')"><div class="ti"><svg class="ico" aria-hidden="true"><use href="#i-me"/></svg></div>我的</div>
   </div>
 </section>
 
@@ -202,16 +371,54 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
   <div class="topbar">
     <div class="ic" onclick="go('s-home')">‹</div>
     <div class="crumb">书院地标 · <b>岳麓书院</b></div>
-    <div class="ic" onclick="openPath()">🧭</div>
+    <div class="ic" onclick="openPath()"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div>
   </div>
   <div class="scroll">
     <div class="kcard">
       <span class="chip">图文卡 · 地标</span><span class="chip green" style="margin-left:6px">已核验</span>
       <div class="kt">岳麓书院</div>
       <div class="ksum">中国四大书院之一，北宋创办于岳麓山下，千年弦歌不绝，朱熹、张栻曾在此会讲。</div>
-      <div class="kimg">🏛️<span class="tag">示意图</span></div>
-      <p class="body">岳麓书院位于长沙湘江西岸的岳麓山脚下，由潭州太守朱洞于北宋开宝九年（976 年）创办<span class="cite">[1]</span>。书院背山面江，与长沙古城隔江相望，形成了"城市—江渡—书院"的空间关系<span class="cite">[2]</span>。<span class="badge b-fact">📎 事实</span></p>
-      <p class="body">南宋乾道三年（1167 年），朱熹与张栻在此举行"朱张会讲"，开创了不同学派在书院公开论辩的传统<span class="cite">[1]</span>。<span class="badge b-fact">📎 事实</span></p>
+      <div class="kimg"><svg class="theme-artwork" viewBox="0 0 320 200" fill="none" aria-hidden="true">
+      <path
+        class="art-soft"
+        d="M27 99 160 33 293 99 268 106H51Z"
+      />
+      <path
+        class="art-line"
+        d="M27 99 160 33 293 99M160 33 76 103M160 33 107 103M160 33 135 103M160 33 185 103M160 33 213 103M160 33 244 103"
+      />
+      <path
+        class="art-solid"
+        d="m18 113 40-15 102-45 102 45 40 15-28 13H46Z"
+      />
+      <path
+        class="art-line"
+        d="M47 126v49h226v-49M73 127v47M110 127v47M210 127v47M247 127v47M35 180h250M24 187h272"
+      />
+      <path
+        class="art-solid"
+        d="M141 137h38v37h-38Z"
+      />
+      <rect
+        class="art-paper"
+        x="124"
+        y="113"
+        width="72"
+        height="20"
+      />
+      <text
+        class="art-letters"
+        x="160"
+        y="127"
+        text-anchor="middle"
+      >书院</text>
+      <path
+        class="art-faint"
+        d="M160 12v15m0 163v7M10 181h10m280 0h10M44 23h38m-19-8v16M260 35h34m-17-8v16"
+      />
+    </svg><span class="tag">示意图</span></div>
+      <p class="body">岳麓书院位于长沙湘江西岸的岳麓山脚下，由潭州太守朱洞于北宋开宝九年（976 年）创办<span class="cite">[1]</span>。书院背山面江，与长沙古城隔江相望，形成了"城市—江渡—书院"的空间关系<span class="cite">[2]</span>。<span class="badge b-fact"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg> 事实</span></p>
+      <p class="body">南宋乾道三年（1167 年），朱熹与张栻在此举行"朱张会讲"，开创了不同学派在书院公开论辩的传统<span class="cite">[1]</span>。<span class="badge b-fact"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg> 事实</span></p>
       <div class="src"><b>来源依据</b><br>[1]《岳麓书院史略》第一章 · p12–14（已授权）<br>[2] 湖南大学岳麓书院官网 · 书院沿革（2024-06 更新）</div>
     </div>
 
@@ -224,16 +431,16 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
 
     <div class="sec-title">探索入口 <span class="ln"></span><span style="font-size:11px;color:var(--sub);font-weight:400">默认展示 5 个</span></div>
     <div class="entry" onclick="runService('为什么岳麓书院建在岳麓山下？','讲解')">
-      <div class="ei">⛰️</div><div class="et"><div class="en">为什么建在这里</div><div class="er">深入了解 · 历史 × 地理</div></div><div class="ea">›</div>
+      <div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-mountain"/></svg></div><div class="et"><div class="en">为什么建在这里</div><div class="er">深入了解 · 历史 × 地理</div></div><div class="ea">›</div>
     </div>
     <div class="entry" onclick="nav('s-figures','哪些人物与这里有关','关联卡')">
-      <div class="ei">👥</div><div class="et"><div class="en">哪些人物与这里有关</div><div class="er">相关联 · 人物 → 时间线</div></div><div class="ea">›</div>
+      <div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-users"/></svg></div><div class="et"><div class="en">哪些人物与这里有关</div><div class="er">相关联 · 人物 → 时间线</div></div><div class="ea">›</div>
     </div>
     <div class="entry" onclick="nav('s-timeline','书院大事记','时间线卡')">
-      <div class="ei">🕰️</div><div class="et"><div class="en">书院千年大事记</div><div class="er">时间线 · 976 年至今</div></div><div class="ea">›</div>
+      <div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg></div><div class="et"><div class="en">书院千年大事记</div><div class="er">时间线 · 976 年至今</div></div><div class="ea">›</div>
     </div>
     <div class="entry" onclick="toast('入口「从一处题刻开始讲故事」为他人分享的入口模板，已复制到本卡')">
-      <div class="ei">🖋️</div><div class="et"><div class="en">从一处题刻开始讲故事<span class="chip orange" style="margin-left:6px">入口模板</span></div><div class="er">去实践 · 来自 @老周的探索</div></div><div class="ea">›</div>
+      <div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-pen"/></svg></div><div class="et"><div class="en">从一处题刻开始讲故事<span class="chip orange" style="margin-left:6px">入口模板</span></div><div class="er">去实践 · 来自 @老周的探索</div></div><div class="ea">›</div>
     </div>
     <div class="fold" onclick="this.style.display='none';document.getElementById('more-entries').style.display='block'">还有 2 个入口，展开 ∨</div>
     <div id="more-entries" style="display:none">
@@ -241,15 +448,15 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
         <div class="ei">📐</div><div class="et"><div class="en">建筑空间布局</div><div class="er">深入了解 · 二期地图卡</div></div><div class="ea">›</div>
       </div>
       <div class="entry" onclick="runService('书院如何影响湖湘文化？','讲解')">
-        <div class="ei">💡</div><div class="et"><div class="en">书院如何影响湖湘文化</div><div class="er">深入了解 · 文化脉络</div></div><div class="ea">›</div>
+        <div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-book"/></svg></div><div class="et"><div class="en">书院如何影响湖湘文化</div><div class="er">深入了解 · 文化脉络</div></div><div class="ea">›</div>
       </div>
     </div>
     <div class="addentry" onclick="go('s-entry-nl')">✚ 用一句话新增入口</div>
   </div>
   <div class="svcbar">
-    <div class="svc" onclick="runService('讲清楚：岳麓书院是什么、为什么重要','讲解')">💡 讲清楚</div>
-    <div class="svc alt" onclick="runService('岳麓书院与城南书院有什么异同？','比较')">⚖️ 帮我比较</div>
-    <div class="svc alt" onclick="go('s-summary')">🗂️ 整理发现</div>
+    <div class="svc" onclick="runService('讲清楚：岳麓书院是什么、为什么重要','讲解')"><svg class="ico" aria-hidden="true"><use href="#i-book"/></svg> 讲清楚</div>
+    <div class="svc alt" onclick="runService('岳麓书院与城南书院有什么异同？','比较')"><svg class="ico" aria-hidden="true"><use href="#i-scale"/></svg> 帮我比较</div>
+    <div class="svc alt" onclick="go('s-summary')"><svg class="ico" aria-hidden="true"><use href="#i-layers"/></svg> 整理发现</div>
   </div>
 </section>
 
@@ -271,13 +478,13 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
 
 <!-- ═══════════ 4 讲解卡结果 ═══════════ -->
 <section class="screen" id="s-explain">
-  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">岳麓书院 · <b>讲解卡</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">岳麓书院 · <b>讲解卡</b></div><div class="ic" onclick="openPath()"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div></div>
   <div class="scroll">
     <div class="kcard">
       <span class="chip">讲解卡 · 由智能体生成</span><span class="chip gray" style="margin-left:6px" id="explain-mode">深入版</span>
       <div class="kt" style="font-size:17px">为什么岳麓书院建在岳麓山下？</div>
-      <p class="body"><b>水源与讲学传统。</b>宋代书院选址普遍遵循"背山面水、藏修游息"的原则。岳麓山提供了清幽的环境，而山脚的湘江渡口（朱张渡）使学者可以从长沙城便捷过江，形成"隔江相望、渡口相连"的关系<span class="cite">[1]</span>。<span class="badge b-fact">📎 事实</span></p>
-      <p class="body"><b>城市功能的互补。</b>976 年创办时，长沙城的教育功能集中于官学；书院选址城外山下，既避开城市喧扰，又通过渡口保持与士人社群的联系，这种"入则宁静、出则通达"的区位被后世学者视为书院选址的典型<span class="cite">[2]</span>。<span class="badge b-fact">📎 事实</span></p>
+      <p class="body"><b>水源与讲学传统。</b>宋代书院选址普遍遵循"背山面水、藏修游息"的原则。岳麓山提供了清幽的环境，而山脚的湘江渡口（朱张渡）使学者可以从长沙城便捷过江，形成"隔江相望、渡口相连"的关系<span class="cite">[1]</span>。<span class="badge b-fact"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg> 事实</span></p>
+      <p class="body"><b>城市功能的互补。</b>976 年创办时，长沙城的教育功能集中于官学；书院选址城外山下，既避开城市喧扰，又通过渡口保持与士人社群的联系，这种"入则宁静、出则通达"的区位被后世学者视为书院选址的典型<span class="cite">[2]</span>。<span class="badge b-fact"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg> 事实</span></p>
       <p class="body"><b>综合来看</b>，岳麓书院的选址反映了宋代书院"山水—渡口—城市"三位一体的空间智慧：山水提供讲学环境，渡口提供可达性，城市提供生源与文化需求。<span class="badge b-syn">✦ 归纳</span></p>
       <div class="src"><b>出处清单</b><br>
         [1]《岳麓书院史略》第一章 · p12–14<br>
@@ -288,7 +495,7 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
     <div class="cardbox">
       <div class="sec-title" style="margin-top:0">🤔 还可以继续问 <span class="ln"></span></div>
       <div class="entry" onclick="runService('朱张渡的日常渡江有多少史料记载？','讲解')"><div class="ei">📄</div><div class="et"><div class="en">朱张渡的渡江记载有多少史料支撑</div><div class="er">证据缺口 · 深入追查</div></div><div class="ea">›</div></div>
-      <div class="entry" onclick="go('s-figures')"><div class="ei">👥</div><div class="et"><div class="en">看看与选址相关的人物</div><div class="er">相关联 · 朱洞 / 朱熹 / 张栻</div></div><div class="ea">›</div></div>
+      <div class="entry" onclick="go('s-figures')"><div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-users"/></svg></div><div class="et"><div class="en">看看与选址相关的人物</div><div class="er">相关联 · 朱洞 / 朱熹 / 张栻</div></div><div class="ea">›</div></div>
     </div>
     <div class="cardbox" style="padding:12px 16px">
       <div style="font-size:12px;color:var(--sub)">📌 本次为受控生成：仅基于卡片与已授权资料，事实与归纳分段标注；无出处内容不会自动成为公共知识。</div>
@@ -303,7 +510,7 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
 
 <!-- ═══════════ 5 人物关联 ═══════════ -->
 <section class="screen" id="s-figures">
-  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">岳麓书院 · <b>人物关联</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">岳麓书院 · <b>人物关联</b></div><div class="ic" onclick="openPath()"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div></div>
   <div class="scroll">
     <div class="kcard" style="padding-bottom:6px">
       <span class="chip">关联卡 · 关系说明必填</span>
@@ -323,19 +530,19 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
       </div>
     </div>
     <div class="entry" style="margin-top:12px" onclick="nav('s-timeline','书院大事记','时间线卡')">
-      <div class="ei">🕰️</div><div class="et"><div class="en">沿时间看书院大事记</div><div class="er">时间线卡 · 含上述人物事件</div></div><div class="ea">›</div>
+      <div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg></div><div class="et"><div class="en">沿时间看书院大事记</div><div class="er">时间线卡 · 含上述人物事件</div></div><div class="ea">›</div>
     </div>
   </div>
   <div class="svcbar">
-    <div class="svc" onclick="runService('朱张会讲为什么影响这么大？','讲解')">💡 讲清楚</div>
-    <div class="svc alt" onclick="runService('朱熹与张栻的观点有何不同？','比较')">⚖️ 帮我比较</div>
-    <div class="svc alt" onclick="go('s-summary')">🗂️ 整理发现</div>
+    <div class="svc" onclick="runService('朱张会讲为什么影响这么大？','讲解')"><svg class="ico" aria-hidden="true"><use href="#i-book"/></svg> 讲清楚</div>
+    <div class="svc alt" onclick="runService('朱熹与张栻的观点有何不同？','比较')"><svg class="ico" aria-hidden="true"><use href="#i-scale"/></svg> 帮我比较</div>
+    <div class="svc alt" onclick="go('s-summary')"><svg class="ico" aria-hidden="true"><use href="#i-layers"/></svg> 整理发现</div>
   </div>
 </section>
 
 <!-- ═══════════ 6 人物图文卡（动态填充） ═══════════ -->
 <section class="screen" id="s-figure">
-  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">人物 · <b id="fig-name">朱熹</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">人物 · <b id="fig-name">朱熹</b></div><div class="ic" onclick="openPath()"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div></div>
   <div class="scroll">
     <div class="kcard">
       <span class="chip">图文卡 · 人物</span>
@@ -345,18 +552,18 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
     </div>
     <div class="sec-title">探索入口 <span class="ln"></span></div>
     <div class="entry" onclick="runService('朱张会讲讲了什么？','讲解')"><div class="ei">🗣️</div><div class="et"><div class="en">朱张会讲讲了什么</div><div class="er">深入了解 · 会讲主题</div></div><div class="ea">›</div></div>
-    <div class="entry" onclick="go('s-timeline')"><div class="ei">🕰️</div><div class="et"><div class="en">回到书院时间线</div><div class="er">相关联 · 大事记</div></div><div class="ea">›</div></div>
+    <div class="entry" onclick="go('s-timeline')"><div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg></div><div class="et"><div class="en">回到书院时间线</div><div class="er">相关联 · 大事记</div></div><div class="ea">›</div></div>
   </div>
   <div class="svcbar">
-    <div class="svc" onclick="runService('用 100 字讲清楚这个人','讲解')">💡 讲清楚</div>
+    <div class="svc" onclick="runService('用 100 字讲清楚这个人','讲解')"><svg class="ico" aria-hidden="true"><use href="#i-book"/></svg> 讲清楚</div>
     <div class="svc alt" onclick="go('s-ask')">💬 追问</div>
-    <div class="svc alt" onclick="pushNode(document.getElementById('fig-title').innerText,'人物卡');toast('已收藏并保存节点')">⭐ 收藏</div>
+    <div class="svc alt" onclick="pushNode(document.getElementById('fig-title').innerText,'人物卡');toast('已收藏并保存节点')"><svg class="ico" aria-hidden="true"><use href="#i-star"/></svg> 收藏</div>
   </div>
 </section>
 
 <!-- ═══════════ 7 时间线卡 ═══════════ -->
 <section class="screen" id="s-timeline">
-  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">岳麓书院 · <b>时间线卡</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">岳麓书院 · <b>时间线卡</b></div><div class="ic" onclick="openPath()"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div></div>
   <div class="scroll">
     <div class="kcard">
       <span class="chip">时间线卡</span>
@@ -372,30 +579,30 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
       </div>
       <div class="src"><b>来源依据</b><br>[1]《岳麓书院史略》· 大事年表<br>[2] 湖南大学校史 · 官网</div>
     </div>
-    <div class="entry" onclick="go('s-card-yuelu')"><div class="ei">🏛️</div><div class="et"><div class="en">回到岳麓书院卡片</div><div class="er">返回上一节点</div></div><div class="ea">›</div></div>
+    <div class="entry" onclick="go('s-card-yuelu')"><div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-temple"/></svg></div><div class="et"><div class="en">回到岳麓书院卡片</div><div class="er">返回上一节点</div></div><div class="ea">›</div></div>
   </div>
   <div class="svcbar">
-    <div class="svc" onclick="runService('比较宋代与清代书院的功能差异','比较')">⚖️ 比较不同阶段</div>
-    <div class="svc alt" onclick="go('s-summary')">🗂️ 整理发现</div>
+    <div class="svc" onclick="runService('比较宋代与清代书院的功能差异','比较')"><svg class="ico" aria-hidden="true"><use href="#i-scale"/></svg> 比较不同阶段</div>
+    <div class="svc alt" onclick="go('s-summary')"><svg class="ico" aria-hidden="true"><use href="#i-layers"/></svg> 整理发现</div>
   </div>
 </section>
 
 <!-- ═══════════ 8 湘菜图文卡 ═══════════ -->
 <section class="screen" id="s-card-dish">
-  <div class="topbar"><div class="ic" onclick="go('s-home')">‹</div><div class="crumb">湘菜风物 · <b>剁椒鱼头</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="topbar"><div class="ic" onclick="go('s-home')">‹</div><div class="crumb">湘菜风物 · <b>剁椒鱼头</b></div><div class="ic" onclick="openPath()"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div></div>
   <div class="scroll">
     <div class="kcard">
       <span class="chip">图文卡 · 菜系</span>
       <div class="kt">剁椒鱼头</div>
       <div class="ksum">湘菜代表作。以鲜鱼头配发酵剁椒蒸制，「鲜辣」风味的典型样本。</div>
-      <div class="kimg" style="background:linear-gradient(135deg,#fbe8e0,#f7f0df)">🌶️<span class="tag">示意图</span></div>
-      <p class="body"><b>食材</b>：主料为鳙鱼（雄鱼头），配料剁椒经盐渍发酵产生乳酸与酯香<span class="cite">[1]</span>。<span class="badge b-fact">📎 事实</span></p>
-      <p class="body"><b>技法</b>：猛火蒸制 8–10 分钟，高温使鱼肉蛋白快速变性，保留水分；剁椒的乳酸与鱼脂结合形成复合鲜味<span class="cite">[1]</span>。<span class="badge b-fact">📎 事实</span></p>
+      <div class="kimg" style="background:linear-gradient(135deg,#fbe8e0,#f7f0df)"><svg class="ico" aria-hidden="true"><use href="#i-bowl"/></svg><span class="tag">示意图</span></div>
+      <p class="body"><b>食材</b>：主料为鳙鱼（雄鱼头），配料剁椒经盐渍发酵产生乳酸与酯香<span class="cite">[1]</span>。<span class="badge b-fact"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg> 事实</span></p>
+      <p class="body"><b>技法</b>：猛火蒸制 8–10 分钟，高温使鱼肉蛋白快速变性，保留水分；剁椒的乳酸与鱼脂结合形成复合鲜味<span class="cite">[1]</span>。<span class="badge b-fact"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg> 事实</span></p>
       <div class="src"><b>来源依据</b><br>[1]《中国菜谱·湖南》· 剁椒蒸鱼头（已授权）</div>
     </div>
     <div class="sec-title">探索入口 <span class="ln"></span></div>
     <div class="entry" onclick="nav('s-compare','剁椒鱼头 vs 清蒸鲈鱼','对比卡')">
-      <div class="ei">⚖️</div><div class="et"><div class="en">与清蒸做法比较</div><div class="er">相比较 · 技法与风味</div></div><div class="ea">›</div>
+      <div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-scale"/></svg></div><div class="et"><div class="en">与清蒸做法比较</div><div class="er">相比较 · 技法与风味</div></div><div class="ea">›</div>
     </div>
     <div class="entry" onclick="runService('这道菜为什么形成这样的风味？','讲解')">
       <div class="ei">🔥</div><div class="et"><div class="en">这道菜为什么形成这样的风味 <span class="chip orange" style="font-size:10px;margin-left:4px">私人入口</span></div><div class="er">深入了解 · 食材 × 技法 × 地域（你创建的入口）</div></div><div class="ea">›</div>
@@ -406,15 +613,15 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
     <div class="addentry" onclick="go('s-entry-nl')">✚ 用一句话新增入口</div>
   </div>
   <div class="svcbar">
-    <div class="svc" onclick="runService('讲清楚：剁椒的发酵原理','讲解')">💡 讲清楚</div>
-    <div class="svc alt" onclick="runService('剁椒鱼头与清蒸鲈鱼比较','比较')">⚖️ 帮我比较</div>
-    <div class="svc alt" onclick="go('s-summary')">🗂️ 整理发现</div>
+    <div class="svc" onclick="runService('讲清楚：剁椒的发酵原理','讲解')"><svg class="ico" aria-hidden="true"><use href="#i-book"/></svg> 讲清楚</div>
+    <div class="svc alt" onclick="runService('剁椒鱼头与清蒸鲈鱼比较','比较')"><svg class="ico" aria-hidden="true"><use href="#i-scale"/></svg> 帮我比较</div>
+    <div class="svc alt" onclick="go('s-summary')"><svg class="ico" aria-hidden="true"><use href="#i-layers"/></svg> 整理发现</div>
   </div>
 </section>
 
 <!-- ═══════════ 9 对比卡 ═══════════ -->
 <section class="screen" id="s-compare">
-  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">湘菜风物 · <b>对比卡</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">湘菜风物 · <b>对比卡</b></div><div class="ic" onclick="openPath()"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div></div>
   <div class="scroll">
     <div class="kcard">
       <span class="chip">对比卡 · 智能体生成</span>
@@ -431,7 +638,7 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
     <div class="cardbox">
       <div style="font-size:13px;font-weight:700;color:var(--ink)">🔀 跨主题继续</div>
       <p class="body" style="font-size:12.5px;color:var(--sub)">两道菜的差异核心在「温度与时间」。沿此关系进入科学主题：</p>
-      <div class="entry" onclick="nav('s-card-sound','声音与振动','图文卡')"><div class="ei">🔊</div><div class="et"><div class="en">温度如何改变物质状态</div><div class="er">饮食 → 科学 · 关系已说明</div></div><div class="ea">›</div></div>
+      <div class="entry" onclick="nav('s-card-sound','声音与振动','图文卡')"><div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-wave"/></svg></div><div class="et"><div class="en">温度如何改变物质状态</div><div class="er">饮食 → 科学 · 关系已说明</div></div><div class="ea">›</div></div>
     </div>
   </div>
   <div class="svcbar">
@@ -442,14 +649,14 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
 
 <!-- ═══════════ 10 声音科学卡 ═══════════ -->
 <section class="screen" id="s-card-sound">
-  <div class="topbar"><div class="ic" onclick="go('s-home')">‹</div><div class="crumb">声音科学 · <b>振动与传播</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="topbar"><div class="ic" onclick="go('s-home')">‹</div><div class="crumb">声音科学 · <b>振动与传播</b></div><div class="ic" onclick="openPath()"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div></div>
   <div class="scroll">
     <div class="kcard">
       <span class="chip">图文卡 · 科学</span>
       <div class="kt">声音：振动与传播</div>
       <div class="ksum">声音由物体振动产生，需要介质传播——这是初中物理的验证性实验主题。</div>
-      <p class="body"><b>振动产生声音</b>：音叉发声时触碰水面激起水花，说明发声体在振动<span class="cite">[1]</span>。<span class="badge b-fact">📎 事实</span></p>
-      <p class="body"><b>介质传播</b>：抽成真空的罩内闹钟铃声逐渐消失，说明声音传播需要介质<span class="cite">[1]</span>。<span class="badge b-fact">📎 事实</span></p>
+      <p class="body"><b>振动产生声音</b>：音叉发声时触碰水面激起水花，说明发声体在振动<span class="cite">[1]</span>。<span class="badge b-fact"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg> 事实</span></p>
+      <p class="body"><b>介质传播</b>：抽成真空的罩内闹钟铃声逐渐消失，说明声音传播需要介质<span class="cite">[1]</span>。<span class="badge b-fact"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg> 事实</span></p>
       <div style="margin-top:12px;border:1.5px dashed #c9d4ea;border-radius:12px;padding:14px;text-align:center;background:#f8faff">
         <div style="font-size:22px">🎛️</div>
         <div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-top:4px">互动演示组件：调整频率观察波形</div>
@@ -463,15 +670,15 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
     <div class="addentry" onclick="go('s-entry-nl')">✚ 用一句话新增入口</div>
   </div>
   <div class="svcbar">
-    <div class="svc" onclick="runService('讲清楚：为什么真空里听不到声音','讲解')">💡 讲清楚</div>
+    <div class="svc" onclick="runService('讲清楚：为什么真空里听不到声音','讲解')"><svg class="ico" aria-hidden="true"><use href="#i-book"/></svg> 讲清楚</div>
     <div class="svc alt" onclick="go('s-ask')">💬 追问</div>
-    <div class="svc alt" onclick="go('s-summary')">🗂️ 整理发现</div>
+    <div class="svc alt" onclick="go('s-summary')"><svg class="ico" aria-hidden="true"><use href="#i-layers"/></svg> 整理发现</div>
   </div>
 </section>
 
 <!-- ═══════════ 11 自由追问 ═══════════ -->
 <section class="screen" id="s-ask">
-  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb"><b>自由追问</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb"><b>自由追问</b></div><div class="ic" onclick="openPath()"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div></div>
   <div class="scroll" style="padding-bottom:10px">
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       <span class="chip">📍 当前：岳麓书院</span><span class="chip gray">🎯 会话目标：了解选址与人物</span><span class="chip gray">深入版</span>
@@ -491,7 +698,7 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
 
 <!-- ═══════════ 12 任务卡（60分钟路线） ═══════════ -->
 <section class="screen" id="s-task">
-  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">岳麓书院 · <b>任务卡</b></div><div class="ic" onclick="openPath()">🧭</div></div>
+  <div class="topbar"><div class="ic" onclick="back()">‹</div><div class="crumb">岳麓书院 · <b>任务卡</b></div><div class="ic" onclick="openPath()"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div></div>
   <div class="scroll">
     <div class="kcard">
       <span class="chip">任务与成果卡 · 智能体生成</span>
@@ -508,7 +715,7 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
   </div>
   <div class="svcbar">
     <div class="svc" onclick="pushNode('任务：60分钟家庭路线','任务卡');toast('已保存为探索成果');">💾 保存为成果</div>
-    <div class="svc alt" onclick="go('s-share')">📤 分享</div>
+    <div class="svc alt" onclick="go('s-share')"><svg class="ico" aria-hidden="true"><use href="#i-share"/></svg> 分享</div>
     <div class="svc alt" onclick="runService('调整路线：改为雨天室内版','讲解')">🔄 调整路线</div>
   </div>
 </section>
@@ -522,13 +729,13 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
     <textarea class="inp" id="nl-input" style="margin-top:14px">给第一次来这里的家庭设计一条 60 分钟的文化探索路线，每一站附一个可以观察的问题。</textarea>
     <div class="sec-title">试试这些例子 <span class="ln"></span></div>
     <div class="entry" onclick="document.getElementById('nl-input').value='给第一次来这里的家庭设计一条60分钟的文化探索路线，每一站附一个可以观察的问题。'">
-      <div class="ei">🏛️</div><div class="et"><div class="en" style="font-size:12.5px;line-height:1.5">给第一次来的家庭设计 60 分钟路线，每站附观察问题</div></div>
+      <div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-temple"/></svg></div><div class="et"><div class="en" style="font-size:12.5px;line-height:1.5">给第一次来的家庭设计 60 分钟路线，每站附观察问题</div></div>
     </div>
     <div class="entry" onclick="document.getElementById('nl-input').value='增加「这道菜为什么形成这样的风味」，从食材、技法和地域饮食习惯三个角度解释，用对比卡呈现。';go('s-card-dish')">
-      <div class="ei">🌶️</div><div class="et"><div class="en" style="font-size:12.5px;line-height:1.5">「这道菜为什么形成这样的风味」三角度解释，对比卡呈现</div></div>
+      <div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-bowl"/></svg></div><div class="et"><div class="en" style="font-size:12.5px;line-height:1.5">「这道菜为什么形成这样的风味」三角度解释，对比卡呈现</div></div>
     </div>
     <div class="entry" onclick="document.getElementById('nl-input').value='增加一个面向初中生的入口，用已验证的互动演示解释声音与振动的关系，最后给出一个观察任务。';go('s-card-sound')">
-      <div class="ei">🔊</div><div class="et"><div class="en" style="font-size:12.5px;line-height:1.5">面向初中生：互动演示解释声音与振动，附观察任务</div></div>
+      <div class="ei"><svg class="ico" aria-hidden="true"><use href="#i-wave"/></svg></div><div class="et"><div class="en" style="font-size:12.5px;line-height:1.5">面向初中生：互动演示解释声音与振动，附观察任务</div></div>
     </div>
   </div>
   <div class="svcbar" style="padding-bottom:26px">
@@ -568,14 +775,14 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
     </div>
     <div class="row2" style="width:100%">
       <div class="svc" style="flex:1.4;background:var(--pri);color:#fff" onclick="toast('已保存到个人空间（仅自己可见，可在「我的·私人入口」管理）');pushNode('新增入口：家庭路线','入口')">💾 保存到个人空间</div>
-      <div class="svc" style="flex:1" onclick="toast('已提交公共审核，将由卡片维护者确认后发布')">📤 提交公共审核</div>
+      <div class="svc" style="flex:1" onclick="toast('已提交公共审核，将由卡片维护者确认后发布')"><svg class="ico" aria-hidden="true"><use href="#i-share"/></svg> 提交公共审核</div>
     </div>
   </div>
 </section>
 
 <!-- ═══════════ 15 我的路径 ═══════════ -->
 <section class="screen" id="s-path">
-  <div class="topbar"><div class="ic" onclick="go('s-home')">‹</div><div class="crumb"><b>我的路径</b></div><div class="ic" onclick="go('s-summary')">🗂️</div></div>
+  <div class="topbar"><div class="ic" onclick="go('s-home')">‹</div><div class="crumb"><b>我的路径</b></div><div class="ic" onclick="go('s-summary')"><svg class="ico" aria-hidden="true"><use href="#i-layers"/></svg></div></div>
   <div class="scroll">
     <div class="cardbox" style="padding:13px 15px">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -585,7 +792,7 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
       </div>
     </div>
     <div style="font-size:11.5px;color:var(--sub);background:#f0f4ff;border-radius:10px;padding:9px 12px;margin-top:10px;line-height:1.6">
-      💡 点击任一节点可回到该处继续探索；从历史节点继续会形成<b>新分支</b>，不影响已有发现。
+      <svg class="ico" aria-hidden="true"><use href="#i-book"/></svg> 点击任一节点可回到该处继续探索；从历史节点继续会形成<b>新分支</b>，不影响已有发现。
     </div>
     <div class="sec-title">探索树 <span class="ln"></span></div>
     <div id="path-tree"></div>
@@ -595,7 +802,7 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
     </div>
   </div>
   <div class="svcbar">
-    <div class="svc" onclick="go('s-summary')">🗂️ 整理目前发现</div>
+    <div class="svc" onclick="go('s-summary')"><svg class="ico" aria-hidden="true"><use href="#i-layers"/></svg> 整理目前发现</div>
     <div class="svc alt" onclick="toast('已暂存会话，可随时从首页「继续探索」恢复')">⏸️ 暂存</div>
     <div class="svc alt" onclick="toast('已按未决疑问生成三个新方向：渡口史料 / 山寺关系 / 讲堂建筑')">🔀 换个方向</div>
   </div>
@@ -621,7 +828,7 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
   </div>
   <div class="svcbar">
     <div class="svc" onclick="toast('已保存到「我的成果」，可随时编辑与分享')">💾 保存成果</div>
-    <div class="svc alt" onclick="go('s-share')">📤 去分享</div>
+    <div class="svc alt" onclick="go('s-share')"><svg class="ico" aria-hidden="true"><use href="#i-share"/></svg> 去分享</div>
   </div>
 </section>
 
@@ -666,12 +873,12 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
       <div style="font-size:11px;opacity:.85">来自 小舟 的探索分享 · 快照 v3（2026-09-30）</div>
       <div style="font-size:17px;font-weight:800;margin-top:6px">岳麓书院：选址智慧与人物群像</div>
       <div style="font-size:12px;opacity:.85;margin-top:6px;line-height:1.6">一次从「为什么建在山下」出发的探索，附家庭观察任务。</div>
-      <div style="display:flex;gap:14px;margin-top:12px;font-size:11px;opacity:.9"><span>🧭 4 个节点</span><span>🌿 2 个分支</span><span>📎 4 个出处</span></div>
+      <div style="display:flex;gap:14px;margin-top:12px;font-size:11px;opacity:.9"><span><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg> 4 个节点</span><span>🌿 2 个分支</span><span><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg> 4 个出处</span></div>
     </div>
-    <div class="shbanner">👤 接收者视角预览——未登录状态。浏览无需账号；「接续探索」将创建<b>你自己的副本</b>，不会改动原路径。</div>
+    <div class="shbanner"><svg class="ico" aria-hidden="true"><use href="#i-me"/></svg> 接收者视角预览——未登录状态。浏览无需账号；「接续探索」将创建<b>你自己的副本</b>，不会改动原路径。</div>
     <div class="sec-title">探索路径 <span class="ln"></span></div>
     <div class="tl">
-      <div class="tl-item"><div class="tl-y">起点</div><div class="tl-t">🏛️ 岳麓书院</div><div class="tl-b">图文卡 · 已核验 · 可从这里继续</div></div>
+      <div class="tl-item"><div class="tl-y">起点</div><div class="tl-t"><svg class="ico" aria-hidden="true"><use href="#i-temple"/></svg> 岳麓书院</div><div class="tl-b">图文卡 · 已核验 · 可从这里继续</div></div>
       <div class="tl-item"><div class="tl-y">追问</div><div class="tl-t">为什么建在岳麓山下</div><div class="tl-b">讲解卡 · 事实与归纳分段标注 · 2 处出处</div></div>
       <div class="tl-item"><div class="tl-y">关联</div><div class="tl-t">人物 → 大事记</div><div class="tl-b">朱张会讲（1167）与千年沿革</div></div>
       <div class="tl-item"><div class="tl-y">分支</div><div class="tl-t">🧒 家庭观察任务</div><div class="tl-b">孩子的记录：「实事求是」挂在讲堂正中</div></div>
@@ -684,7 +891,7 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
   </div>
   <div class="svcbar">
     <div class="svc" style="background:var(--pri);color:#fff" onclick="toast('已创建你的探索副本（原路径不受影响）。登录后可保存进度。');go('s-card-yuelu')">▶ 沿此路径继续</div>
-    <div class="svc alt" onclick="toast('已收藏（登录后同步到个人空间）')">⭐ 收藏</div>
+    <div class="svc alt" onclick="toast('已收藏（登录后同步到个人空间）')"><svg class="ico" aria-hidden="true"><use href="#i-star"/></svg> 收藏</div>
   </div>
 </section>
 
@@ -698,9 +905,9 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
       <span class="chip">⚙️ 偏好</span>
     </div>
     <div class="themes" style="grid-template-columns:repeat(4,1fr)">
-      <div class="theme" onclick="openPath()"><div class="em">🧭</div><div class="tn" style="font-size:12px">路径</div><div class="tc">2 个会话</div></div>
-      <div class="theme" onclick="toast('收藏列表（原型示意）')"><div class="em">⭐</div><div class="tn" style="font-size:12px">收藏</div><div class="tc">5 张卡</div></div>
-      <div class="theme" onclick="go('s-summary')"><div class="em">🗂️</div><div class="tn" style="font-size:12px">成果</div><div class="tc">1 份报告</div></div>
+      <div class="theme" onclick="openPath()"><div class="em"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div><div class="tn" style="font-size:12px">路径</div><div class="tc">2 个会话</div></div>
+      <div class="theme" onclick="toast('收藏列表（原型示意）')"><div class="em"><svg class="ico" aria-hidden="true"><use href="#i-star"/></svg></div><div class="tn" style="font-size:12px">收藏</div><div class="tc">5 张卡</div></div>
+      <div class="theme" onclick="go('s-summary')"><div class="em"><svg class="ico" aria-hidden="true"><use href="#i-layers"/></svg></div><div class="tn" style="font-size:12px">成果</div><div class="tc">1 份报告</div></div>
       <div class="theme" onclick="go('s-entry-config')"><div class="em">✚</div><div class="tn" style="font-size:12px">私人入口</div><div class="tc">1 个</div></div>
     </div>
     <div class="cardbox">
@@ -711,9 +918,9 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
     </div>
   </div>
   <div class="tabbar">
-    <div class="tab" onclick="go('s-home')"><div class="ti">🏠</div>首页</div>
-    <div class="tab" onclick="openPath()"><div class="ti">🧭</div>我的路径</div>
-    <div class="tab on"><div class="ti">👤</div>我的</div>
+    <div class="tab" onclick="go('s-home')"><div class="ti"><svg class="ico" aria-hidden="true"><use href="#i-home"/></svg></div>首页</div>
+    <div class="tab" onclick="openPath()"><div class="ti"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg></div>我的路径</div>
+    <div class="tab on"><div class="ti"><svg class="ico" aria-hidden="true"><use href="#i-me"/></svg></div>我的</div>
   </div>
 </section>
 
@@ -725,7 +932,7 @@ textarea.inp{min-height:88px;resize:none;line-height:1.6}
     <h3>📖 知识探索卡片系统 · 移动端原型</h3>
     <p>高保真可点击原型，覆盖一期核心闭环：<br>
       ① 打开「岳麓书院」卡片，走完 讲解服务 → 人物 → 时间线；<br>
-      ② 点右上 🧭 查看路径树，回到历史节点开<b>新分支</b>；<br>
+      ② 点右上 <svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg> 查看路径树，回到历史节点开<b>新分支</b>；<br>
       ③ 用一句话<b>新增入口</b>并试运行；<br>
       ④ 整理发现 → 分享 → 切换到<b>接收者视角</b>接续探索。<br>
       湘菜专题演示「跨主题关联」，声音专题演示分期标识。</p>

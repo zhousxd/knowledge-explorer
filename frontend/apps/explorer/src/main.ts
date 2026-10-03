@@ -4,6 +4,7 @@ import { createPinia } from 'pinia';
 import Vant from 'vant';
 import 'vant/lib/index.css';
 import '@ke/shared/src/tokens.css';
+import '@ke/shared/src/styles/base.css';
 import '@ke/shared/src/styles/theme-vant.css';
 import { installSprite } from '@ke/shared';
 import App from './App.vue';

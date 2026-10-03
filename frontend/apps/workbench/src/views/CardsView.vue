@@ -356,16 +356,16 @@ onMounted(() => {
 
 <style scoped>
 .page { display: flex; flex-direction: column; gap: 14px; }
-.page-head { display: flex; align-items: center; justify-content: space-between; }
+.page-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; gap: 16px; }
 .page-title { margin: 0; color: var(--ke-ink); font-size: 18px; }
-.create-btn { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: none; border-radius: var(--ke-radius-s); background: var(--ke-primary); color: var(--ke-white); font-size: 13px; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); }
+.create-btn { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: none; background: var(--ke-primary); color: var(--ke-white); font-size: 13px; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease); min-height: 42px; border-radius: var(--ke-radius-xs); }
 .create-btn:hover { background: var(--ke-primary-deep); }
 .create-btn .ke-icon { width: 16px; height: 16px; }
-.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.status-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
-.status-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 14px; border: 1px solid var(--ke-line-strong); border-radius: var(--ke-radius-full); background: var(--ke-surface); color: var(--ke-sub); font-size: 12px; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease), color var(--ke-dur-fast) var(--ke-ease), border-color var(--ke-dur-fast) var(--ke-ease); }
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 1px solid var(--ke-line); }
+.status-tabs { display: flex; gap: 20px; flex-wrap: wrap; }
+.status-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; font-size: 12px; cursor: pointer; transition: background var(--ke-dur-fast) var(--ke-ease), color var(--ke-dur-fast) var(--ke-ease), border-color var(--ke-dur-fast) var(--ke-ease); min-height: 44px; padding: 8px 0; border: none; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--ke-sub); }
 .status-chip:hover { border-color: var(--ke-primary); color: var(--ke-primary); }
-.status-chip.is-active { border-color: var(--ke-primary); background: var(--ke-primary); color: var(--ke-white); }
+.status-chip.is-active { border-color: var(--ke-primary); border-bottom-color: var(--ke-primary); background: transparent; color: var(--ke-ink); }
 
 /* 筛选 chip 的状态语义色点:取 Element 主题变量(theme-element.css 已映射 --ke-*,不写裸色值) */
 .chip-dot { width: 6px; height: 6px; border-radius: var(--ke-radius-full); }
@@ -375,8 +375,7 @@ onMounted(() => {
 .dot-danger { background: var(--el-color-danger); }
 .search { width: 220px; }
 .load-error { margin: 0; padding: 8px 12px; border-radius: var(--ke-radius-s); background: var(--ke-danger-soft); color: var(--ke-danger); font-size: 13px; }
-.tpl-chip { padding: 2px 8px; border-radius: var(--ke-radius-full); background: var(--ke-primary-soft); color: var(--ke-primary); font-size: 11px; font-weight: 600; }
+.tpl-chip { font-size: 11px; padding: 3px 6px; border-radius: var(--ke-radius-xs); background: var(--ke-surface-2); color: var(--ke-sub); font-weight: 400; }
 .num { font-variant-numeric: tabular-nums; }
 .page-foot { display: flex; justify-content: flex-end; }
-
 </style>

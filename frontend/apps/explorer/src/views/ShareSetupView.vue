@@ -371,7 +371,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.page { min-height: 100vh; box-sizing: border-box; padding: 52px 16px 120px; background: var(--ke-bg); }
+.page { min-height: 100vh; box-sizing: border-box; padding: 52px 16px 120px; background: var(--ke-bg); padding-top: 80px; padding-right: 24px; padding-left: 24px; }
 .wrap { margin: 14px auto 0; max-width: 480px; }
 .state { margin: 40px 0 0; text-align: center; font-size: 12px; color: var(--ke-sub); }
 

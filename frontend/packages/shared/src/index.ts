@@ -1,4 +1,5 @@
 export { default as KeIcon } from './components/KeIcon.vue';
+export { default as ThemeArtwork } from './components/ThemeArtwork.vue';
 export { default as ClaimBadge } from './components/ClaimBadge.vue';
 export { default as CitationTag } from './components/CitationTag.vue';
 export { default as SourceList } from './components/SourceList.vue';

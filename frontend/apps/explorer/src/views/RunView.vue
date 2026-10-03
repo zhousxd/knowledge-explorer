@@ -645,7 +645,7 @@ function goBack(): void {
 </template>
 
 <style scoped>
-.page { min-height: 100vh; box-sizing: border-box; padding: 52px 16px 40px; background: var(--ke-bg); }
+.page { min-height: 100vh; box-sizing: border-box; padding: 52px 16px 40px; background: var(--ke-bg); padding-top: 80px; padding-right: 24px; padding-left: 24px; }
 .wrap { margin: 46px auto 0; max-width: 340px; text-align: center; }
 
 /* spinner 44 / 3px 主色环(04 §7.2 RunProgress) */

@@ -16,3 +16,12 @@
   --van-toast-background:var(--ke-toast);
   --van-font-family:var(--ke-font);
 }
+
+.explorer-app { max-width: 560px; min-height: 100vh; margin: auto; background: var(--ke-bg); }
+.explorer-app:has(> .atlas-login) { max-width: none; }
+.explorer-app :is(.topbar, .svcbar, .askbar, .pausebar, .sum-bar, .share-bar, .sv-bar) { max-width: 560px; margin-right: auto; margin-left: auto; }
+.explorer-app .resume-bar { max-width: 536px; margin-right: auto; margin-left: auto; }
+.explorer-app :is(.title, .h1, .head-t, .q-title, .sv-title, .r-title) { font-family: var(--ke-font-display); font-weight: 400; }
+@media (width >= 561px) {
+  .explorer-app:not(:has(> .atlas-login)) { border-right: 1px solid var(--ke-line); border-left: 1px solid var(--ke-line); }
+}
